@@ -73,8 +73,13 @@ func (a *Analyzer) Analyze() (*types.Analysis, error) {
 	// Detect dependencies
 	analysis.Dependencies = a.detectDependencies(absPath)
 
-	// Detect conventions (basic for now)
-	analysis.Conventions = a.detectConventions(files)
+	// Detect conventions
+	conventionDetector := detector.NewConventionDetector(absPath, files)
+	conventions, err := conventionDetector.Detect()
+	if err != nil {
+		return nil, fmt.Errorf("failed to detect conventions: %w", err)
+	}
+	analysis.Conventions = conventions
 
 	return analysis, nil
 }
@@ -139,57 +144,6 @@ func (a *Analyzer) detectDependencies(rootPath string) []types.Dependency {
 	return deps
 }
 
-// detectConventions detects basic coding conventions
-func (a *Analyzer) detectConventions(files []types.FileInfo) []types.Convention {
-	var conventions []types.Convention
-
-	// Check for TypeScript
-	hasTS := false
-	hasJS := false
-	for _, f := range files {
-		if f.Extension == ".ts" || f.Extension == ".tsx" {
-			hasTS = true
-		}
-		if f.Extension == ".js" || f.Extension == ".jsx" {
-			hasJS = true
-		}
-	}
-
-	if hasTS {
-		conventions = append(conventions, types.Convention{
-			Category:    "language",
-			Description: "TypeScript is used - prefer .ts/.tsx files over .js/.jsx",
-		})
-	}
-
-	if hasTS && !hasJS {
-		conventions = append(conventions, types.Convention{
-			Category:    "language",
-			Description: "Pure TypeScript project - avoid adding JavaScript files",
-		})
-	}
-
-	// Check for common file patterns
-	extCounts := CountByExtension(files)
-
-	// React/JSX convention
-	if extCounts[".jsx"] > 0 || extCounts[".tsx"] > 0 {
-		conventions = append(conventions, types.Convention{
-			Category:    "components",
-			Description: "React components use JSX/TSX syntax",
-		})
-	}
-
-	// Go conventions
-	if extCounts[".go"] > 0 {
-		conventions = append(conventions, types.Convention{
-			Category:    "language",
-			Description: "Go project - use gofmt for formatting",
-		})
-	}
-
-	return conventions
-}
 
 // Helper functions to avoid importing strings package multiple times
 func splitLines(s string) []string {
