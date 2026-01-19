@@ -1,0 +1,96 @@
+name: Bug Report
+description: Report a bug or unexpected behavior
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out the sections below.
+
+  - type: input
+    id: version
+    attributes:
+      label: Argus version
+      description: Run `argus version` to get this
+      placeholder: v0.1.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - macOS
+        - Linux
+        - Windows
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: output_format
+    attributes:
+      label: Output format (if applicable)
+      options:
+        - CLAUDE.md
+        - .cursorrules
+        - copilot-instructions.md
+        - All formats
+        - Not format-related
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug
+      placeholder: |
+        I ran `argus scan` on my TypeScript project and the conventions weren't detected correctly...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+      placeholder: |
+        I expected Argus to detect that I'm using PascalCase for components...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps to reproduce the issue
+      placeholder: |
+        1. Create a project with TypeScript + React
+        2. Run `argus scan`
+        3. Check generated CLAUDE.md
+        4. See missing/incorrect conventions
+    validations:
+      required: true
+
+  - type: textarea
+    id: project_info
+    attributes:
+      label: Project info (if relevant)
+      description: What kind of project were you scanning?
+      placeholder: |
+        - Language: TypeScript
+        - Framework: Next.js 14
+        - Package manager: pnpm
+        - Directory structure: monorepo
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error output / logs
+      description: Run with `--verbose` flag if possible
+      render: shell
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Any other context, screenshots, or information

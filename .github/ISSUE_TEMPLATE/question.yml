@@ -1,0 +1,46 @@
+name: Question
+description: Ask a question about usage or configuration
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have a question? We're happy to help! Please check the [README](https://github.com/Priyans-hu/argus#readme) first.
+
+  - type: dropdown
+    id: topic
+    attributes:
+      label: Question topic
+      options:
+        - Installation / Setup
+        - Configuration (.argus.yaml)
+        - Output formats (CLAUDE.md, .cursorrules)
+        - Detection accuracy
+        - Integration with AI tools
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+      description: What would you like to know?
+      placeholder: |
+        How do I customize the generated CLAUDE.md to include project-specific conventions?
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Any relevant context about your setup or what you're trying to achieve
+      placeholder: |
+        I have a monorepo with multiple packages, each with different conventions...
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: What have you tried?
+      description: Any approaches you've already attempted?
