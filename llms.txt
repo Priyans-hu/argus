@@ -1,0 +1,41 @@
+# Argus
+
+> Help AI grok your codebase
+
+Argus is a CLI tool that scans codebases and automatically generates context files for AI coding assistants.
+
+## What it does
+
+- Scans your codebase (tech stack, structure, patterns, conventions)
+- Generates optimized context files:
+  - CLAUDE.md (Claude Code)
+  - .cursorrules (Cursor)
+  - .github/copilot-instructions.md (GitHub Copilot)
+  - .continue/config.json (Continue.dev)
+
+## Commands
+
+- `argus init` - Initialize configuration
+- `argus scan` - Analyze codebase and generate files
+- `argus sync` - Update files with changes
+- `argus version` - Print version
+
+## Tech Stack
+
+- Language: Go
+- CLI: Cobra
+- Analysis: Static (AST parsing, file inspection)
+- Output: Markdown, JSON, YAML
+
+## Project Structure
+
+- cmd/argus/ - CLI entry point
+- internal/analyzer/ - Codebase analysis
+- internal/detector/ - Tech/pattern detection
+- internal/generator/ - Output generation
+- pkg/types/ - Shared types
+
+## Links
+
+- GitHub: https://github.com/Priyans-hu/argus
+- Author: Priyanshu Garg
