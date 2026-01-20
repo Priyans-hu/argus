@@ -81,6 +81,14 @@ func (a *Analyzer) Analyze() (*types.Analysis, error) {
 	}
 	analysis.Conventions = conventions
 
+	// Detect patterns (branch naming, comments, logging, error handling, architecture)
+	patternDetector := detector.NewPatternDetector(absPath, files)
+	patterns, err := patternDetector.Detect()
+	if err != nil {
+		return nil, fmt.Errorf("failed to detect patterns: %w", err)
+	}
+	analysis.Conventions = append(analysis.Conventions, patterns...)
+
 	return analysis, nil
 }
 
