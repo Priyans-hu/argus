@@ -1,0 +1,69 @@
+#!/bin/bash
+
+# Pre-commit hook for Go projects
+# Auto-fixes formatting and runs linter
+
+set -e
+
+echo "Running pre-commit checks..."
+
+# Get staged Go files
+STAGED_GO_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep '\.go$' || true)
+
+if [ -z "$STAGED_GO_FILES" ]; then
+    echo "No Go files staged, skipping checks"
+    exit 0
+fi
+
+# Run gofmt on staged files
+echo "Running gofmt..."
+for file in $STAGED_GO_FILES; do
+    if [ -f "$file" ]; then
+        gofmt -w "$file"
+        git add "$file"
+    fi
+done
+
+# Run goimports if available
+if command -v goimports &> /dev/null; then
+    echo "Running goimports..."
+    for file in $STAGED_GO_FILES; do
+        if [ -f "$file" ]; then
+            goimports -w "$file"
+            git add "$file"
+        fi
+    done
+fi
+
+# Run golangci-lint with --fix for auto-fixable issues
+if command -v golangci-lint &> /dev/null; then
+    echo "Running golangci-lint --fix..."
+    golangci-lint run --fix ./... 2>/dev/null || true
+
+    # Re-add any fixed files
+    for file in $STAGED_GO_FILES; do
+        if [ -f "$file" ]; then
+            git add "$file"
+        fi
+    done
+
+    # Final lint check (fail if issues remain)
+    echo "Running final lint check..."
+    if ! golangci-lint run ./...; then
+        echo ""
+        echo "Lint errors found. Please fix them before committing."
+        exit 1
+    fi
+else
+    echo "Warning: golangci-lint not found, skipping lint check"
+fi
+
+# Run tests
+echo "Running tests..."
+if ! go test ./... -short; then
+    echo ""
+    echo "Tests failed. Please fix them before committing."
+    exit 1
+fi
+
+echo "All checks passed!"
