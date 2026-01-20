@@ -25,12 +25,15 @@ The all-seeing code analyzer. Help AI grok your codebase.
 ```
 .
 ├── cmd/          # Command entrypoints
-├── internal/analyzer/          # Analysis logic
-├── internal/config/          # Configuration
-├── internal/detector/          # Detection logic
-├── internal/generator/          # Code generation
-├── internal/merger/          # Merge utilities
-├── pkg/types/          # Type definitions
+├── internal/
+│   ├── analyzer/          # Analysis logic
+│   ├── config/          # Configuration
+│   ├── detector/          # Detection logic
+│   ├── generator/          # Code generation
+│   └── merger/          # Merge utilities
+├── pkg/
+│   └── types/          # Type definitions
+├── .codecov.yml
 ├── .goreleaser.yml
 ├── CHANGELOG.md
 ├── CLAUDE.md
@@ -53,9 +56,13 @@ The all-seeing code analyzer. Help AI grok your codebase.
 
 ## Coding Conventions
 
+### Code-style
+
+- Go project - use 'go fmt' or 'gofmt' for formatting
+
 ### Git
 
-- Branch naming uses prefixes: feat, chore
+- Branch naming uses prefixes: chore, feat
   ```
   feat/user-auth, fix/login-bug, chore/update-deps
   ```
@@ -67,9 +74,21 @@ The all-seeing code analyzer. Help AI grok your codebase.
   if err != nil { return fmt.Errorf("context: %w", err) }
   ```
 
-### Code-style
+## Guidelines
 
-- Go project - use 'go fmt' or 'gofmt' for formatting
+### Do
+
+- Use `gofmt` or `goimports` for consistent formatting
+- Handle all errors explicitly with `if err != nil`
+- Use meaningful variable names; short names for short scopes
+- Write doc comments for exported functions starting with function name
+- Prefer composition over inheritance
+
+### Don't
+
+- Don't use `panic()` for regular error handling
+- Don't ignore errors with `_`
+- Don't use global state unnecessarily
 
 ## Dependencies
 

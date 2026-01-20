@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"sort"
+	"strings"
 	"unicode"
 
 	"github.com/Priyans-hu/argus/pkg/types"
@@ -54,6 +55,9 @@ func (g *ClaudeGenerator) Generate(analysis *types.Analysis) ([]byte, error) {
 
 	// Conventions
 	g.writeConventions(&buf, analysis.Conventions)
+
+	// Guidelines based on tech stack
+	g.writeGuidelines(&buf, &analysis.TechStack)
 
 	// Dependencies summary
 	g.writeDependencies(&buf, analysis.Dependencies)
@@ -190,39 +194,114 @@ func (g *ClaudeGenerator) writeStructure(buf *bytes.Buffer, structure *types.Pro
 	buf.WriteString("## Project Structure\n\n")
 
 	buf.WriteString("```\n")
-	buf.WriteString(".\n")
 
-	// Sort directories by path
-	dirs := make([]types.Directory, len(structure.Directories))
-	copy(dirs, structure.Directories)
-	sort.Slice(dirs, func(i, j int) bool {
-		return dirs[i].Path < dirs[j].Path
-	})
+	// Build tree from directories
+	tree := buildDirectoryTree(structure.Directories)
+
+	// Render tree
+	renderTree(buf, tree, "", true, structure.RootFiles)
+
+	buf.WriteString("```\n\n")
+}
+
+// treeNode represents a node in the directory tree
+type treeNode struct {
+	name     string
+	purpose  string
+	children map[string]*treeNode
+}
+
+// buildDirectoryTree builds a tree structure from flat directory paths
+func buildDirectoryTree(dirs []types.Directory) *treeNode {
+	root := &treeNode{name: ".", children: make(map[string]*treeNode)}
 
 	for _, dir := range dirs {
-		if dir.Purpose != "" {
-			fmt.Fprintf(buf, "├── %s/          # %s\n", dir.Path, dir.Purpose)
-		} else {
-			fmt.Fprintf(buf, "├── %s/\n", dir.Path)
-		}
-	}
+		parts := strings.Split(dir.Path, "/")
+		current := root
 
-	// Root files
-	if len(structure.RootFiles) > 0 {
-		rootFiles := make([]string, len(structure.RootFiles))
-		copy(rootFiles, structure.RootFiles)
-		sort.Strings(rootFiles)
+		for i, part := range parts {
+			if _, exists := current.children[part]; !exists {
+				current.children[part] = &treeNode{
+					name:     part,
+					children: make(map[string]*treeNode),
+				}
+			}
+			current = current.children[part]
 
-		for i, f := range rootFiles {
-			if i == len(rootFiles)-1 {
-				fmt.Fprintf(buf, "└── %s\n", f)
-			} else {
-				fmt.Fprintf(buf, "├── %s\n", f)
+			// Set purpose on the deepest node
+			if i == len(parts)-1 {
+				current.purpose = dir.Purpose
 			}
 		}
 	}
 
-	buf.WriteString("```\n\n")
+	return root
+}
+
+// renderTree renders the tree structure to the buffer
+func renderTree(buf *bytes.Buffer, node *treeNode, prefix string, isRoot bool, rootFiles []string) {
+	if isRoot {
+		buf.WriteString(".\n")
+	}
+
+	// Get sorted children names
+	var childNames []string
+	for name := range node.children {
+		childNames = append(childNames, name)
+	}
+	sort.Strings(childNames)
+
+	// Count total items (dirs + root files if at root level)
+	totalItems := len(childNames)
+	if isRoot {
+		totalItems += len(rootFiles)
+	}
+
+	// Render directories
+	for i, name := range childNames {
+		child := node.children[name]
+		isLast := (i == len(childNames)-1) && (isRoot && len(rootFiles) == 0 || !isRoot)
+
+		// Choose connector
+		connector := "├── "
+		if isLast && (!isRoot || len(rootFiles) == 0) {
+			connector = "└── "
+		}
+
+		// Format line with purpose comment
+		if child.purpose != "" {
+			fmt.Fprintf(buf, "%s%s%s/          # %s\n", prefix, connector, name, child.purpose)
+		} else {
+			fmt.Fprintf(buf, "%s%s%s/\n", prefix, connector, name)
+		}
+
+		// Render children with updated prefix
+		newPrefix := prefix
+		if isLast && (!isRoot || len(rootFiles) == 0) {
+			newPrefix += "    "
+		} else {
+			newPrefix += "│   "
+		}
+
+		if len(child.children) > 0 {
+			renderTree(buf, child, newPrefix, false, nil)
+		}
+	}
+
+	// Render root files at the end
+	if isRoot && len(rootFiles) > 0 {
+		sortedFiles := make([]string, len(rootFiles))
+		copy(sortedFiles, rootFiles)
+		sort.Strings(sortedFiles)
+
+		for i, f := range sortedFiles {
+			connector := "├── "
+			if i == len(sortedFiles)-1 {
+				connector = "└── "
+			}
+			fmt.Fprintf(buf, "%s%s%s\n", prefix, connector, f)
+		}
+	}
 }
 
 // writeKeyFiles writes the key files section
@@ -329,6 +408,155 @@ func (g *ClaudeGenerator) writeConventions(buf *bytes.Buffer, conventions []type
 			if conv.Example != "" {
 				fmt.Fprintf(buf, "  ```\n  %s\n  ```\n", conv.Example)
 			}
+		}
+		buf.WriteString("\n")
+	}
+}
+
+// writeGuidelines writes actionable coding guidelines based on tech stack
+func (g *ClaudeGenerator) writeGuidelines(buf *bytes.Buffer, stack *types.TechStack) {
+	var dos []string
+	var donts []string
+
+	// Check for languages and frameworks
+	hasGo := false
+	hasTypeScript := false
+	hasJavaScript := false
+	hasPython := false
+	hasReact := false
+	hasVue := false
+	hasAngular := false
+
+	for _, lang := range stack.Languages {
+		switch strings.ToLower(lang.Name) {
+		case "go":
+			hasGo = true
+		case "typescript":
+			hasTypeScript = true
+		case "javascript":
+			hasJavaScript = true
+		case "python":
+			hasPython = true
+		}
+	}
+
+	for _, fw := range stack.Frameworks {
+		switch strings.ToLower(fw.Name) {
+		case "react", "next.js", "nextjs":
+			hasReact = true
+		case "vue", "nuxt", "nuxt.js":
+			hasVue = true
+		case "angular":
+			hasAngular = true
+		}
+	}
+
+	// Go guidelines
+	if hasGo {
+		dos = append(dos,
+			"Use `gofmt` or `goimports` for consistent formatting",
+			"Handle all errors explicitly with `if err != nil`",
+			"Use meaningful variable names; short names for short scopes",
+			"Write doc comments for exported functions starting with function name",
+			"Prefer composition over inheritance",
+		)
+		donts = append(donts,
+			"Don't use `panic()` for regular error handling",
+			"Don't ignore errors with `_`",
+			"Don't use global state unnecessarily",
+		)
+	}
+
+	// TypeScript/JavaScript guidelines
+	if hasTypeScript || hasJavaScript {
+		dos = append(dos,
+			"Use `const` for variables that don't change, `let` for those that do",
+			"Use async/await over raw promises when possible",
+			"Handle errors properly in try/catch blocks",
+		)
+		donts = append(donts,
+			"Don't use `var`, prefer `const`/`let`",
+			"Don't use `any` type without good reason (TypeScript)",
+			"Don't nest ternary operators",
+		)
+	}
+
+	// React guidelines
+	if hasReact {
+		dos = append(dos,
+			"Use functional components with hooks",
+			"Extract reusable logic into custom hooks",
+			"Use `const` for component declarations",
+			"Add `data-testid` to interactive elements for testing",
+		)
+		donts = append(donts,
+			"Don't use class components for new code",
+			"Don't overuse `useEffect` - consider if it's truly needed",
+			"Don't mutate state directly, use setter functions",
+		)
+	}
+
+	// Vue guidelines
+	if hasVue {
+		dos = append(dos,
+			"Use Composition API with `<script setup>` for new components",
+			"Use reactive/ref for state management",
+			"Extract reusable logic into composables",
+		)
+		donts = append(donts,
+			"Don't mix Options API and Composition API in same component",
+			"Don't mutate props directly",
+		)
+	}
+
+	// Angular guidelines
+	if hasAngular {
+		dos = append(dos,
+			"Use standalone components for new code",
+			"Use signals for reactive state",
+			"Use dependency injection for services",
+		)
+		donts = append(donts,
+			"Don't subscribe without unsubscribing (use async pipe or takeUntil)",
+			"Don't put business logic in components",
+		)
+	}
+
+	// Python guidelines
+	if hasPython {
+		dos = append(dos,
+			"Follow PEP 8 style guide",
+			"Use type hints for function signatures",
+			"Use snake_case for functions and variables",
+			"Write docstrings for functions and classes",
+			"Use context managers (`with` statements) for resource management",
+		)
+		donts = append(donts,
+			"Don't use mutable default arguments",
+			"Don't catch generic `Exception` without re-raising",
+			"Don't use `from module import *`",
+		)
+	}
+
+	// Only write section if we have guidelines
+	if len(dos) == 0 && len(donts) == 0 {
+		return
+	}
+
+	buf.WriteString("## Guidelines\n\n")
+
+	if len(dos) > 0 {
+		buf.WriteString("### Do\n\n")
+		for _, d := range dos {
+			fmt.Fprintf(buf, "- %s\n", d)
+		}
+		buf.WriteString("\n")
+	}
+
+	if len(donts) > 0 {
+		buf.WriteString("### Don't\n\n")
+		for _, d := range donts {
+			fmt.Fprintf(buf, "- %s\n", d)
 		}
 		buf.WriteString("\n")
 	}
