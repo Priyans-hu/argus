@@ -1,145 +1,175 @@
-# Argus - AI Assistant Instructions
+<!-- ARGUS:AUTO -->
+# argus
 
 ## Project Overview
 
-Argus is a CLI tool that scans codebases and generates optimized context files for AI coding assistants (Claude Code, Cursor, Copilot, Continue).
+The all-seeing code analyzer. Help AI grok your codebase.
 
-**Core value:** Automate the creation of CLAUDE.md, .cursorrules, and similar files so developers don't have to manually write and maintain them.
+## Tech Stack
 
-## Local Tracking Files
+### Languages
 
-**IMPORTANT:** Always maintain these local files while working on this project.
+- **Go** 1.24 (100.0%)
 
-### Files to Update (gitignored, local only)
+### Frameworks & Libraries
 
-| File | Purpose | When to Update |
-|------|---------|----------------|
-| `.todos.md` | Active tasks and progress | Before starting, after completing, when planning |
-| `.brainstorm.md` | Ideas, designs, decisions | When discussing new features or approaches |
-| `.notes.md` | Session notes, blockers | During work sessions |
+**CLI:**
+- Cobra
 
-### Update Format
+### Tools
 
-Always include timestamps in ISO format:
-
-```markdown
-## 2026-01-19T10:30:00
-
-### Completed
-- [x] Task description
-
-### In Progress
-- [ ] Task description
-
-### Notes
-- Decision made: xyz
-```
+- GitHub Actions
 
 ## Project Structure
 
 ```
-argus/
-├── cmd/argus/          # CLI entry point (Cobra)
+.
+├── cmd/          # Command entrypoints
 ├── internal/
-│   ├── analyzer/       # Codebase analysis logic
-│   ├── detector/       # Tech stack & pattern detection
-│   └── generator/      # Output file generation
-├── pkg/types/          # Shared types
-├── docs/               # Documentation
-└── [local files]       # Not committed
-    ├── .todos.md
-    ├── .brainstorm.md
-    └── .notes.md
+│   ├── analyzer/          # Analysis logic
+│   ├── config/          # Configuration
+│   ├── detector/          # Detection logic
+│   ├── generator/          # Code generation
+│   └── merger/          # Merge utilities
+├── pkg/
+│   └── types/          # Type definitions
+├── .codecov.yml
+├── .goreleaser.yml
+├── CHANGELOG.md
+├── CLAUDE.md
+├── CONTRIBUTING.md
+├── LICENSE
+├── README.md
+├── SETUP.md
+├── go.mod
+└── llms.txt
 ```
 
-## Architecture
+## Key Files
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                      CLI (Cobra)                        │
-│                   cmd/argus/main.go                     │
-└─────────────────────┬───────────────────────────────────┘
-                      │
-┌─────────────────────▼───────────────────────────────────┐
-│                     Analyzer                            │
-│              internal/analyzer/                         │
-│  - Walks file tree                                      │
-│  - Collects file metadata                               │
-│  - Coordinates detectors                                │
-└─────────────────────┬───────────────────────────────────┘
-                      │
-┌─────────────────────▼───────────────────────────────────┐
-│                    Detectors                            │
-│              internal/detector/                         │
-│  - TechStackDetector (frameworks, languages)            │
-│  - PatternDetector (conventions, naming)                │
-│  - StructureDetector (directory layout)                 │
-│  - DependencyDetector (package managers)                │
-└─────────────────────┬───────────────────────────────────┘
-                      │
-┌─────────────────────▼───────────────────────────────────┐
-│                    Generator                            │
-│              internal/generator/                        │
-│  - ClaudeGenerator (CLAUDE.md)                          │
-│  - CursorGenerator (.cursorrules)                       │
-│  - CopilotGenerator (copilot-instructions.md)           │
-│  - ContinueGenerator (config.json)                      │
-└─────────────────────────────────────────────────────────┘
-```
+| File | Purpose | Description |
+|------|---------|-------------|
+| `CONTRIBUTING.md` | Contributing | Contribution guidelines |
+| `README.md` | Documentation | Project documentation |
+| `cmd/argus/main.go` | Entry point | Go application entry |
+| `go.mod` | Go module | Go dependencies |
 
-## Code Style
+## Coding Conventions
 
-- Go 1.21+
-- Use `gofmt` for formatting
-- Follow Effective Go guidelines
-- Keep functions small and focused
-- Error wrapping with `fmt.Errorf("context: %w", err)`
+### Code-style
 
-## Build & Test
+- Go project - use 'go fmt' or 'gofmt' for formatting
 
-```bash
-go build -o argus ./cmd/argus    # Build
-go test ./...                     # Test
-./argus --help                    # Run
-```
+### Git
 
-## Git Workflow
+- Branch naming uses prefixes: feat, chore
+  ```
+  feat/user-auth, fix/login-bug, chore/update-deps
+  ```
 
-### Branch Naming
+### Error-handling
 
-| Prefix | Purpose | Example |
-|--------|---------|---------|
-| `feat/` | New feature | `feat/tech-detection` |
-| `fix/` | Bug fix | `fix/go-mod-parsing` |
-| `refactor/` | Code refactoring | `refactor/detector-interface` |
-| `docs/` | Documentation | `docs/readme-examples` |
-| `test/` | Adding tests | `test/analyzer-unit` |
-| `chore/` | Maintenance | `chore/update-deps` |
+- Go-style explicit error checking (if err != nil)
+  ```
+  if err != nil { return fmt.Errorf("context: %w", err) }
+  ```
 
-### Commit Convention
+## Guidelines
 
-```
-<type>(<scope>): <description>
+### Do
 
-Types: feat, fix, docs, style, refactor, test, chore
-Scopes: analyzer, detector, generator, cli, config
-```
+- Use `gofmt` or `goimports` for consistent formatting
+- Handle all errors explicitly with `if err != nil`
+- Use meaningful variable names; short names for short scopes
+- Write doc comments for exported functions starting with function name
+- Prefer composition over inheritance
 
-## Key Design Decisions
+### Don't
 
-1. **No AI required for MVP** — Static analysis only, AI enhancement later
-2. **Multiple output formats** — Generate for all major AI tools
-3. **Convention over configuration** — Works out of box, config is optional
-4. **Fast** — Should scan large codebases in seconds
+- Don't use `panic()` for regular error handling
+- Don't ignore errors with `_`
+- Don't use global state unnecessarily
 
-## When Working on Tasks
+## Detected Patterns
 
-### Before Starting
-1. Read `.todos.md` to understand current state
-2. Add new task with timestamp if not exists
-3. Mark task as "In Progress"
+*The following patterns were detected by scanning the codebase:*
 
-### After Completing
-1. Mark task as completed with timestamp
-2. Add any follow-up tasks discovered
-3. Update `.brainstorm.md` if new ideas emerged
+### Data Fetching
+
+- **resty.** - Resty HTTP client
+- **http.Get** - Go standard HTTP GET
+- **http.Post** - Go standard HTTP POST
+- **http.Client** - Go HTTP client
+
+### Routing
+
+- **fiber.Ctx** - Fiber framework context (2 files)
+- **chi.Router** - Chi router
+- **http.HandleFunc** - Go standard HTTP handler
+- **echo.Context** - Echo framework context
+- **mux.NewRouter** - Gorilla Mux router
+- **fiber.New** - Fiber app initialization
+- **gin.Context** - Gin framework context (2 files)
+- **chi.NewRouter** - Chi router initialization
+- **http.Handle** - Go standard HTTP handler
+- **gin.Default** - Gin default router
+- **echo.New** - Echo router initialization
+
+### Testing
+
+- **t.Error** - Go test error (6 files)
+  - Found in: `cmd/argus/main.go`, `internal/analyzer/analyzer.go`, `internal/config/config.go`
+- **httptest** - Go HTTP testing
+- **t.Run** - Go subtest (2 files)
+- **func Test** - Go test function (2 files)
+- **t.Fatal** - Go test fatal (2 files)
+- **require.** - Testify require assertions
+- **assert.** - Testify assert
+- **gomock** - GoMock mocking
+
+### Authentication
+
+- **jwt.** - JWT handling
+- **middleware** - Auth middleware (4 files)
+  - Found in: `internal/detector/codepatterns.go`, `internal/detector/endpoints.go`, `internal/detector/frameworks.go`
+- **Authorization** - Authorization header (2 files)
+- **Bearer** - Bearer token
+
+### API Patterns
+
+- **protobuf** - Protocol Buffers
+- **websocket** - WebSocket communication
+- **useQuery** - GraphQL/React Query (2 files)
+- **swagger** - Swagger documentation
+- **grpc** - gRPC protocol (2 files)
+- **REST** - RESTful API design (3 files)
+  - Found in: `internal/detector/codepatterns.go`, `internal/detector/frameworks.go`, `internal/detector/structure.go`
+- **GraphQL** - GraphQL API (2 files)
+- **gql`** - GraphQL query
+- **socket.io** - Socket.IO real-time
+- **useMutation** - GraphQL/React Query mutation
+- **tRPC** - tRPC type-safe API
+- **OpenAPI** - OpenAPI/Swagger spec
+
+### Database & ORM
+
+- **gorm.Model** - GORM model embedding
+- **pgx** - pgx PostgreSQL driver
+- **sqlx** - sqlx database library (2 files)
+- **sql.DB** - Go standard SQL
+- **ent.** - Ent ORM (3 files)
+  - Found in: `cmd/argus/main.go`, `internal/detector/codepatterns.go`, `internal/generator/claude.go`
+- **mongo.** - MongoDB Go driver
+- **bun.** - Bun ORM
+- **gorm.** - GORM ORM (2 files)
+
+## Dependencies
+
+### Runtime
+
+- `github.com/fsnotify/fsnotify` v1.9.0
+- `github.com/inconshreveable/mousetrap` v1.1.0
+- `github.com/spf13/pflag` v1.0.9
+- `golang.org/x/sys` v0.13.0
+- `gopkg.in/yaml.v3` v3.0.1
+<!-- /ARGUS:AUTO -->

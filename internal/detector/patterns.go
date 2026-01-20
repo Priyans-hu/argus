@@ -2,7 +2,6 @@ package detector
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -28,8 +27,8 @@ func NewPatternDetector(rootPath string, files []types.FileInfo) *PatternDetecto
 func (d *PatternDetector) Detect() ([]types.Convention, error) {
 	var conventions []types.Convention
 
-	// Detect git branch naming conventions
-	conventions = append(conventions, d.detectBranchNaming()...)
+	// Note: Git branch naming is now handled by GitDetector for better integration
+	// with commit conventions output
 
 	// Detect comment/documentation patterns
 	conventions = append(conventions, d.detectCommentPatterns()...)
@@ -44,67 +43,6 @@ func (d *PatternDetector) Detect() ([]types.Convention, error) {
 	conventions = append(conventions, d.detectArchitecturalPatterns()...)
 
 	return conventions, nil
-}
-
-// detectBranchNaming analyzes git branch naming conventions
-func (d *PatternDetector) detectBranchNaming() []types.Convention {
-	var conventions []types.Convention
-
-	// Check if git repo exists
-	gitDir := filepath.Join(d.rootPath, ".git")
-	if _, err := os.Stat(gitDir); os.IsNotExist(err) {
-		return conventions
-	}
-
-	// Get branch names from git
-	cmd := exec.Command("git", "-C", d.rootPath, "branch", "-a", "--format=%(refname:short)")
-	output, err := cmd.Output()
-	if err != nil {
-		return conventions
-	}
-
-	branches := strings.Split(strings.TrimSpace(string(output)), "\n")
-
-	// Count branch patterns
-	patterns := map[string]int{
-		"feat/":     0,
-		"feature/":  0,
-		"fix/":      0,
-		"bugfix/":   0,
-		"hotfix/":   0,
-		"chore/":    0,
-		"docs/":     0,
-		"refactor/": 0,
-		"test/":     0,
-		"release/":  0,
-	}
-
-	for _, branch := range branches {
-		branch = strings.TrimPrefix(branch, "origin/")
-		for prefix := range patterns {
-			if strings.HasPrefix(branch, prefix) {
-				patterns[prefix]++
-			}
-		}
-	}
-
-	// Find dominant patterns
-	var usedPrefixes []string
-	for prefix, count := range patterns {
-		if count >= 2 {
-			usedPrefixes = append(usedPrefixes, strings.TrimSuffix(prefix, "/"))
-		}
-	}
-
-	if len(usedPrefixes) >= 2 {
-		conventions = append(conventions, types.Convention{
-			Category:    "git",
-			Description: "Branch naming uses prefixes: " + strings.Join(usedPrefixes, ", "),
-			Example:     "feat/user-auth, fix/login-bug, chore/update-deps",
-		})
-	}
-
-	return conventions
 }
 
 // detectCommentPatterns analyzes documentation and comment styles

@@ -2,15 +2,71 @@ package types
 
 // Analysis represents the complete analysis of a codebase
 type Analysis struct {
-	ProjectName  string            `json:"project_name"`
-	RootPath     string            `json:"root_path"`
-	TechStack    TechStack         `json:"tech_stack"`
-	Structure    ProjectStructure  `json:"structure"`
-	Conventions  []Convention      `json:"conventions"`
-	Dependencies []Dependency      `json:"dependencies"`
-	Commands     []Command         `json:"commands"`
-	KeyFiles     []KeyFile         `json:"key_files"`
-	Endpoints    []Endpoint        `json:"endpoints,omitempty"`
+	ProjectName      string            `json:"project_name"`
+	RootPath         string            `json:"root_path"`
+	TechStack        TechStack         `json:"tech_stack"`
+	Structure        ProjectStructure  `json:"structure"`
+	Conventions      []Convention      `json:"conventions"`
+	Dependencies     []Dependency      `json:"dependencies"`
+	Commands         []Command         `json:"commands"`
+	KeyFiles         []KeyFile         `json:"key_files"`
+	Endpoints        []Endpoint        `json:"endpoints,omitempty"`
+	ReadmeContent    *ReadmeContent    `json:"readme_content,omitempty"`
+	MonorepoInfo     *MonorepoInfo     `json:"monorepo_info,omitempty"`
+	CodePatterns     *CodePatterns     `json:"code_patterns,omitempty"`
+	GitConventions   *GitConventions   `json:"git_conventions,omitempty"`
+	ArchitectureInfo *ArchitectureInfo `json:"architecture_info,omitempty"`
+}
+
+// ReadmeContent represents parsed README information
+type ReadmeContent struct {
+	Title        string   `json:"title,omitempty"`
+	Description  string   `json:"description,omitempty"`
+	Features     []string `json:"features,omitempty"`
+	Installation string   `json:"installation,omitempty"`
+	QuickStart   string   `json:"quick_start,omitempty"`
+	Usage        string   `json:"usage,omitempty"`
+}
+
+// MonorepoInfo represents monorepo/workspace configuration
+type MonorepoInfo struct {
+	IsMonorepo     bool               `json:"is_monorepo"`
+	Tool           string             `json:"tool,omitempty"`           // Turborepo, Lerna, Nx, etc.
+	PackageManager string             `json:"package_manager,omitempty"` // npm, yarn, pnpm, bun
+	WorkspacePaths []string           `json:"workspace_paths,omitempty"`
+	Packages       []WorkspacePackage `json:"packages,omitempty"`
+}
+
+// WorkspacePackage represents a package in a monorepo
+type WorkspacePackage struct {
+	Name        string   `json:"name"`
+	Path        string   `json:"path"`
+	Description string   `json:"description,omitempty"`
+	SubPackages []string `json:"sub_packages,omitempty"`
+}
+
+// CodePatterns represents detected code patterns from deep analysis
+type CodePatterns struct {
+	StateManagement []PatternInfo `json:"state_management,omitempty"`
+	DataFetching    []PatternInfo `json:"data_fetching,omitempty"`
+	Routing         []PatternInfo `json:"routing,omitempty"`
+	Forms           []PatternInfo `json:"forms,omitempty"`
+	Testing         []PatternInfo `json:"testing,omitempty"`
+	Styling         []PatternInfo `json:"styling,omitempty"`
+	Authentication  []PatternInfo `json:"authentication,omitempty"`
+	APIPatterns     []PatternInfo `json:"api_patterns,omitempty"`
+	DatabaseORM     []PatternInfo `json:"database_orm,omitempty"`
+	Utilities       []PatternInfo `json:"utilities,omitempty"`
+}
+
+// PatternInfo represents a detected pattern
+type PatternInfo struct {
+	Name        string   `json:"name"`
+	Category    string   `json:"category"`
+	Description string   `json:"description"`
+	FileCount   int      `json:"file_count"`
+	Examples    []string `json:"examples,omitempty"`
+	Usage       string   `json:"usage,omitempty"`
 }
 
 // Endpoint represents an API endpoint
@@ -123,4 +179,42 @@ type FileInfo struct {
 	Extension string
 	Size      int64
 	IsDir     bool
+}
+
+// GitConventions represents detected git conventions
+type GitConventions struct {
+	CommitConvention *CommitConvention `json:"commit_convention,omitempty"`
+	BranchConvention *BranchConvention `json:"branch_convention,omitempty"`
+}
+
+// CommitConvention represents detected commit message conventions
+type CommitConvention struct {
+	Style   string   `json:"style"`            // conventional, gitmoji, jira, angular
+	Format  string   `json:"format"`           // e.g., "<type>(<scope>): <description>"
+	Types   []string `json:"types,omitempty"`  // feat, fix, docs, etc.
+	Scopes  []string `json:"scopes,omitempty"` // api, ui, core, etc.
+	Example string   `json:"example"`
+}
+
+// BranchConvention represents detected branch naming conventions
+type BranchConvention struct {
+	Prefixes []string `json:"prefixes"`         // feat, fix, chore, etc.
+	Format   string   `json:"format"`           // e.g., "<prefix>/<description>"
+	Examples []string `json:"examples,omitempty"`
+}
+
+// ArchitectureInfo represents detected architecture
+type ArchitectureInfo struct {
+	Style      string              `json:"style,omitempty"`       // layered, modular, clean, etc.
+	Layers     []ArchitectureLayer `json:"layers,omitempty"`      // detected layers
+	EntryPoint string              `json:"entry_point,omitempty"` // main entry point
+	Diagram    string              `json:"diagram,omitempty"`     // text-based diagram
+}
+
+// ArchitectureLayer represents an architectural layer
+type ArchitectureLayer struct {
+	Name      string   `json:"name"`
+	Purpose   string   `json:"purpose,omitempty"`
+	Packages  []string `json:"packages,omitempty"`
+	DependsOn []string `json:"depends_on,omitempty"`
 }
