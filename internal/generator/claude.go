@@ -41,6 +41,9 @@ func (g *ClaudeGenerator) Generate(analysis *types.Analysis) ([]byte, error) {
 	// Architecture section for monorepos
 	g.writeArchitecture(&buf, analysis.MonorepoInfo)
 
+	// Architecture diagram
+	g.writeArchitectureDiagram(&buf, analysis.ArchitectureInfo)
+
 	// Tech Stack Summary
 	g.writeTechStack(&buf, &analysis.TechStack)
 
@@ -56,8 +59,8 @@ func (g *ClaudeGenerator) Generate(analysis *types.Analysis) ([]byte, error) {
 	// API Endpoints
 	g.writeEndpoints(&buf, analysis.Endpoints)
 
-	// Conventions
-	g.writeConventions(&buf, analysis.Conventions)
+	// Conventions (includes git conventions)
+	g.writeConventions(&buf, analysis.Conventions, analysis.GitConventions)
 
 	// Guidelines based on tech stack
 	g.writeGuidelines(&buf, &analysis.TechStack)
@@ -144,6 +147,55 @@ func (g *ClaudeGenerator) writeArchitecture(buf *bytes.Buffer, mono *types.Monor
 			}
 		}
 		buf.WriteString("\n")
+	}
+}
+
+// writeArchitectureDiagram writes the architecture diagram section
+func (g *ClaudeGenerator) writeArchitectureDiagram(buf *bytes.Buffer, arch *types.ArchitectureInfo) {
+	if arch == nil || arch.Diagram == "" {
+		return
+	}
+
+	// Only write if we have meaningful architecture info
+	if arch.Style == "" && len(arch.Layers) == 0 {
+		return
+	}
+
+	buf.WriteString("## Architecture\n\n")
+
+	if arch.Style != "" {
+		fmt.Fprintf(buf, "**Style:** %s\n\n", arch.Style)
+	}
+
+	if arch.EntryPoint != "" {
+		fmt.Fprintf(buf, "**Entry Point:** `%s`\n\n", arch.EntryPoint)
+	}
+
+	// Write diagram
+	if arch.Diagram != "" {
+		buf.WriteString(arch.Diagram)
+		buf.WriteString("\n")
+	}
+
+	// Write layer dependencies
+	if len(arch.Layers) > 0 {
+		hasDepends := false
+		for _, layer := range arch.Layers {
+			if len(layer.DependsOn) > 0 {
+				hasDepends = true
+				break
+			}
+		}
+
+		if hasDepends {
+			buf.WriteString("**Package Dependencies:**\n")
+			for _, layer := range arch.Layers {
+				if len(layer.DependsOn) > 0 {
+					fmt.Fprintf(buf, "- `%s` → `%s`\n", layer.Name, strings.Join(layer.DependsOn, "`, `"))
+				}
+			}
+			buf.WriteString("\n")
+		}
 	}
 }
 
@@ -400,45 +452,172 @@ func (g *ClaudeGenerator) writeCommands(buf *bytes.Buffer, commands []types.Comm
 	buf.WriteString("```\n\n")
 }
 
-// writeEndpoints writes the API endpoints section
+// writeEndpoints writes the API endpoints section grouped by resource
 func (g *ClaudeGenerator) writeEndpoints(buf *bytes.Buffer, endpoints []types.Endpoint) {
 	if len(endpoints) == 0 {
 		return
 	}
 
 	buf.WriteString("## API Endpoints\n\n")
-	buf.WriteString("| Method | Path | File | Auth |\n")
-	buf.WriteString("|--------|------|------|------|\n")
 
-	// Limit to 50 endpoints to avoid huge tables
-	limit := 50
-	if len(endpoints) < limit {
-		limit = len(endpoints)
+	// Group endpoints by resource (first path segment after /)
+	grouped := groupEndpointsByResource(endpoints)
+
+	// Get sorted resource names
+	var resources []string
+	for resource := range grouped {
+		resources = append(resources, resource)
 	}
+	sort.Strings(resources)
 
-	for i := 0; i < limit; i++ {
-		ep := endpoints[i]
-		auth := ep.Auth
-		if auth == "" {
-			auth = "-"
+	totalShown := 0
+	maxEndpoints := 100 // Show up to 100 endpoints total
+
+	for _, resource := range resources {
+		if totalShown >= maxEndpoints {
+			break
 		}
-		file := ep.File
-		if ep.Line > 0 {
-			file = fmt.Sprintf("%s:%d", ep.File, ep.Line)
+
+		eps := grouped[resource]
+		if len(eps) == 0 {
+			continue
 		}
-		fmt.Fprintf(buf, "| %s | `%s` | `%s` | %s |\n", ep.Method, ep.Path, file, auth)
+
+		// Write resource header
+		displayResource := resource
+		if displayResource == "" || displayResource == "/" {
+			displayResource = "Root"
+		}
+		fmt.Fprintf(buf, "### %s\n\n", displayResource)
+		buf.WriteString("| Method | Path | File |\n")
+		buf.WriteString("|--------|------|------|\n")
+
+		for _, ep := range eps {
+			if totalShown >= maxEndpoints {
+				break
+			}
+
+			file := ep.File
+			if ep.Line > 0 {
+				file = fmt.Sprintf("%s:%d", ep.File, ep.Line)
+			}
+
+			// Add auth indicator if present
+			path := ep.Path
+			if ep.Auth != "" {
+				path = fmt.Sprintf("%s 🔒", ep.Path)
+			}
+
+			fmt.Fprintf(buf, "| %s | `%s` | `%s` |\n", ep.Method, path, file)
+			totalShown++
+		}
+
+		buf.WriteString("\n")
 	}
 
-	if len(endpoints) > 50 {
-		fmt.Fprintf(buf, "\n*...and %d more endpoints*\n", len(endpoints)-50)
+	remaining := len(endpoints) - totalShown
+	if remaining > 0 {
+		fmt.Fprintf(buf, "*...and %d more endpoints*\n\n", remaining)
+	}
+}
+
+// groupEndpointsByResource groups endpoints by their resource path prefix
+func groupEndpointsByResource(endpoints []types.Endpoint) map[string][]types.Endpoint {
+	grouped := make(map[string][]types.Endpoint)
+
+	for _, ep := range endpoints {
+		resource := extractResourcePrefix(ep.Path)
+		grouped[resource] = append(grouped[resource], ep)
 	}
 
-	buf.WriteString("\n")
+	// Sort endpoints within each group by path, then method
+	for resource := range grouped {
+		eps := grouped[resource]
+		sort.Slice(eps, func(i, j int) bool {
+			if eps[i].Path == eps[j].Path {
+				return methodPriority(eps[i].Method) < methodPriority(eps[j].Method)
+			}
+			return eps[i].Path < eps[j].Path
+		})
+		grouped[resource] = eps
+	}
+
+	return grouped
+}
+
+// extractResourcePrefix extracts the resource name from a path
+// /api/users/123 -> /api/users
+// /users/:id -> /users
+// /v1/products/categories -> /v1/products
+func extractResourcePrefix(path string) string {
+	// Clean the path
+	path = strings.Trim(path, "/")
+	if path == "" {
+		return "/"
+	}
+
+	parts := strings.Split(path, "/")
+
+	// Handle API versioning prefixes
+	startIdx := 0
+	if len(parts) > 0 {
+		first := strings.ToLower(parts[0])
+		// Check for common prefixes like api, v1, v2
+		if first == "api" || (len(first) >= 2 && first[0] == 'v' && isDigit(first[1])) {
+			startIdx = 1
+		}
+	}
+
+	// Build resource path
+	var resourceParts []string
+
+	// Include prefix (api, v1, etc.)
+	for i := 0; i < startIdx && i < len(parts); i++ {
+		resourceParts = append(resourceParts, parts[i])
+	}
+
+	// Add the main resource (first non-prefix, non-param segment)
+	for i := startIdx; i < len(parts) && i < startIdx+2; i++ {
+		part := parts[i]
+		// Skip dynamic segments
+		if strings.HasPrefix(part, ":") || strings.HasPrefix(part, "{") ||
+			strings.HasPrefix(part, "[") || part == "*" {
+			break
+		}
+		resourceParts = append(resourceParts, part)
+		// Stop at 2 meaningful segments
+		if len(resourceParts)-startIdx >= 1 {
+			break
+		}
+	}
+
+	if len(resourceParts) == 0 {
+		return "/"
+	}
+
+	return "/" + strings.Join(resourceParts, "/")
+}
+
+func isDigit(c byte) bool {
+	return c >= '0' && c <= '9'
+}
+
+func methodPriority(method string) int {
+	priority := map[string]int{
+		"GET": 1, "POST": 2, "PUT": 3, "PATCH": 4, "DELETE": 5, "ALL": 6,
+	}
+	if p, ok := priority[method]; ok {
+		return p
+	}
+	return 99
 }
 
 // writeConventions writes the conventions section
-func (g *ClaudeGenerator) writeConventions(buf *bytes.Buffer, conventions []types.Convention) {
-	if len(conventions) == 0 {
+func (g *ClaudeGenerator) writeConventions(buf *bytes.Buffer, conventions []types.Convention, gitConventions *types.GitConventions) {
+	hasConventions := len(conventions) > 0
+	hasGitConventions := gitConventions != nil && (gitConventions.CommitConvention != nil || gitConventions.BranchConvention != nil)
+
+	if !hasConventions && !hasGitConventions {
 		return
 	}
 
@@ -464,6 +643,73 @@ func (g *ClaudeGenerator) writeConventions(buf *bytes.Buffer, conventions []type
 		}
 		buf.WriteString("\n")
 	}
+
+	// Write git conventions
+	g.writeGitConventions(buf, gitConventions)
+}
+
+// writeGitConventions writes git commit and branch conventions
+func (g *ClaudeGenerator) writeGitConventions(buf *bytes.Buffer, git *types.GitConventions) {
+	if git == nil {
+		return
+	}
+
+	// Commit conventions
+	if git.CommitConvention != nil {
+		cc := git.CommitConvention
+		buf.WriteString("### Git\n\n")
+
+		// Commit message format
+		if cc.Style != "" {
+			styleName := cc.Style
+			switch cc.Style {
+			case "conventional":
+				styleName = "Conventional Commits"
+			case "angular":
+				styleName = "Angular style"
+			case "gitmoji":
+				styleName = "Gitmoji"
+			case "jira":
+				styleName = "Jira ticket prefix"
+			}
+			fmt.Fprintf(buf, "- Commit style: **%s**\n", styleName)
+		}
+
+		if cc.Format != "" {
+			fmt.Fprintf(buf, "  - Format: `%s`\n", cc.Format)
+		}
+
+		if len(cc.Types) > 0 {
+			fmt.Fprintf(buf, "  - Types: `%s`\n", strings.Join(cc.Types, "`, `"))
+		}
+
+		if len(cc.Scopes) > 0 {
+			fmt.Fprintf(buf, "  - Scopes: `%s`\n", strings.Join(cc.Scopes, "`, `"))
+		}
+
+		if cc.Example != "" {
+			fmt.Fprintf(buf, "  - Example: `%s`\n", cc.Example)
+		}
+	}
+
+	// Branch naming conventions
+	if git.BranchConvention != nil {
+		bc := git.BranchConvention
+
+		// If no commit convention was written, add Git header
+		if git.CommitConvention == nil {
+			buf.WriteString("### Git\n\n")
+		}
+
+		if len(bc.Prefixes) > 0 {
+			fmt.Fprintf(buf, "- Branch naming uses prefixes: %s\n", strings.Join(bc.Prefixes, ", "))
+			if len(bc.Examples) > 0 {
+				fmt.Fprintf(buf, "  ```\n  %s\n  ```\n", strings.Join(bc.Examples, ", "))
+			}
+		}
+	}
+
+	buf.WriteString("\n")
 }
 
 // writeGuidelines writes actionable coding guidelines based on tech stack

@@ -117,6 +117,14 @@ func (a *Analyzer) Analyze() (*types.Analysis, error) {
 	codePatternDetector := detector.NewCodePatternDetector(absPath, files)
 	analysis.CodePatterns = codePatternDetector.Detect()
 
+	// Detect git conventions (commit messages, branch naming)
+	gitDetector := detector.NewGitDetector(absPath)
+	analysis.GitConventions = gitDetector.Detect()
+
+	// Detect architecture patterns
+	archDetector := detector.NewArchitectureDetector(absPath, files)
+	analysis.ArchitectureInfo = archDetector.Detect()
+
 	return analysis, nil
 }
 
@@ -165,10 +173,22 @@ func (a *Analyzer) detectDependencies(rootPath string) []types.Dependency {
 				continue
 			}
 			if inRequire && line != "" {
+				// Skip indirect dependencies
+				if contains(line, "// indirect") {
+					continue
+				}
+
 				parts := splitFields(line)
 				if len(parts) >= 2 {
+					pkgName := parts[0]
+
+					// Filter out internal/vendor packages
+					if isInternalPackage(pkgName) {
+						continue
+					}
+
 					deps = append(deps, types.Dependency{
-						Name:    parts[0],
+						Name:    pkgName,
 						Version: parts[1],
 						Type:    "runtime",
 					})
@@ -178,6 +198,37 @@ func (a *Analyzer) detectDependencies(rootPath string) []types.Dependency {
 	}
 
 	return deps
+}
+
+// isInternalPackage checks if a package path is internal/vendor
+func isInternalPackage(pkg string) bool {
+	// Skip internal subpackages
+	if contains(pkg, "/internal/") {
+		return true
+	}
+	// Skip service-specific subpackages (AWS SDK pattern)
+	if contains(pkg, "/service/internal/") {
+		return true
+	}
+	// Skip feature subpackages
+	if contains(pkg, "/feature/") {
+		return true
+	}
+	return false
+}
+
+// contains checks if s contains substr (simple implementation)
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && findSubstring(s, substr) >= 0
+}
+
+func findSubstring(s, substr string) int {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return i
+		}
+	}
+	return -1
 }
 
 
