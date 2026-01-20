@@ -46,6 +46,9 @@ func (g *ClaudeGenerator) Generate(analysis *types.Analysis) ([]byte, error) {
 	// Available Commands
 	g.writeCommands(&buf, analysis.Commands)
 
+	// API Endpoints
+	g.writeEndpoints(&buf, analysis.Endpoints)
+
 	// Conventions
 	g.writeConventions(&buf, analysis.Conventions)
 
@@ -231,6 +234,42 @@ func (g *ClaudeGenerator) writeCommands(buf *bytes.Buffer, commands []types.Comm
 	}
 
 	buf.WriteString("```\n\n")
+}
+
+// writeEndpoints writes the API endpoints section
+func (g *ClaudeGenerator) writeEndpoints(buf *bytes.Buffer, endpoints []types.Endpoint) {
+	if len(endpoints) == 0 {
+		return
+	}
+
+	buf.WriteString("## API Endpoints\n\n")
+	buf.WriteString("| Method | Path | File | Auth |\n")
+	buf.WriteString("|--------|------|------|------|\n")
+
+	// Limit to 50 endpoints to avoid huge tables
+	limit := 50
+	if len(endpoints) < limit {
+		limit = len(endpoints)
+	}
+
+	for i := 0; i < limit; i++ {
+		ep := endpoints[i]
+		auth := ep.Auth
+		if auth == "" {
+			auth = "-"
+		}
+		file := ep.File
+		if ep.Line > 0 {
+			file = fmt.Sprintf("%s:%d", ep.File, ep.Line)
+		}
+		fmt.Fprintf(buf, "| %s | `%s` | `%s` | %s |\n", ep.Method, ep.Path, file, auth)
+	}
+
+	if len(endpoints) > 50 {
+		fmt.Fprintf(buf, "\n*...and %d more endpoints*\n", len(endpoints)-50)
+	}
+
+	buf.WriteString("\n")
 }
 
 // writeConventions writes the conventions section
