@@ -1,0 +1,76 @@
+name: Feature Request
+description: Suggest a new feature or enhancement
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a feature! Please describe what you'd like to see.
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Feature category
+      options:
+        - New output format (Cursor, Copilot, etc.)
+        - New detection (framework, convention, pattern)
+        - CLI improvement
+        - Configuration (.argus.yaml)
+        - Performance
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What problem does this solve? Why do you need this?
+      placeholder: |
+        Argus doesn't detect my project's import alias configuration from tsconfig.json...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How do you think this should work?
+      placeholder: |
+        Argus should parse tsconfig.json and extract:
+        - baseUrl
+        - paths aliases (@/, ~/)
+        - And include them in the conventions section
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any workarounds or alternative approaches you've considered?
+      placeholder: |
+        I could manually add these to .argus.yaml custom_conventions, but automatic detection would be better...
+
+  - type: textarea
+    id: output_example
+    attributes:
+      label: Example output (if applicable)
+      description: How should this appear in the generated file?
+      render: markdown
+      placeholder: |
+        ## Conventions
+
+        ### Imports
+        - Use `@/` path alias for imports
+          ```typescript
+          import { Button } from '@/components/Button'
+          ```
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I'm willing to submit a PR for this feature
