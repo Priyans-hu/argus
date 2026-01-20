@@ -1,19 +1,26 @@
-.PHONY: build test lint lint-fix setup-hooks clean
+.PHONY: build test lint lint-fix setup-hooks clean check-hooks
+
+# Check if hooks are configured (runs automatically on build/test)
+check-hooks:
+	@if [ "$$(git config core.hooksPath)" != ".githooks" ]; then \
+		echo "Setting up git hooks..."; \
+		git config core.hooksPath .githooks; \
+	fi
 
 # Build the binary
-build:
+build: check-hooks
 	go build -o bin/argus ./cmd/argus
 
 # Run tests
-test:
+test: check-hooks
 	go test ./...
 
 # Run tests with verbose output
-test-v:
+test-v: check-hooks
 	go test -v ./...
 
 # Run linter
-lint:
+lint: check-hooks
 	golangci-lint run ./...
 
 # Run linter with auto-fix
