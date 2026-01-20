@@ -102,7 +102,7 @@ func (w *Walker) loadGitignore() {
 	if err != nil {
 		return // No .gitignore, use defaults only
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
