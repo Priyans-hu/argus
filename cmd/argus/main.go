@@ -267,8 +267,14 @@ func runSync(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// Generator interface for different output formats
+type contextGenerator interface {
+	Generate(analysis *types.Analysis) ([]byte, error)
+	OutputFile() string
+}
+
 func generateOutput(absPath, format string, analysis *types.Analysis, dryRun bool) error {
-	var gen *generator.ClaudeGenerator
+	var gen contextGenerator
 	var outputFile string
 
 	switch format {
@@ -277,13 +283,13 @@ func generateOutput(absPath, format string, analysis *types.Analysis, dryRun boo
 		gen = g
 		outputFile = g.OutputFile()
 	case "cursor":
-		// TODO: Implement cursor generator
-		fmt.Printf("⚠️  Cursor format not yet implemented, skipping...\n")
-		return nil
+		g := generator.NewCursorGenerator()
+		gen = g
+		outputFile = g.OutputFile()
 	case "copilot":
-		// TODO: Implement copilot generator
-		fmt.Printf("⚠️  Copilot format not yet implemented, skipping...\n")
-		return nil
+		g := generator.NewCopilotGenerator()
+		gen = g
+		outputFile = g.OutputFile()
 	default:
 		return fmt.Errorf("unknown format: %s", format)
 	}
@@ -301,6 +307,13 @@ func generateOutput(absPath, format string, analysis *types.Analysis, dryRun boo
 		fmt.Println(string(content))
 		fmt.Println("---")
 		return nil
+	}
+
+	// Ensure parent directory exists (for .github/copilot-instructions.md)
+	if dir := filepath.Dir(outPath); dir != absPath {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("failed to create directory: %w", err)
+		}
 	}
 
 	if err := os.WriteFile(outPath, content, 0644); err != nil {
