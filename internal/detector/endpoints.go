@@ -28,18 +28,33 @@ func NewEndpointDetector(rootPath string, files []types.FileInfo) *EndpointDetec
 func (d *EndpointDetector) Detect() ([]types.Endpoint, error) {
 	var endpoints []types.Endpoint
 
-	// Detect based on framework
+	// Node.js/TypeScript frameworks
 	endpoints = append(endpoints, d.detectExpressEndpoints()...)
 	endpoints = append(endpoints, d.detectFastifyEndpoints()...)
 	endpoints = append(endpoints, d.detectNextJSEndpoints()...)
+	endpoints = append(endpoints, d.detectNestJSEndpoints()...)
+	endpoints = append(endpoints, d.detectHonoEndpoints()...)
+	endpoints = append(endpoints, d.detectKoaEndpoints()...)
+
+	// Python frameworks
 	endpoints = append(endpoints, d.detectFastAPIEndpoints()...)
 	endpoints = append(endpoints, d.detectFlaskEndpoints()...)
 	endpoints = append(endpoints, d.detectDjangoEndpoints()...)
+
+	// Java frameworks
 	endpoints = append(endpoints, d.detectSpringEndpoints()...)
+
+	// Go frameworks
 	endpoints = append(endpoints, d.detectGinEndpoints()...)
 	endpoints = append(endpoints, d.detectEchoEndpoints()...)
 	endpoints = append(endpoints, d.detectFiberEndpoints()...)
 	endpoints = append(endpoints, d.detectChiEndpoints()...)
+	endpoints = append(endpoints, d.detectMuxEndpoints()...)
+	endpoints = append(endpoints, d.detectGoHTTPEndpoints()...)
+
+	// Rust frameworks
+	endpoints = append(endpoints, d.detectActixEndpoints()...)
+	endpoints = append(endpoints, d.detectAxumEndpoints()...)
 
 	// Sort endpoints by path
 	sort.Slice(endpoints, func(i, j int) bool {
@@ -58,6 +73,23 @@ func methodOrder(method string) int {
 		return o
 	}
 	return 99
+}
+
+// shouldSkipForEndpoints returns true if file should be skipped for endpoint detection
+func shouldSkipForEndpoints(path string) bool {
+	// Skip test files
+	if strings.Contains(path, "_test.go") || strings.Contains(path, ".test.") || strings.Contains(path, ".spec.") {
+		return true
+	}
+	// Skip detector/analyzer files (avoid self-detection)
+	if strings.Contains(path, "detector") || strings.Contains(path, "analyzer") {
+		return true
+	}
+	// Skip node_modules
+	if strings.Contains(path, "node_modules") {
+		return true
+	}
+	return false
 }
 
 // detectExpressEndpoints detects Express.js endpoints
@@ -84,8 +116,9 @@ func (d *EndpointDetector) detectExpressEndpoints() []types.Endpoint {
 		if f.Extension != ".js" && f.Extension != ".ts" {
 			continue
 		}
-		// Skip test files and node_modules
-		if strings.Contains(f.Path, "node_modules") || strings.Contains(f.Path, ".test.") || strings.Contains(f.Path, ".spec.") {
+		// Skip test files, node_modules, and detector files
+		if strings.Contains(f.Path, "node_modules") || strings.Contains(f.Path, ".test.") || strings.Contains(f.Path, ".spec.") ||
+			strings.Contains(f.Path, "detector") || strings.Contains(f.Path, "analyzer") {
 			continue
 		}
 
@@ -502,10 +535,7 @@ func (d *EndpointDetector) detectGinEndpoints() []types.Endpoint {
 	routeRegex := regexp.MustCompile(`\.(GET|POST|PUT|PATCH|DELETE)\s*\(\s*["']([^"']+)["']`)
 
 	for _, f := range d.files {
-		if f.IsDir || f.Extension != ".go" {
-			continue
-		}
-		if strings.HasSuffix(f.Name, "_test.go") {
+		if f.IsDir || f.Extension != ".go" || shouldSkipForEndpoints(f.Path) {
 			continue
 		}
 
@@ -551,7 +581,7 @@ func (d *EndpointDetector) detectEchoEndpoints() []types.Endpoint {
 	routeRegex := regexp.MustCompile(`e\.(GET|POST|PUT|PATCH|DELETE)\s*\(\s*["']([^"']+)["']`)
 
 	for _, f := range d.files {
-		if f.IsDir || f.Extension != ".go" || strings.HasSuffix(f.Name, "_test.go") {
+		if f.IsDir || f.Extension != ".go" || shouldSkipForEndpoints(f.Path) {
 			continue
 		}
 
@@ -593,7 +623,7 @@ func (d *EndpointDetector) detectFiberEndpoints() []types.Endpoint {
 	routeRegex := regexp.MustCompile(`\.(Get|Post|Put|Patch|Delete)\s*\(\s*["']([^"']+)["']`)
 
 	for _, f := range d.files {
-		if f.IsDir || f.Extension != ".go" || strings.HasSuffix(f.Name, "_test.go") {
+		if f.IsDir || f.Extension != ".go" || shouldSkipForEndpoints(f.Path) {
 			continue
 		}
 
@@ -635,7 +665,7 @@ func (d *EndpointDetector) detectChiEndpoints() []types.Endpoint {
 	routeRegex := regexp.MustCompile(`r\.(Get|Post|Put|Patch|Delete)\s*\(\s*["']([^"']+)["']`)
 
 	for _, f := range d.files {
-		if f.IsDir || f.Extension != ".go" || strings.HasSuffix(f.Name, "_test.go") {
+		if f.IsDir || f.Extension != ".go" || shouldSkipForEndpoints(f.Path) {
 			continue
 		}
 
@@ -735,4 +765,404 @@ func extractHandlerName(line string) string {
 		return match[1]
 	}
 	return ""
+}
+
+// detectNestJSEndpoints detects NestJS (TypeScript) endpoints
+func (d *EndpointDetector) detectNestJSEndpoints() []types.Endpoint {
+	var endpoints []types.Endpoint
+
+	if !d.hasPackage("@nestjs/core") && !d.hasPackage("@nestjs/common") {
+		return endpoints
+	}
+
+	// @Get('/path'), @Post('/path'), etc.
+	decoratorRegex := regexp.MustCompile(`@(Get|Post|Put|Patch|Delete)\s*\(\s*['"]([^'"]+)['"]`)
+	// Controller decorator for base path
+	controllerRegex := regexp.MustCompile(`@Controller\s*\(\s*['"]([^'"]+)['"]`)
+
+	for _, f := range d.files {
+		if f.IsDir || (f.Extension != ".ts" && f.Extension != ".js") {
+			continue
+		}
+		if strings.Contains(f.Path, "node_modules") || strings.Contains(f.Path, ".spec.") {
+			continue
+		}
+
+		fullPath := filepath.Join(d.rootPath, f.Path)
+		content, err := os.ReadFile(fullPath)
+		if err != nil || len(content) > 500000 {
+			continue
+		}
+
+		contentStr := string(content)
+
+		// Check if it's a NestJS controller
+		if !strings.Contains(contentStr, "@Controller") && !strings.Contains(contentStr, "@nestjs") {
+			continue
+		}
+
+		lines := strings.Split(contentStr, "\n")
+
+		// Find controller base path
+		basePath := ""
+		for _, line := range lines {
+			if match := controllerRegex.FindStringSubmatch(line); len(match) >= 2 {
+				basePath = "/" + strings.Trim(match[1], "/")
+				break
+			}
+		}
+
+		for lineNum, line := range lines {
+			matches := decoratorRegex.FindAllStringSubmatch(line, -1)
+			for _, match := range matches {
+				if len(match) >= 3 {
+					method := strings.ToUpper(match[1])
+					path := match[2]
+					fullEndpointPath := basePath
+					if path != "" && path != "/" {
+						fullEndpointPath = basePath + "/" + strings.Trim(path, "/")
+					}
+					if fullEndpointPath == "" {
+						fullEndpointPath = "/"
+					}
+
+					endpoints = append(endpoints, types.Endpoint{
+						Method: method,
+						Path:   fullEndpointPath,
+						File:   f.Path,
+						Line:   lineNum + 1,
+					})
+				}
+			}
+		}
+	}
+
+	return endpoints
+}
+
+// detectHonoEndpoints detects Hono (TypeScript/Bun) endpoints
+func (d *EndpointDetector) detectHonoEndpoints() []types.Endpoint {
+	var endpoints []types.Endpoint
+
+	if !d.hasPackage("hono") {
+		return endpoints
+	}
+
+	// app.get('/path', handler)
+	routeRegex := regexp.MustCompile(`(?:app|hono)\.(get|post|put|patch|delete)\s*\(\s*['"\x60]([^'"\x60]+)['"\x60]`)
+
+	for _, f := range d.files {
+		if f.IsDir || (f.Extension != ".ts" && f.Extension != ".js") {
+			continue
+		}
+		if strings.Contains(f.Path, "node_modules") {
+			continue
+		}
+
+		fullPath := filepath.Join(d.rootPath, f.Path)
+		content, err := os.ReadFile(fullPath)
+		if err != nil || len(content) > 500000 {
+			continue
+		}
+
+		contentStr := string(content)
+		if !strings.Contains(contentStr, "hono") && !strings.Contains(contentStr, "Hono") {
+			continue
+		}
+
+		lines := strings.Split(contentStr, "\n")
+
+		for lineNum, line := range lines {
+			matches := routeRegex.FindAllStringSubmatch(line, -1)
+			for _, match := range matches {
+				if len(match) >= 3 {
+					endpoints = append(endpoints, types.Endpoint{
+						Method: strings.ToUpper(match[1]),
+						Path:   match[2],
+						File:   f.Path,
+						Line:   lineNum + 1,
+					})
+				}
+			}
+		}
+	}
+
+	return endpoints
+}
+
+// detectKoaEndpoints detects Koa.js endpoints (with koa-router)
+func (d *EndpointDetector) detectKoaEndpoints() []types.Endpoint {
+	var endpoints []types.Endpoint
+
+	if !d.hasPackage("koa") {
+		return endpoints
+	}
+
+	// router.get('/path', handler)
+	routeRegex := regexp.MustCompile(`router\.(get|post|put|patch|delete)\s*\(\s*['"\x60]([^'"\x60]+)['"\x60]`)
+
+	for _, f := range d.files {
+		if f.IsDir || (f.Extension != ".ts" && f.Extension != ".js") {
+			continue
+		}
+		if strings.Contains(f.Path, "node_modules") {
+			continue
+		}
+
+		fullPath := filepath.Join(d.rootPath, f.Path)
+		content, err := os.ReadFile(fullPath)
+		if err != nil || len(content) > 500000 {
+			continue
+		}
+
+		contentStr := string(content)
+		lines := strings.Split(contentStr, "\n")
+
+		for lineNum, line := range lines {
+			matches := routeRegex.FindAllStringSubmatch(line, -1)
+			for _, match := range matches {
+				if len(match) >= 3 {
+					endpoints = append(endpoints, types.Endpoint{
+						Method: strings.ToUpper(match[1]),
+						Path:   match[2],
+						File:   f.Path,
+						Line:   lineNum + 1,
+					})
+				}
+			}
+		}
+	}
+
+	return endpoints
+}
+
+// detectMuxEndpoints detects Gorilla Mux (Go) endpoints
+func (d *EndpointDetector) detectMuxEndpoints() []types.Endpoint {
+	var endpoints []types.Endpoint
+
+	if !d.hasGoPackage("github.com/gorilla/mux") {
+		return endpoints
+	}
+
+	// r.HandleFunc("/path", handler).Methods("GET")
+	handleFuncRegex := regexp.MustCompile(`\.HandleFunc\s*\(\s*["']([^"']+)["']`)
+	methodsRegex := regexp.MustCompile(`\.Methods\s*\(\s*["']([^"']+)["']`)
+
+	for _, f := range d.files {
+		if f.IsDir || f.Extension != ".go" || shouldSkipForEndpoints(f.Path) {
+			continue
+		}
+
+		fullPath := filepath.Join(d.rootPath, f.Path)
+		content, err := os.ReadFile(fullPath)
+		if err != nil || len(content) > 500000 {
+			continue
+		}
+
+		contentStr := string(content)
+		if !strings.Contains(contentStr, "mux") {
+			continue
+		}
+
+		lines := strings.Split(contentStr, "\n")
+
+		for lineNum, line := range lines {
+			handleMatch := handleFuncRegex.FindStringSubmatch(line)
+			if len(handleMatch) >= 2 {
+				path := handleMatch[1]
+				method := "ALL"
+
+				// Check if .Methods() is on the same line
+				if methodMatch := methodsRegex.FindStringSubmatch(line); len(methodMatch) >= 2 {
+					method = strings.ToUpper(methodMatch[1])
+				}
+
+				endpoints = append(endpoints, types.Endpoint{
+					Method: method,
+					Path:   path,
+					File:   f.Path,
+					Line:   lineNum + 1,
+				})
+			}
+		}
+	}
+
+	return endpoints
+}
+
+// detectGoHTTPEndpoints detects Go standard library net/http endpoints
+func (d *EndpointDetector) detectGoHTTPEndpoints() []types.Endpoint {
+	var endpoints []types.Endpoint
+
+	// Check if this is a Go project
+	modPath := filepath.Join(d.rootPath, "go.mod")
+	if _, err := os.Stat(modPath); os.IsNotExist(err) {
+		return endpoints
+	}
+
+	// Skip if using other routers (they'll be detected by their specific detectors)
+	if d.hasGoPackage("github.com/gin-gonic/gin") ||
+		d.hasGoPackage("github.com/labstack/echo") ||
+		d.hasGoPackage("github.com/gofiber/fiber") ||
+		d.hasGoPackage("github.com/go-chi/chi") ||
+		d.hasGoPackage("github.com/gorilla/mux") {
+		return endpoints
+	}
+
+	// http.HandleFunc("/path", handler)
+	handleFuncRegex := regexp.MustCompile(`http\.HandleFunc\s*\(\s*["']([^"']+)["']`)
+	handleRegex := regexp.MustCompile(`http\.Handle\s*\(\s*["']([^"']+)["']`)
+
+	for _, f := range d.files {
+		if f.IsDir || f.Extension != ".go" || shouldSkipForEndpoints(f.Path) {
+			continue
+		}
+
+		fullPath := filepath.Join(d.rootPath, f.Path)
+		content, err := os.ReadFile(fullPath)
+		if err != nil || len(content) > 500000 {
+			continue
+		}
+
+		contentStr := string(content)
+		if !strings.Contains(contentStr, "net/http") && !strings.Contains(contentStr, "http.") {
+			continue
+		}
+
+		lines := strings.Split(contentStr, "\n")
+
+		for lineNum, line := range lines {
+			// Check http.HandleFunc
+			if match := handleFuncRegex.FindStringSubmatch(line); len(match) >= 2 {
+				endpoints = append(endpoints, types.Endpoint{
+					Method: "ALL",
+					Path:   match[1],
+					File:   f.Path,
+					Line:   lineNum + 1,
+				})
+			}
+
+			// Check http.Handle
+			if match := handleRegex.FindStringSubmatch(line); len(match) >= 2 {
+				endpoints = append(endpoints, types.Endpoint{
+					Method: "ALL",
+					Path:   match[1],
+					File:   f.Path,
+					Line:   lineNum + 1,
+				})
+			}
+		}
+	}
+
+	return endpoints
+}
+
+// detectActixEndpoints detects Actix-web (Rust) endpoints
+func (d *EndpointDetector) detectActixEndpoints() []types.Endpoint {
+	var endpoints []types.Endpoint
+
+	if !d.hasRustPackage("actix-web") {
+		return endpoints
+	}
+
+	// #[get("/path")], #[post("/path")], etc.
+	attrRegex := regexp.MustCompile(`#\[(get|post|put|patch|delete)\s*\(\s*["']([^"']+)["']`)
+	// .route("/path", web::get().to(handler))
+	routeRegex := regexp.MustCompile(`\.route\s*\(\s*["']([^"']+)["']\s*,\s*web::(get|post|put|patch|delete)`)
+
+	for _, f := range d.files {
+		if f.IsDir || f.Extension != ".rs" {
+			continue
+		}
+
+		fullPath := filepath.Join(d.rootPath, f.Path)
+		content, err := os.ReadFile(fullPath)
+		if err != nil || len(content) > 500000 {
+			continue
+		}
+
+		contentStr := string(content)
+		lines := strings.Split(contentStr, "\n")
+
+		for lineNum, line := range lines {
+			// Check attribute macros
+			if match := attrRegex.FindStringSubmatch(line); len(match) >= 3 {
+				endpoints = append(endpoints, types.Endpoint{
+					Method: strings.ToUpper(match[1]),
+					Path:   match[2],
+					File:   f.Path,
+					Line:   lineNum + 1,
+				})
+			}
+
+			// Check .route() calls
+			if match := routeRegex.FindStringSubmatch(line); len(match) >= 3 {
+				endpoints = append(endpoints, types.Endpoint{
+					Method: strings.ToUpper(match[2]),
+					Path:   match[1],
+					File:   f.Path,
+					Line:   lineNum + 1,
+				})
+			}
+		}
+	}
+
+	return endpoints
+}
+
+// detectAxumEndpoints detects Axum (Rust) endpoints
+func (d *EndpointDetector) detectAxumEndpoints() []types.Endpoint {
+	var endpoints []types.Endpoint
+
+	if !d.hasRustPackage("axum") {
+		return endpoints
+	}
+
+	// .route("/path", get(handler)) or .route("/path", post(handler))
+	routeRegex := regexp.MustCompile(`\.route\s*\(\s*["']([^"']+)["']\s*,\s*(get|post|put|patch|delete)\s*\(`)
+
+	for _, f := range d.files {
+		if f.IsDir || f.Extension != ".rs" {
+			continue
+		}
+
+		fullPath := filepath.Join(d.rootPath, f.Path)
+		content, err := os.ReadFile(fullPath)
+		if err != nil || len(content) > 500000 {
+			continue
+		}
+
+		contentStr := string(content)
+		if !strings.Contains(contentStr, "axum") {
+			continue
+		}
+
+		lines := strings.Split(contentStr, "\n")
+
+		for lineNum, line := range lines {
+			matches := routeRegex.FindAllStringSubmatch(line, -1)
+			for _, match := range matches {
+				if len(match) >= 3 {
+					endpoints = append(endpoints, types.Endpoint{
+						Method: strings.ToUpper(match[2]),
+						Path:   match[1],
+						File:   f.Path,
+						Line:   lineNum + 1,
+					})
+				}
+			}
+		}
+	}
+
+	return endpoints
+}
+
+// hasRustPackage checks if a Rust crate is in dependencies
+func (d *EndpointDetector) hasRustPackage(name string) bool {
+	cargoPath := filepath.Join(d.rootPath, "Cargo.toml")
+	content, err := os.ReadFile(cargoPath)
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(content), name)
 }
