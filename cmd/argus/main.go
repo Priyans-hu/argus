@@ -94,7 +94,7 @@ func init() {
 
 	// Scan command flags
 	scanCmd.Flags().StringVarP(&outputDir, "output", "o", ".", "Output directory for generated files")
-	scanCmd.Flags().StringVarP(&outputFormat, "format", "f", "claude", "Output format: claude, cursor, copilot, all")
+	scanCmd.Flags().StringVarP(&outputFormat, "format", "f", "claude", "Output format: claude, claude-code, cursor, copilot, all")
 	scanCmd.Flags().BoolVarP(&dryRun, "dry-run", "n", false, "Show what would be generated without writing files")
 	scanCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed output")
 	scanCmd.Flags().BoolVarP(&mergeMode, "merge", "m", true, "Preserve custom sections when regenerating (default: true)")
@@ -192,7 +192,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 	formats := cfg.Output
 	if cmd.Flags().Changed("format") {
 		if outputFormat == "all" {
-			formats = []string{"claude", "cursor", "copilot"}
+			formats = []string{"claude", "claude-code", "cursor", "copilot"}
 		} else {
 			formats = []string{outputFormat}
 		}
@@ -302,6 +302,11 @@ type contextGenerator interface {
 }
 
 func generateOutput(absPath, format string, analysis *types.Analysis, dryRun bool) error {
+	// Handle claude-code format separately (multi-file generator)
+	if format == "claude-code" {
+		return generateClaudeCodeOutput(absPath, analysis, dryRun)
+	}
+
 	var gen contextGenerator
 	var outputFile string
 
@@ -369,6 +374,57 @@ func generateOutput(absPath, format string, analysis *types.Analysis, dryRun boo
 	}
 
 	fmt.Printf("✅ Generated %s\n", outPath)
+	return nil
+}
+
+// generateClaudeCodeOutput handles the multi-file claude-code format
+func generateClaudeCodeOutput(absPath string, analysis *types.Analysis, dryRun bool) error {
+	// Load config to get ClaudeCode settings
+	cfg, err := config.Load(absPath)
+	if err != nil {
+		cfg = config.DefaultConfig()
+	}
+
+	g := generator.NewClaudeCodeGenerator(cfg.ClaudeCode)
+	files, err := g.Generate(analysis)
+	if err != nil {
+		return fmt.Errorf("claude-code generation failed: %w", err)
+	}
+
+	if len(files) == 0 {
+		fmt.Println("ℹ️  No Claude Code configs generated (check claude_code settings)")
+		return nil
+	}
+
+	for _, file := range files {
+		outPath := filepath.Join(absPath, file.Path)
+
+		if dryRun {
+			fmt.Printf("\n📄 Would write to %s:\n", outPath)
+			fmt.Println("---")
+			fmt.Println(string(file.Content))
+			fmt.Println("---")
+			continue
+		}
+
+		// Create parent directories
+		if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
+			return fmt.Errorf("failed to create directory for %s: %w", file.Path, err)
+		}
+
+		if err := os.WriteFile(outPath, file.Content, 0644); err != nil {
+			return fmt.Errorf("failed to write %s: %w", file.Path, err)
+		}
+
+		if verbose {
+			fmt.Printf("✅ Generated %s\n", outPath)
+		}
+	}
+
+	if !dryRun {
+		fmt.Printf("✅ Generated %d Claude Code configs in .claude/\n", len(files))
+	}
+
 	return nil
 }
 
@@ -561,11 +617,16 @@ func isRelevantChange(event fsnotify.Event) bool {
 }
 
 func isGeneratedFile(path string) bool {
+	// Check if path is in .claude/ directory
+	if strings.Contains(path, ".claude/") || strings.Contains(path, ".claude"+string(filepath.Separator)) {
+		return true
+	}
+
 	name := filepath.Base(path)
 	generated := map[string]bool{
-		"CLAUDE.md":                true,
-		".cursorrules":             true,
-		"copilot-instructions.md":  true,
+		"CLAUDE.md":               true,
+		".cursorrules":            true,
+		"copilot-instructions.md": true,
 	}
 	return generated[name]
 }
