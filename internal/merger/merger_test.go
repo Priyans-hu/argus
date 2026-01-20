@@ -18,7 +18,7 @@ func TestNewMerger(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			m := NewMerger(tt.preserveCustom)
 			if m == nil {
-				t.Error("NewMerger returned nil")
+				t.Fatal("NewMerger returned nil")
 			}
 			if m.preserveCustom != tt.preserveCustom {
 				t.Errorf("preserveCustom = %v, want %v", m.preserveCustom, tt.preserveCustom)
