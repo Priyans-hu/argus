@@ -113,6 +113,10 @@ func (a *Analyzer) Analyze() (*types.Analysis, error) {
 	monorepoDetector := detector.NewMonorepoDetector(absPath, files)
 	analysis.MonorepoInfo = monorepoDetector.Detect()
 
+	// Deep code pattern analysis
+	codePatternDetector := detector.NewCodePatternDetector(absPath, files)
+	analysis.CodePatterns = codePatternDetector.Detect()
+
 	return analysis, nil
 }
 

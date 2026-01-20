@@ -13,6 +13,7 @@ type Analysis struct {
 	Endpoints     []Endpoint        `json:"endpoints,omitempty"`
 	ReadmeContent *ReadmeContent    `json:"readme_content,omitempty"`
 	MonorepoInfo  *MonorepoInfo     `json:"monorepo_info,omitempty"`
+	CodePatterns  *CodePatterns     `json:"code_patterns,omitempty"`
 }
 
 // ReadmeContent represents parsed README information
@@ -40,6 +41,30 @@ type WorkspacePackage struct {
 	Path        string   `json:"path"`
 	Description string   `json:"description,omitempty"`
 	SubPackages []string `json:"sub_packages,omitempty"`
+}
+
+// CodePatterns represents detected code patterns from deep analysis
+type CodePatterns struct {
+	StateManagement []PatternInfo `json:"state_management,omitempty"`
+	DataFetching    []PatternInfo `json:"data_fetching,omitempty"`
+	Routing         []PatternInfo `json:"routing,omitempty"`
+	Forms           []PatternInfo `json:"forms,omitempty"`
+	Testing         []PatternInfo `json:"testing,omitempty"`
+	Styling         []PatternInfo `json:"styling,omitempty"`
+	Authentication  []PatternInfo `json:"authentication,omitempty"`
+	APIPatterns     []PatternInfo `json:"api_patterns,omitempty"`
+	DatabaseORM     []PatternInfo `json:"database_orm,omitempty"`
+	Utilities       []PatternInfo `json:"utilities,omitempty"`
+}
+
+// PatternInfo represents a detected pattern
+type PatternInfo struct {
+	Name        string   `json:"name"`
+	Category    string   `json:"category"`
+	Description string   `json:"description"`
+	FileCount   int      `json:"file_count"`
+	Examples    []string `json:"examples,omitempty"`
+	Usage       string   `json:"usage,omitempty"`
 }
 
 // Endpoint represents an API endpoint

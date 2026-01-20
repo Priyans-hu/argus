@@ -62,6 +62,9 @@ func (g *ClaudeGenerator) Generate(analysis *types.Analysis) ([]byte, error) {
 	// Guidelines based on tech stack
 	g.writeGuidelines(&buf, &analysis.TechStack)
 
+	// Detected patterns from deep analysis
+	g.writePatterns(&buf, analysis.CodePatterns)
+
 	// Dependencies summary
 	g.writeDependencies(&buf, analysis.Dependencies)
 
@@ -607,6 +610,80 @@ func (g *ClaudeGenerator) writeGuidelines(buf *bytes.Buffer, stack *types.TechSt
 		buf.WriteString("### Don't\n\n")
 		for _, d := range donts {
 			fmt.Fprintf(buf, "- %s\n", d)
+		}
+		buf.WriteString("\n")
+	}
+}
+
+// writePatterns writes detected code patterns from deep analysis
+func (g *ClaudeGenerator) writePatterns(buf *bytes.Buffer, patterns *types.CodePatterns) {
+	if patterns == nil {
+		return
+	}
+
+	// Collect all patterns that have findings
+	type patternSection struct {
+		title    string
+		patterns []types.PatternInfo
+	}
+
+	sections := []patternSection{
+		{"State Management", patterns.StateManagement},
+		{"Data Fetching", patterns.DataFetching},
+		{"Routing", patterns.Routing},
+		{"Forms", patterns.Forms},
+		{"Testing", patterns.Testing},
+		{"Styling", patterns.Styling},
+		{"Authentication", patterns.Authentication},
+		{"API Patterns", patterns.APIPatterns},
+		{"Database & ORM", patterns.DatabaseORM},
+		{"Utilities", patterns.Utilities},
+	}
+
+	// Check if any patterns were detected
+	hasPatterns := false
+	for _, s := range sections {
+		if len(s.patterns) > 0 {
+			hasPatterns = true
+			break
+		}
+	}
+
+	if !hasPatterns {
+		return
+	}
+
+	buf.WriteString("## Detected Patterns\n\n")
+	buf.WriteString("*The following patterns were detected by scanning the codebase:*\n\n")
+
+	for _, section := range sections {
+		if len(section.patterns) == 0 {
+			continue
+		}
+
+		fmt.Fprintf(buf, "### %s\n\n", section.title)
+
+		// Group by significance (file count)
+		for _, p := range section.patterns {
+			if p.FileCount > 0 {
+				fmt.Fprintf(buf, "- **%s** - %s", p.Name, p.Description)
+				if p.FileCount > 1 {
+					fmt.Fprintf(buf, " (%d files)", p.FileCount)
+				}
+				buf.WriteString("\n")
+
+				// Show example files for significant patterns
+				if p.FileCount >= 3 && len(p.Examples) > 0 {
+					buf.WriteString("  - Found in: ")
+					for i, ex := range p.Examples {
+						if i > 0 {
+							buf.WriteString(", ")
+						}
+						fmt.Fprintf(buf, "`%s`", ex)
+					}
+					buf.WriteString("\n")
+				}
+			}
 		}
 		buf.WriteString("\n")
 	}
