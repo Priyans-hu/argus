@@ -4,8 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"sort"
-	"strings"
-	"text/template"
+	"unicode"
 
 	"github.com/Priyans-hu/argus/pkg/types"
 )
@@ -33,7 +32,7 @@ func (g *ClaudeGenerator) Generate(analysis *types.Analysis) ([]byte, error) {
 	var buf bytes.Buffer
 
 	// Header
-	buf.WriteString(fmt.Sprintf("# %s\n\n", analysis.ProjectName))
+	fmt.Fprintf(&buf, "# %s\n\n", analysis.ProjectName)
 
 	// Tech Stack Summary
 	g.writeTechStack(&buf, &analysis.TechStack)
@@ -72,9 +71,9 @@ func (g *ClaudeGenerator) writeTechStack(buf *bytes.Buffer, stack *types.TechSta
 
 		for _, lang := range langs {
 			if lang.Version != "" {
-				buf.WriteString(fmt.Sprintf("- **%s** %s (%.1f%%)\n", lang.Name, lang.Version, lang.Percentage))
+				fmt.Fprintf(buf, "- **%s** %s (%.1f%%)\n", lang.Name, lang.Version, lang.Percentage)
 			} else {
-				buf.WriteString(fmt.Sprintf("- **%s** (%.1f%%)\n", lang.Name, lang.Percentage))
+				fmt.Fprintf(buf, "- **%s** (%.1f%%)\n", lang.Name, lang.Percentage)
 			}
 		}
 		buf.WriteString("\n")
@@ -117,15 +116,15 @@ func (g *ClaudeGenerator) writeTechStack(buf *bytes.Buffer, stack *types.TechSta
 
 			catName := categoryNames[cat]
 			if catName == "" {
-				catName = strings.Title(cat)
+				catName = titleCase(cat)
 			}
 
-			buf.WriteString(fmt.Sprintf("**%s:**\n", catName))
+			fmt.Fprintf(buf, "**%s:**\n", catName)
 			for _, fw := range fws {
 				if fw.Version != "" {
-					buf.WriteString(fmt.Sprintf("- %s %s\n", fw.Name, fw.Version))
+					fmt.Fprintf(buf, "- %s %s\n", fw.Name, fw.Version)
 				} else {
-					buf.WriteString(fmt.Sprintf("- %s\n", fw.Name))
+					fmt.Fprintf(buf, "- %s\n", fw.Name)
 				}
 			}
 			buf.WriteString("\n")
@@ -136,7 +135,7 @@ func (g *ClaudeGenerator) writeTechStack(buf *bytes.Buffer, stack *types.TechSta
 	if len(stack.Databases) > 0 {
 		buf.WriteString("### Databases\n\n")
 		for _, db := range stack.Databases {
-			buf.WriteString(fmt.Sprintf("- %s\n", db))
+			fmt.Fprintf(buf, "- %s\n", db)
 		}
 		buf.WriteString("\n")
 	}
@@ -145,7 +144,7 @@ func (g *ClaudeGenerator) writeTechStack(buf *bytes.Buffer, stack *types.TechSta
 	if len(stack.Tools) > 0 {
 		buf.WriteString("### Tools\n\n")
 		for _, tool := range stack.Tools {
-			buf.WriteString(fmt.Sprintf("- %s\n", tool))
+			fmt.Fprintf(buf, "- %s\n", tool)
 		}
 		buf.WriteString("\n")
 	}
@@ -167,9 +166,9 @@ func (g *ClaudeGenerator) writeStructure(buf *bytes.Buffer, structure *types.Pro
 
 	for _, dir := range dirs {
 		if dir.Purpose != "" {
-			buf.WriteString(fmt.Sprintf("├── %s/          # %s\n", dir.Path, dir.Purpose))
+			fmt.Fprintf(buf, "├── %s/          # %s\n", dir.Path, dir.Purpose)
 		} else {
-			buf.WriteString(fmt.Sprintf("├── %s/\n", dir.Path))
+			fmt.Fprintf(buf, "├── %s/\n", dir.Path)
 		}
 	}
 
@@ -181,9 +180,9 @@ func (g *ClaudeGenerator) writeStructure(buf *bytes.Buffer, structure *types.Pro
 
 		for i, f := range rootFiles {
 			if i == len(rootFiles)-1 {
-				buf.WriteString(fmt.Sprintf("└── %s\n", f))
+				fmt.Fprintf(buf, "└── %s\n", f)
 			} else {
-				buf.WriteString(fmt.Sprintf("├── %s\n", f))
+				fmt.Fprintf(buf, "├── %s\n", f)
 			}
 		}
 	}
@@ -206,7 +205,7 @@ func (g *ClaudeGenerator) writeKeyFiles(buf *bytes.Buffer, keyFiles []types.KeyF
 		if desc == "" {
 			desc = "-"
 		}
-		buf.WriteString(fmt.Sprintf("| `%s` | %s | %s |\n", kf.Path, kf.Purpose, desc))
+		fmt.Fprintf(buf, "| `%s` | %s | %s |\n", kf.Path, kf.Purpose, desc)
 	}
 	buf.WriteString("\n")
 }
@@ -222,11 +221,11 @@ func (g *ClaudeGenerator) writeCommands(buf *bytes.Buffer, commands []types.Comm
 
 	for _, cmd := range commands {
 		if cmd.Description != "" {
-			buf.WriteString(fmt.Sprintf("# %s\n", cmd.Description))
+			fmt.Fprintf(buf, "# %s\n", cmd.Description)
 		}
-		buf.WriteString(fmt.Sprintf("%s\n", cmd.Name))
+		fmt.Fprintf(buf, "%s\n", cmd.Name)
 		if cmd.Command != "" && cmd.Command != cmd.Name {
-			buf.WriteString(fmt.Sprintf("# → %s\n", cmd.Command))
+			fmt.Fprintf(buf, "# → %s\n", cmd.Command)
 		}
 		buf.WriteString("\n")
 	}
@@ -253,11 +252,11 @@ func (g *ClaudeGenerator) writeConventions(buf *bytes.Buffer, conventions []type
 	}
 
 	for cat, convs := range byCategory {
-		buf.WriteString(fmt.Sprintf("### %s\n\n", strings.Title(cat)))
+		fmt.Fprintf(buf, "### %s\n\n", titleCase(cat))
 		for _, conv := range convs {
-			buf.WriteString(fmt.Sprintf("- %s\n", conv.Description))
+			fmt.Fprintf(buf, "- %s\n", conv.Description)
 			if conv.Example != "" {
-				buf.WriteString(fmt.Sprintf("  ```\n  %s\n  ```\n", conv.Example))
+				fmt.Fprintf(buf, "  ```\n  %s\n  ```\n", conv.Example)
 			}
 		}
 		buf.WriteString("\n")
@@ -292,10 +291,10 @@ func (g *ClaudeGenerator) writeDependencies(buf *bytes.Buffer, deps []types.Depe
 			limit = len(runtime)
 		}
 		for i := 0; i < limit; i++ {
-			buf.WriteString(fmt.Sprintf("- `%s` %s\n", runtime[i].Name, runtime[i].Version))
+			fmt.Fprintf(buf, "- `%s` %s\n", runtime[i].Name, runtime[i].Version)
 		}
 		if len(runtime) > 20 {
-			buf.WriteString(fmt.Sprintf("\n*...and %d more*\n", len(runtime)-20))
+			fmt.Fprintf(buf, "\n*...and %d more*\n", len(runtime)-20)
 		}
 		buf.WriteString("\n")
 	}
@@ -307,26 +306,21 @@ func (g *ClaudeGenerator) writeDependencies(buf *bytes.Buffer, deps []types.Depe
 			limit = len(dev)
 		}
 		for i := 0; i < limit; i++ {
-			buf.WriteString(fmt.Sprintf("- `%s` %s\n", dev[i].Name, dev[i].Version))
+			fmt.Fprintf(buf, "- `%s` %s\n", dev[i].Name, dev[i].Version)
 		}
 		if len(dev) > 15 {
-			buf.WriteString(fmt.Sprintf("\n*...and %d more*\n", len(dev)-15))
+			fmt.Fprintf(buf, "\n*...and %d more*\n", len(dev)-15)
 		}
 		buf.WriteString("\n")
 	}
 }
 
-// claudeTemplate is an alternative template-based approach (not used currently)
-var claudeTemplate = template.Must(template.New("claude").Parse(`# {{.ProjectName}}
-
-## Tech Stack
-{{range .TechStack.Languages}}
-- **{{.Name}}** {{if .Version}}{{.Version}} {{end}}({{printf "%.1f" .Percentage}}%)
-{{- end}}
-
-## Project Structure
-
-` + "```" + `
-{{range .Structure.Directories}}├── {{.Path}}/{{if .Purpose}}          # {{.Purpose}}{{end}}
-{{end}}` + "```" + `
-`))
+// titleCase converts the first letter of a string to uppercase
+func titleCase(s string) string {
+	if s == "" {
+		return s
+	}
+	r := []rune(s)
+	r[0] = unicode.ToUpper(r[0])
+	return string(r)
+}
