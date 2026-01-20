@@ -12,6 +12,7 @@ type Analysis struct {
 	KeyFiles      []KeyFile         `json:"key_files"`
 	Endpoints     []Endpoint        `json:"endpoints,omitempty"`
 	ReadmeContent *ReadmeContent    `json:"readme_content,omitempty"`
+	MonorepoInfo  *MonorepoInfo     `json:"monorepo_info,omitempty"`
 }
 
 // ReadmeContent represents parsed README information
@@ -22,6 +23,23 @@ type ReadmeContent struct {
 	Installation string   `json:"installation,omitempty"`
 	QuickStart   string   `json:"quick_start,omitempty"`
 	Usage        string   `json:"usage,omitempty"`
+}
+
+// MonorepoInfo represents monorepo/workspace configuration
+type MonorepoInfo struct {
+	IsMonorepo     bool               `json:"is_monorepo"`
+	Tool           string             `json:"tool,omitempty"`           // Turborepo, Lerna, Nx, etc.
+	PackageManager string             `json:"package_manager,omitempty"` // npm, yarn, pnpm, bun
+	WorkspacePaths []string           `json:"workspace_paths,omitempty"`
+	Packages       []WorkspacePackage `json:"packages,omitempty"`
+}
+
+// WorkspacePackage represents a package in a monorepo
+type WorkspacePackage struct {
+	Name        string   `json:"name"`
+	Path        string   `json:"path"`
+	Description string   `json:"description,omitempty"`
+	SubPackages []string `json:"sub_packages,omitempty"`
 }
 
 // Endpoint represents an API endpoint

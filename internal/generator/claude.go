@@ -38,6 +38,9 @@ func (g *ClaudeGenerator) Generate(analysis *types.Analysis) ([]byte, error) {
 	// Project Overview from README
 	g.writeProjectOverview(&buf, analysis.ReadmeContent)
 
+	// Architecture section for monorepos
+	g.writeArchitecture(&buf, analysis.MonorepoInfo)
+
 	// Tech Stack Summary
 	g.writeTechStack(&buf, &analysis.TechStack)
 
@@ -89,6 +92,53 @@ func (g *ClaudeGenerator) writeProjectOverview(buf *bytes.Buffer, readme *types.
 		buf.WriteString("### Key Features\n\n")
 		for _, feature := range readme.Features {
 			fmt.Fprintf(buf, "- %s\n", feature)
+		}
+		buf.WriteString("\n")
+	}
+}
+
+// writeArchitecture writes the architecture section for monorepos
+func (g *ClaudeGenerator) writeArchitecture(buf *bytes.Buffer, mono *types.MonorepoInfo) {
+	if mono == nil || !mono.IsMonorepo {
+		return
+	}
+
+	buf.WriteString("## Architecture\n\n")
+
+	// Monorepo tool info
+	if mono.Tool != "" {
+		fmt.Fprintf(buf, "This is a **%s** monorepo", mono.Tool)
+		if mono.PackageManager != "" {
+			fmt.Fprintf(buf, " using **%s**", mono.PackageManager)
+		}
+		buf.WriteString(".\n\n")
+	} else {
+		buf.WriteString("This is a **monorepo** with multiple packages.\n\n")
+	}
+
+	// Workspace paths
+	if len(mono.WorkspacePaths) > 0 {
+		buf.WriteString("**Workspaces:** ")
+		buf.WriteString("`" + strings.Join(mono.WorkspacePaths, "`, `") + "`\n\n")
+	}
+
+	// Package descriptions
+	if len(mono.Packages) > 0 {
+		buf.WriteString("### Key Packages\n\n")
+		for _, pkg := range mono.Packages {
+			fmt.Fprintf(buf, "- **`%s/`** - %s\n", pkg.Path, pkg.Description)
+			if len(pkg.SubPackages) > 0 {
+				// Show first few sub-packages
+				shown := pkg.SubPackages
+				if len(shown) > 5 {
+					shown = shown[:5]
+				}
+				fmt.Fprintf(buf, "  - Contains: `%s`", strings.Join(shown, "`, `"))
+				if len(pkg.SubPackages) > 5 {
+					fmt.Fprintf(buf, " and %d more", len(pkg.SubPackages)-5)
+				}
+				buf.WriteString("\n")
+			}
 		}
 		buf.WriteString("\n")
 	}

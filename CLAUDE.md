@@ -62,7 +62,7 @@ The all-seeing code analyzer. Help AI grok your codebase.
 
 ### Git
 
-- Branch naming uses prefixes: chore, feat
+- Branch naming uses prefixes: feat, chore
   ```
   feat/user-auth, fix/login-bug, chore/update-deps
   ```

@@ -109,6 +109,10 @@ func (a *Analyzer) Analyze() (*types.Analysis, error) {
 	readmeDetector := detector.NewReadmeDetector(absPath)
 	analysis.ReadmeContent = readmeDetector.Detect()
 
+	// Detect monorepo structure
+	monorepoDetector := detector.NewMonorepoDetector(absPath, files)
+	analysis.MonorepoInfo = monorepoDetector.Detect()
+
 	return analysis, nil
 }
 
