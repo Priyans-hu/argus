@@ -572,7 +572,7 @@ func detectGoCommands(rootPath string) []types.Command {
 
 	// Check for test files
 	hasTests := false
-	filepath.WalkDir(rootPath, func(path string, d os.DirEntry, err error) error {
+	_ = filepath.WalkDir(rootPath, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}

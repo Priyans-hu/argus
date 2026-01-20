@@ -356,12 +356,6 @@ func renderTree(buf *bytes.Buffer, node *treeNode, prefix string, isRoot bool, r
 	}
 	sort.Strings(childNames)
 
-	// Count total items (dirs + root files if at root level)
-	totalItems := len(childNames)
-	if isRoot {
-		totalItems += len(rootFiles)
-	}
-
 	// Render directories
 	for i, name := range childNames {
 		child := node.children[name]

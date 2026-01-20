@@ -67,7 +67,7 @@ func TestCodePatternDetector_DetectStateManagement(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create a React component with Redux
 	reduxContent := `import React from 'react';
@@ -118,7 +118,7 @@ func TestCodePatternDetector_DetectDataFetching(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create a file with fetch patterns
 	fetchContent := `package main
@@ -165,7 +165,7 @@ func TestCodePatternDetector_DetectTesting(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create a Go test file
 	testContent := `package main
@@ -210,7 +210,7 @@ func TestCodePatternDetector_DetectAuthentication(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create a file with JWT handling
 	authContent := `package auth
@@ -259,7 +259,7 @@ func TestCodePatternDetector_DetectDatabasePatterns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create a file with GORM usage
 	dbContent := `package repository
@@ -311,7 +311,7 @@ func TestCodePatternDetector_DetectAPIPatterns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create a file with gRPC usage
 	grpcContent := `package api

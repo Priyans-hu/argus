@@ -168,7 +168,7 @@ func (d *ArchitectureDetector) detectLayerDependencies(layer string) []string {
 	importLineRegex := regexp.MustCompile(`"([^"]+/internal/([^"/]+))"`)
 
 	layerPath := filepath.Join(d.rootPath, layer)
-	filepath.WalkDir(layerPath, func(path string, entry os.DirEntry, err error) error {
+	_ = filepath.WalkDir(layerPath, func(path string, entry os.DirEntry, err error) error {
 		if err != nil || entry.IsDir() {
 			return nil
 		}

@@ -14,7 +14,7 @@ func TestDetectGoCommands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create go.mod
 	goMod := `module test
@@ -157,7 +157,7 @@ func TestDetectPythonCommands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create requirements.txt with pytest
 	reqContent := `flask==2.0.0
@@ -192,7 +192,7 @@ func TestDetectPythonCommands_WithPyproject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create pyproject.toml
 	pyproject := `[project]
@@ -224,7 +224,7 @@ func TestDetectCobraCommands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create go.mod with cobra
 	goMod := `module myapp
@@ -314,7 +314,7 @@ func TestParseCobraCommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	content := `package cmd
 
@@ -367,7 +367,7 @@ func TestDetectKeyFiles_NoDuplicates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create multiple README.md files (root and nested)
 	if err := os.WriteFile(filepath.Join(tmpDir, "README.md"), []byte("# Root"), 0644); err != nil {

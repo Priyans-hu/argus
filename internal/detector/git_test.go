@@ -13,7 +13,7 @@ func TestGitDetector_DetectCommitConvention(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Initialize git repo
 	if err := runGitCommand(tmpDir, "init"); err != nil {
@@ -104,7 +104,7 @@ func TestGitDetector_DetectBranchConvention(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Initialize git repo
 	if err := runGitCommand(tmpDir, "init"); err != nil {
@@ -191,7 +191,7 @@ func TestGitDetector_NotGitRepo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	detector := NewGitDetector(tmpDir)
 	conventions := detector.Detect()

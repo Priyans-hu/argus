@@ -1,7 +1,6 @@
 package detector
 
 import (
-	"bufio"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -56,13 +55,6 @@ func (d *CodePatternDetector) Detect() *types.CodePatterns {
 	}
 
 	return patterns
-}
-
-// KeywordMatch holds information about a keyword match
-type keywordMatch struct {
-	keyword string
-	file    string
-	line    int
 }
 
 // scanForKeywords scans files for specific keywords
@@ -888,22 +880,6 @@ func (d *CodePatternDetector) detectUtilityPatterns() []types.PatternInfo {
 	}
 
 	return patterns
-}
-
-// countFileLines counts lines in a file (for size estimation)
-func countFileLines(path string) int {
-	file, err := os.Open(path)
-	if err != nil {
-		return 0
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	count := 0
-	for scanner.Scan() {
-		count++
-	}
-	return count
 }
 
 // Helper functions

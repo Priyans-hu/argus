@@ -37,7 +37,7 @@ func TestDetectExpressEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create package.json with express dependency
 	pkgJSON := `{"dependencies": {"express": "^4.18.0"}}`
@@ -102,7 +102,7 @@ func TestDetectGinEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create go.mod with gin dependency
 	goMod := `module test
@@ -153,7 +153,7 @@ func TestDetectFastAPIEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create requirements.txt with fastapi
 	reqContent := `fastapi==0.104.0
@@ -211,7 +211,7 @@ func TestDetectChiEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create go.mod with chi dependency
 	goMod := `module test
@@ -269,7 +269,7 @@ func TestDetectEndpoints_SkipsTestFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create a test file with endpoint-like patterns
 	testContent := `package routes_test
@@ -304,7 +304,7 @@ func TestDetectEndpoints_SkipsDetectorFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create a file that looks like it's in a detector directory
 	detectorContent := `package detector

@@ -54,7 +54,7 @@ func TestArchitectureDetector_DetectStyle(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to create temp dir: %v", err)
 			}
-			defer os.RemoveAll(tmpDir)
+			defer func() { _ = os.RemoveAll(tmpDir) }()
 
 			// Create directory structure
 			var files []types.FileInfo
@@ -91,7 +91,7 @@ func TestArchitectureDetector_DetectEntryPoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create cmd/myapp/main.go structure
 	cmdDir := filepath.Join(tmpDir, "cmd", "myapp")
@@ -122,7 +122,7 @@ func TestArchitectureDetector_DetectLayers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create internal structure
 	internalDirs := []string{"config", "handler", "service", "repository"}
@@ -175,7 +175,7 @@ func TestArchitectureDetector_GenerateDiagram(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create cmd and internal structure
 	cmdDir := filepath.Join(tmpDir, "cmd", "app")
