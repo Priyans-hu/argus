@@ -372,35 +372,51 @@ func (d *CodePatternDetector) detectRouting() []types.PatternInfo {
 		}
 	}
 
-	// Go routing
+	// Go routing - exclude test files to avoid false positives
 	goKeywords := map[string]string{
-		"gin.Context":   "Gin framework context",
-		"gin.Default":   "Gin default router",
-		"echo.Context":  "Echo framework context",
-		"echo.New":      "Echo router initialization",
-		"fiber.Ctx":     "Fiber framework context",
-		"fiber.New":     "Fiber app initialization",
-		"chi.Router":    "Chi router",
-		"chi.NewRouter": "Chi router initialization",
-		"mux.NewRouter": "Gorilla Mux router",
+		"gin.Context":     "Gin framework context",
+		"gin.Default":     "Gin default router",
+		"echo.Context":    "Echo framework context",
+		"echo.New":        "Echo router initialization",
+		"fiber.Ctx":       "Fiber framework context",
+		"fiber.New":       "Fiber app initialization",
+		"chi.Router":      "Chi router",
+		"chi.NewRouter":   "Chi router initialization",
+		"mux.NewRouter":   "Gorilla Mux router",
 		"http.HandleFunc": "Go standard HTTP handler",
-		"http.Handle":   "Go standard HTTP handler",
+		"http.Handle":     "Go standard HTTP handler",
 	}
 
 	goResults := d.scanForKeywords(keys(goKeywords), goExts)
 	for kw, files := range goResults {
-		if len(files) > 0 {
+		// Filter out test files for routing patterns
+		nonTestFiles := filterOutTestFiles(files)
+		if len(nonTestFiles) > 0 {
 			patterns = append(patterns, types.PatternInfo{
 				Name:        kw,
 				Category:    "routing",
 				Description: goKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
+				FileCount:   len(nonTestFiles),
+				Examples:    limitSlice(nonTestFiles, 3),
 			})
 		}
 	}
 
 	return patterns
+}
+
+// filterOutTestFiles removes test files from the list
+func filterOutTestFiles(files []string) []string {
+	var result []string
+	for _, f := range files {
+		if !strings.HasSuffix(f, "_test.go") &&
+			!strings.Contains(f, ".test.") &&
+			!strings.Contains(f, ".spec.") &&
+			!strings.Contains(f, "__tests__") {
+			result = append(result, f)
+		}
+	}
+	return result
 }
 
 // detectForms detects form handling patterns
@@ -445,23 +461,24 @@ func (d *CodePatternDetector) detectTesting() []types.PatternInfo {
 	var patterns []types.PatternInfo
 	jsExts := []string{".js", ".jsx", ".ts", ".tsx", ".test.js", ".test.ts", ".spec.js", ".spec.ts"}
 	pyExts := []string{".py"}
-	goExts := []string{".go", "_test.go"}
+	goTestExts := []string{"_test.go"} // Only scan test files for Go testing patterns
+	goExts := []string{".go"}
 
 	// JS testing
 	jsKeywords := map[string]string{
-		"describe(":      "Test suite definition (Jest/Vitest/Mocha)",
-		"it(":            "Test case (Jest/Vitest/Mocha)",
-		"test(":          "Test case (Jest/Vitest)",
-		"expect(":        "Assertion (Jest/Vitest/Chai)",
-		"vi.mock":        "Vitest mocking",
-		"jest.mock":      "Jest mocking",
+		"describe(":        "Test suite definition (Jest/Vitest/Mocha)",
+		"it(":              "Test case (Jest/Vitest/Mocha)",
+		"test(":            "Test case (Jest/Vitest)",
+		"expect(":          "Assertion (Jest/Vitest/Chai)",
+		"vi.mock":          "Vitest mocking",
+		"jest.mock":        "Jest mocking",
 		"@testing-library": "Testing Library",
-		"render(":        "Testing Library render",
-		"screen.":        "Testing Library screen queries",
-		"userEvent":      "Testing Library user events",
-		"fireEvent":      "Testing Library fire events",
-		"cy.":            "Cypress commands",
-		"playwright":     "Playwright testing",
+		"render(":          "Testing Library render",
+		"screen.":          "Testing Library screen queries",
+		"userEvent":        "Testing Library user events",
+		"fireEvent":        "Testing Library fire events",
+		"cy.":              "Cypress commands",
+		"playwright":       "Playwright testing",
 	}
 
 	jsResults := d.scanForKeywords(keys(jsKeywords), jsExts)
@@ -479,13 +496,13 @@ func (d *CodePatternDetector) detectTesting() []types.PatternInfo {
 
 	// Python testing
 	pyKeywords := map[string]string{
-		"pytest":        "Pytest framework",
-		"def test_":     "Pytest test function",
-		"unittest":      "Python unittest",
-		"TestCase":      "unittest TestCase class",
+		"pytest":          "Pytest framework",
+		"def test_":       "Pytest test function",
+		"unittest":        "Python unittest",
+		"TestCase":        "unittest TestCase class",
 		"@pytest.fixture": "Pytest fixture",
-		"mock.":         "Python mocking",
-		"@patch":        "unittest mock patch",
+		"mock.":           "Python mocking",
+		"@patch":          "unittest mock patch",
 	}
 
 	pyResults := d.scanForKeywords(keys(pyKeywords), pyExts)
@@ -501,25 +518,77 @@ func (d *CodePatternDetector) detectTesting() []types.PatternInfo {
 		}
 	}
 
-	// Go testing
-	goKeywords := map[string]string{
-		"func Test":     "Go test function",
-		"t.Run":         "Go subtest",
-		"t.Error":       "Go test error",
-		"t.Fatal":       "Go test fatal",
-		"require.":      "Testify require assertions",
-		"assert.":       "Testify assert",
-		"gomock":        "GoMock mocking",
-		"httptest":      "Go HTTP testing",
+	// Go testing - scan only _test.go files, consolidate similar patterns
+	goTestKeywords := []string{"func Test", "t.Run(", "t.Error", "t.Fatal"}
+	goTestResults := d.scanForKeywords(goTestKeywords, goTestExts)
+
+	// Consolidate t.Error and t.Errorf, t.Fatal and t.Fatalf
+	consolidatedResults := make(map[string][]string)
+	for kw, files := range goTestResults {
+		// Normalize key names
+		normalizedKey := kw
+		if strings.HasPrefix(kw, "t.Error") {
+			normalizedKey = "t.Error"
+		} else if strings.HasPrefix(kw, "t.Fatal") {
+			normalizedKey = "t.Fatal"
+		}
+		// Merge files, dedupe
+		existing := consolidatedResults[normalizedKey]
+		for _, f := range files {
+			found := false
+			for _, e := range existing {
+				if e == f {
+					found = true
+					break
+				}
+			}
+			if !found {
+				existing = append(existing, f)
+			}
+		}
+		consolidatedResults[normalizedKey] = existing
 	}
 
-	goResults := d.scanForKeywords(keys(goKeywords), goExts)
-	for kw, files := range goResults {
+	goTestDescriptions := map[string]string{
+		"func Test": "Go test function",
+		"t.Run(":    "Go subtest",
+		"t.Error":   "Go test assertions",
+		"t.Fatal":   "Go test fatal assertions",
+	}
+
+	for kw, files := range consolidatedResults {
 		if len(files) > 0 {
+			displayName := strings.TrimSuffix(kw, "(")
+			desc := goTestDescriptions[kw]
+			if desc == "" {
+				desc = "Go testing"
+			}
 			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
+				Name:        displayName,
 				Category:    "testing",
-				Description: goKeywords[kw],
+				Description: desc,
+				FileCount:   len(files),
+				Examples:    limitSlice(files, 3),
+			})
+		}
+	}
+
+	// Go testing helpers - can be in any .go file
+	goHelperKeywords := map[string]string{
+		"require.":  "Testify require assertions",
+		"assert.":   "Testify assert",
+		"gomock":    "GoMock mocking",
+		"httptest.": "Go HTTP testing",
+	}
+
+	goHelperResults := d.scanForKeywords(keys(goHelperKeywords), goExts)
+	for kw, files := range goHelperResults {
+		if len(files) > 0 {
+			displayName := strings.TrimSuffix(kw, ".")
+			patterns = append(patterns, types.PatternInfo{
+				Name:        displayName,
+				Category:    "testing",
+				Description: goHelperKeywords[kw],
 				FileCount:   len(files),
 				Examples:    limitSlice(files, 3),
 			})
@@ -743,29 +812,44 @@ func (d *CodePatternDetector) detectDatabasePatterns() []types.PatternInfo {
 		}
 	}
 
-	// Go ORMs
+	// Go ORMs - use more specific patterns to avoid false positives
 	goKeywords := map[string]string{
-		"gorm.":          "GORM ORM",
+		"gorm.Open(":     "GORM ORM",
 		"gorm.Model":     "GORM model embedding",
-		"sqlx":           "sqlx database library",
-		"sql.DB":         "Go standard SQL",
-		"pgx":            "pgx PostgreSQL driver",
-		"mongo.":         "MongoDB Go driver",
-		"ent.":           "Ent ORM",
-		"bun.":           "Bun ORM",
+		"sqlx.Connect":   "sqlx database library",
+		"sqlx.Open":      "sqlx database library",
+		"sql.Open(":      "Go standard SQL",
+		"pgx.Connect":    "pgx PostgreSQL driver",
+		"mongo.Connect":  "MongoDB Go driver",
+		"bun.NewDB":      "Bun ORM",
 	}
 
 	goResults := d.scanForKeywords(keys(goKeywords), goExts)
 	for kw, files := range goResults {
 		if len(files) > 0 {
+			// Clean display name
+			displayName := strings.Split(kw, "(")[0]
+			displayName = strings.Split(displayName, ".")[0] + "." + strings.Split(displayName, ".")[1]
 			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
+				Name:        displayName,
 				Category:    "database",
 				Description: goKeywords[kw],
 				FileCount:   len(files),
 				Examples:    limitSlice(files, 3),
 			})
 		}
+	}
+
+	// Ent ORM - needs regex to avoid false positives (content, environment, etc.)
+	entFiles := d.scanForRegex(`ent\.(Client|Schema|Field|Edge|Mixin)`, goExts)
+	if len(entFiles) > 0 {
+		patterns = append(patterns, types.PatternInfo{
+			Name:        "ent",
+			Category:    "database",
+			Description: "Ent ORM (entgo.io)",
+			FileCount:   len(entFiles),
+			Examples:    limitSlice(entFiles, 3),
+		})
 	}
 
 	return patterns

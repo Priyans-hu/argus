@@ -28,8 +28,8 @@ func NewPatternDetector(rootPath string, files []types.FileInfo) *PatternDetecto
 func (d *PatternDetector) Detect() ([]types.Convention, error) {
 	var conventions []types.Convention
 
-	// Detect git branch naming conventions
-	conventions = append(conventions, d.detectBranchNaming()...)
+	// Note: Git branch naming is now handled by GitDetector for better integration
+	// with commit conventions output
 
 	// Detect comment/documentation patterns
 	conventions = append(conventions, d.detectCommentPatterns()...)
