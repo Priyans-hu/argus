@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/Priyans-hu/argus/pkg/types"
@@ -295,11 +296,27 @@ func inferDirectoryPurpose(dirName string) string {
 
 		// GraphQL
 		"graphql":       "GraphQL schema/resolvers",
-		"resolvers":     "GraphQL resolvers",
-		"resolver":      "GraphQL resolvers",
+		"resolvers":     "Resolver implementations",
+		"resolver":      "Resolution logic",
 		"mutations":     "GraphQL mutations",
 		"queries":       "GraphQL queries",
 		"subscriptions": "GraphQL subscriptions",
+
+		// Error handling
+		"errors":        "Error definitions",
+		"error":         "Error handling",
+		"exceptions":    "Exception definitions",
+
+		// History & Tracking
+		"history":       "History tracking",
+		"audit":         "Audit logging",
+		"changelog":     "Change tracking",
+
+		// Terminal UI
+		"tui":           "Terminal UI",
+		"terminal":      "Terminal utilities",
+		"console":       "Console utilities",
+		"prompt":        "Interactive prompts",
 
 		// Events & Messaging
 		"events":        "Event handlers",
@@ -432,29 +449,64 @@ func (d *StructureDetector) DetectKeyFiles() []types.KeyFile {
 		"auth.js":           {"Authentication", "Auth utilities"},
 	}
 
+	// Track which file types we've already added to avoid duplicates
+	seen := make(map[string]bool)
+
 	for _, f := range d.files {
 		if f.IsDir {
 			continue
 		}
 
-		// Check exact matches
+		// Special handling for README.md - only include root level
+		if f.Name == "README.md" {
+			if f.Path == "README.md" && !seen["README.md"] {
+				keyFiles = append(keyFiles, types.KeyFile{
+					Path:        f.Path,
+					Purpose:     "Documentation",
+					Description: "Project documentation",
+				})
+				seen["README.md"] = true
+			}
+			continue
+		}
+
+		// Special handling for CONTRIBUTING.md - only root level
+		if f.Name == "CONTRIBUTING.md" {
+			if f.Path == "CONTRIBUTING.md" && !seen["CONTRIBUTING.md"] {
+				keyFiles = append(keyFiles, types.KeyFile{
+					Path:        f.Path,
+					Purpose:     "Contributing",
+					Description: "Contribution guidelines",
+				})
+				seen["CONTRIBUTING.md"] = true
+			}
+			continue
+		}
+
+		// Check exact matches (non-doc files)
 		if kf, ok := keyFilePatterns[f.Name]; ok {
+			// Skip if we've already seen this type of file
+			if seen[f.Name] {
+				continue
+			}
 			keyFiles = append(keyFiles, types.KeyFile{
 				Path:        f.Path,
 				Purpose:     kf.purpose,
 				Description: kf.desc,
 			})
+			seen[f.Name] = true
 			continue
 		}
 
-		// Check path patterns
+		// Check path patterns (for nested config files like .github/workflows/ci.yml)
 		for pattern, kf := range keyFilePatterns {
-			if strings.HasSuffix(f.Path, pattern) {
+			if strings.HasSuffix(f.Path, pattern) && !seen[pattern] {
 				keyFiles = append(keyFiles, types.KeyFile{
 					Path:        f.Path,
 					Purpose:     kf.purpose,
 					Description: kf.desc,
 				})
+				seen[pattern] = true
 				break
 			}
 		}
@@ -485,17 +537,316 @@ func DetectCommands(rootPath string) []types.Command {
 		}
 	}
 
+	// Try Go commands
+	goModPath := filepath.Join(rootPath, "go.mod")
+	if _, err := os.Stat(goModPath); err == nil {
+		commands = append(commands, detectGoCommands(rootPath)...)
+	}
+
 	// Try Makefile
 	makefilePath := filepath.Join(rootPath, "Makefile")
-	if _, err := readFile(makefilePath); err == nil {
-		// Basic Makefile parsing could be added here
+	if data, err := readFile(makefilePath); err == nil {
+		makeTargets := parseMakefileTargets(string(data))
+		commands = append(commands, makeTargets...)
+	}
+
+	// Try Cargo.toml (Rust)
+	cargoPath := filepath.Join(rootPath, "Cargo.toml")
+	if _, err := os.Stat(cargoPath); err == nil {
+		commands = append(commands, detectCargoCommands()...)
+	}
+
+	// Try Python
+	commands = append(commands, detectPythonCommands(rootPath)...)
+
+	// Try Cobra CLI commands (Go)
+	cobraCommands := detectCobraCommands(rootPath)
+	commands = append(commands, cobraCommands...)
+
+	return commands
+}
+
+// detectGoCommands returns standard Go commands
+func detectGoCommands(rootPath string) []types.Command {
+	var commands []types.Command
+
+	// Check for test files
+	hasTests := false
+	filepath.WalkDir(rootPath, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if !d.IsDir() && hasTestSuffix(d.Name()) {
+			hasTests = true
+			return filepath.SkipAll
+		}
+		return nil
+	})
+
+	commands = append(commands, types.Command{
+		Name:        "go build ./...",
+		Description: "Build all packages",
+	})
+
+	if hasTests {
 		commands = append(commands, types.Command{
-			Name:        "make",
-			Description: "Run Makefile targets",
+			Name:        "go test ./...",
+			Description: "Run all tests",
+		})
+		commands = append(commands, types.Command{
+			Name:        "go test -v ./...",
+			Description: "Run all tests with verbose output",
+		})
+	}
+
+	commands = append(commands, types.Command{
+		Name:        "go fmt ./...",
+		Description: "Format all Go files",
+	})
+
+	return commands
+}
+
+// parseMakefileTargets extracts targets from a Makefile
+func parseMakefileTargets(content string) []types.Command {
+	var commands []types.Command
+
+	// Regex to match target definitions (target: [dependencies])
+	targetRegex := regexp.MustCompile(`(?m)^([a-zA-Z_][a-zA-Z0-9_-]*)\s*:`)
+
+	// Common targets to detect with descriptions
+	targetDescs := map[string]string{
+		"build":       "Build the project",
+		"test":        "Run tests",
+		"clean":       "Clean build artifacts",
+		"install":     "Install dependencies/binary",
+		"run":         "Run the application",
+		"dev":         "Start development mode",
+		"lint":        "Run linter",
+		"format":      "Format code",
+		"fmt":         "Format code",
+		"check":       "Run checks",
+		"all":         "Build all targets",
+		"help":        "Show available targets",
+		"docker":      "Build Docker image",
+		"deploy":      "Deploy the application",
+		"release":     "Create a release",
+		"coverage":    "Run tests with coverage",
+		"bench":       "Run benchmarks",
+		"generate":    "Generate code",
+		"proto":       "Generate protobuf code",
+		"migrate":     "Run database migrations",
+		"seed":        "Seed the database",
+	}
+
+	matches := targetRegex.FindAllStringSubmatch(content, -1)
+	seen := make(map[string]bool)
+
+	for _, match := range matches {
+		if len(match) < 2 {
+			continue
+		}
+		target := match[1]
+
+		// Skip internal targets (starting with .)
+		if target[0] == '.' {
+			continue
+		}
+
+		// Skip if already added
+		if seen[target] {
+			continue
+		}
+		seen[target] = true
+
+		desc := targetDescs[target]
+		commands = append(commands, types.Command{
+			Name:        "make " + target,
+			Description: desc,
 		})
 	}
 
 	return commands
+}
+
+// detectCargoCommands returns standard Cargo commands
+func detectCargoCommands() []types.Command {
+	return []types.Command{
+		{Name: "cargo build", Description: "Build the project"},
+		{Name: "cargo build --release", Description: "Build for release"},
+		{Name: "cargo test", Description: "Run tests"},
+		{Name: "cargo fmt", Description: "Format code"},
+		{Name: "cargo clippy", Description: "Run linter"},
+	}
+}
+
+// detectPythonCommands returns Python commands if applicable
+func detectPythonCommands(rootPath string) []types.Command {
+	var commands []types.Command
+
+	// Check for requirements.txt
+	reqPath := filepath.Join(rootPath, "requirements.txt")
+	hasRequirements := false
+	if _, err := os.Stat(reqPath); err == nil {
+		hasRequirements = true
+		commands = append(commands, types.Command{
+			Name:        "pip install -r requirements.txt",
+			Description: "Install dependencies",
+		})
+	}
+
+	// Check for pyproject.toml
+	pyprojectPath := filepath.Join(rootPath, "pyproject.toml")
+	if _, err := os.Stat(pyprojectPath); err == nil {
+		commands = append(commands, types.Command{
+			Name:        "pip install -e .",
+			Description: "Install package in editable mode",
+		})
+	}
+
+	// Check for pytest
+	if hasRequirements {
+		reqData, err := os.ReadFile(reqPath)
+		if err == nil && containsString(string(reqData), "pytest") {
+			commands = append(commands, types.Command{
+				Name:        "pytest",
+				Description: "Run tests",
+			})
+			commands = append(commands, types.Command{
+				Name:        "pytest -v",
+				Description: "Run tests with verbose output",
+			})
+		}
+	}
+
+	// Check for setup.py
+	setupPath := filepath.Join(rootPath, "setup.py")
+	if _, err := os.Stat(setupPath); err == nil {
+		commands = append(commands, types.Command{
+			Name:        "python setup.py install",
+			Description: "Install the package",
+		})
+	}
+
+	return commands
+}
+
+// detectCobraCommands finds Cobra CLI commands in Go projects
+func detectCobraCommands(rootPath string) []types.Command {
+	var commands []types.Command
+
+	// Check if this is a Cobra project
+	modPath := filepath.Join(rootPath, "go.mod")
+	modData, err := os.ReadFile(modPath)
+	if err != nil {
+		return commands
+	}
+	if !containsString(string(modData), "spf13/cobra") {
+		return commands
+	}
+
+	// Find the CLI name from cmd directory
+	cmdDir := filepath.Join(rootPath, "cmd")
+	entries, err := os.ReadDir(cmdDir)
+	if err != nil {
+		return commands
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		cliName := entry.Name()
+		cmdSubDir := filepath.Join(cmdDir, cliName, "cmd")
+
+		// Check if cmd subdir exists
+		if _, err := os.Stat(cmdSubDir); os.IsNotExist(err) {
+			continue
+		}
+
+		// Scan for command files
+		cmdFiles, err := os.ReadDir(cmdSubDir)
+		if err != nil {
+			continue
+		}
+
+		for _, cmdFile := range cmdFiles {
+			if cmdFile.IsDir() || !hasGoSuffix(cmdFile.Name()) {
+				continue
+			}
+			// Skip test files and root.go
+			if hasTestSuffix(cmdFile.Name()) || cmdFile.Name() == "root.go" {
+				continue
+			}
+
+			// Parse the command name and description
+			cmdName, cmdDesc := parseCobraCommand(filepath.Join(cmdSubDir, cmdFile.Name()))
+			if cmdName != "" {
+				commands = append(commands, types.Command{
+					Name:        cliName + " " + cmdName,
+					Description: cmdDesc,
+				})
+			}
+		}
+	}
+
+	return commands
+}
+
+// parseCobraCommand extracts command name and description from a Cobra command file
+func parseCobraCommand(filePath string) (string, string) {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return "", ""
+	}
+
+	contentStr := string(content)
+
+	// Look for Use: "commandname" or Use: "commandname [args]"
+	useRegex := regexp.MustCompile(`Use:\s*["']([^"'\s]+)`)
+	useMatch := useRegex.FindStringSubmatch(contentStr)
+
+	cmdName := ""
+	if len(useMatch) >= 2 {
+		cmdName = useMatch[1]
+	} else {
+		// Fallback: use filename without .go
+		base := filepath.Base(filePath)
+		cmdName = base[:len(base)-3]
+	}
+
+	// Look for Short: "description"
+	shortRegex := regexp.MustCompile(`Short:\s*["']([^"']+)["']`)
+	shortMatch := shortRegex.FindStringSubmatch(contentStr)
+
+	cmdDesc := ""
+	if len(shortMatch) >= 2 {
+		cmdDesc = shortMatch[1]
+	}
+
+	return cmdName, cmdDesc
+}
+
+func containsString(s, substr string) bool {
+	return len(s) >= len(substr) && findStr(s, substr) >= 0
+}
+
+func findStr(s, substr string) int {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return i
+		}
+	}
+	return -1
+}
+
+func hasGoSuffix(name string) bool {
+	return len(name) > 3 && name[len(name)-3:] == ".go"
+}
+
+func hasTestSuffix(name string) bool {
+	return len(name) > 8 && name[len(name)-8:] == "_test.go"
 }
 
 func inferScriptDescription(name string) string {
