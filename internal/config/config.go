@@ -17,6 +17,7 @@ type ClaudeCodeConfig struct {
 	Agents   bool `yaml:"agents"`
 	Commands bool `yaml:"commands"`
 	Rules    bool `yaml:"rules"`
+	MCP      bool `yaml:"mcp"`
 }
 
 // Config represents Argus configuration
@@ -150,5 +151,6 @@ custom_conventions:
 #   agents: true    # Generate .claude/agents/*.md
 #   commands: true  # Generate .claude/commands/*.md
 #   rules: true     # Generate .claude/rules/*.md
+#   mcp: true       # Generate .claude/mcp.json (MCP server configs)
 `
 }

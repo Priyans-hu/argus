@@ -19,6 +19,7 @@ func NewClaudeCodeGenerator(cfg *config.ClaudeCodeConfig) *ClaudeCodeGenerator {
 			Agents:   true,
 			Commands: true,
 			Rules:    true,
+			MCP:      true,
 		}
 	}
 	return &ClaudeCodeGenerator{config: cfg}
@@ -49,6 +50,12 @@ func (g *ClaudeCodeGenerator) Generate(analysis *types.Analysis) ([]types.Genera
 	if g.config.Rules {
 		ruleFiles := g.generateRules(analysis)
 		files = append(files, ruleFiles...)
+	}
+
+	// Generate MCP configuration
+	if g.config.MCP {
+		mcpFiles := g.generateMCP(analysis)
+		files = append(files, mcpFiles...)
 	}
 
 	return files, nil
