@@ -12,6 +12,7 @@ import (
 	"github.com/Priyans-hu/argus/internal/analyzer"
 	"github.com/Priyans-hu/argus/internal/config"
 	"github.com/Priyans-hu/argus/internal/generator"
+	"github.com/Priyans-hu/argus/internal/merger"
 	"github.com/Priyans-hu/argus/pkg/types"
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
@@ -21,11 +22,13 @@ var version = "0.1.0"
 
 // Flags
 var (
-	outputDir    string
-	outputFormat string
-	dryRun       bool
-	verbose      bool
-	force        bool
+	outputDir      string
+	outputFormat   string
+	dryRun         bool
+	verbose        bool
+	force          bool
+	mergeMode      bool
+	addCustomBlock bool
 )
 
 var rootCmd = &cobra.Command{
@@ -94,13 +97,18 @@ func init() {
 	scanCmd.Flags().StringVarP(&outputFormat, "format", "f", "claude", "Output format: claude, cursor, copilot, all")
 	scanCmd.Flags().BoolVarP(&dryRun, "dry-run", "n", false, "Show what would be generated without writing files")
 	scanCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed output")
+	scanCmd.Flags().BoolVarP(&mergeMode, "merge", "m", true, "Preserve custom sections when regenerating (default: true)")
+	scanCmd.Flags().BoolVar(&addCustomBlock, "add-custom", false, "Add a custom section placeholder to output")
 
 	// Sync command flags
 	syncCmd.Flags().BoolVarP(&dryRun, "dry-run", "n", false, "Show what would be generated without writing files")
 	syncCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed output")
+	syncCmd.Flags().BoolVarP(&mergeMode, "merge", "m", true, "Preserve custom sections when regenerating (default: true)")
+	syncCmd.Flags().BoolVar(&addCustomBlock, "add-custom", false, "Add a custom section placeholder to output")
 
 	// Watch command flags
 	watchCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed output")
+	watchCmd.Flags().BoolVarP(&mergeMode, "merge", "m", true, "Preserve custom sections when regenerating (default: true)")
 
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(scanCmd)
@@ -320,6 +328,26 @@ func generateOutput(absPath, format string, analysis *types.Analysis, dryRun boo
 	}
 
 	outPath := filepath.Join(absPath, outputFile)
+
+	// Handle merge mode - preserve custom sections from existing file
+	if mergeMode {
+		existingContent, err := os.ReadFile(outPath)
+		if err == nil && len(existingContent) > 0 {
+			m := merger.NewMerger(true)
+			content = m.Merge(existingContent, content)
+			if verbose {
+				fmt.Printf("   ℹ️  Merged with existing content (preserving custom sections)\n")
+			}
+		}
+	}
+
+	// Add custom block placeholder if requested
+	if addCustomBlock {
+		contentStr := string(content)
+		if !strings.Contains(contentStr, merger.CustomStartMarker) {
+			content = []byte(merger.AddCustomSectionPlaceholder(contentStr))
+		}
+	}
 
 	if dryRun {
 		fmt.Printf("\n📄 Would write to %s:\n", outPath)
