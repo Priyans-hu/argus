@@ -89,6 +89,14 @@ func (a *Analyzer) Analyze() (*types.Analysis, error) {
 	}
 	analysis.Conventions = append(analysis.Conventions, patterns...)
 
+	// Detect framework-specific patterns
+	frameworkDetector := detector.NewFrameworkDetector(absPath, files)
+	frameworkPatterns, err := frameworkDetector.Detect()
+	if err != nil {
+		return nil, fmt.Errorf("failed to detect framework patterns: %w", err)
+	}
+	analysis.Conventions = append(analysis.Conventions, frameworkPatterns...)
+
 	return analysis, nil
 }
 
