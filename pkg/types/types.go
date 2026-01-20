@@ -10,6 +10,18 @@ type Analysis struct {
 	Dependencies []Dependency      `json:"dependencies"`
 	Commands     []Command         `json:"commands"`
 	KeyFiles     []KeyFile         `json:"key_files"`
+	Endpoints    []Endpoint        `json:"endpoints,omitempty"`
+}
+
+// Endpoint represents an API endpoint
+type Endpoint struct {
+	Method      string `json:"method"`
+	Path        string `json:"path"`
+	Handler     string `json:"handler,omitempty"`
+	File        string `json:"file"`
+	Line        int    `json:"line,omitempty"`
+	Auth        string `json:"auth,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
 // TechStack represents detected technologies

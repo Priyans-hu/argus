@@ -97,6 +97,14 @@ func (a *Analyzer) Analyze() (*types.Analysis, error) {
 	}
 	analysis.Conventions = append(analysis.Conventions, frameworkPatterns...)
 
+	// Detect API endpoints
+	endpointDetector := detector.NewEndpointDetector(absPath, files)
+	endpoints, err := endpointDetector.Detect()
+	if err != nil {
+		return nil, fmt.Errorf("failed to detect endpoints: %w", err)
+	}
+	analysis.Endpoints = endpoints
+
 	return analysis, nil
 }
 
