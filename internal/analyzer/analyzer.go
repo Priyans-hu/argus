@@ -105,6 +105,10 @@ func (a *Analyzer) Analyze() (*types.Analysis, error) {
 	}
 	analysis.Endpoints = endpoints
 
+	// Parse README for project overview
+	readmeDetector := detector.NewReadmeDetector(absPath)
+	analysis.ReadmeContent = readmeDetector.Detect()
+
 	return analysis, nil
 }
 

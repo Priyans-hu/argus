@@ -34,6 +34,9 @@ func (g *ClaudeGenerator) Generate(analysis *types.Analysis) ([]byte, error) {
 	// Header
 	fmt.Fprintf(&buf, "# %s\n\n", analysis.ProjectName)
 
+	// Project Overview from README
+	g.writeProjectOverview(&buf, analysis.ReadmeContent)
+
 	// Tech Stack Summary
 	g.writeTechStack(&buf, &analysis.TechStack)
 
@@ -56,6 +59,35 @@ func (g *ClaudeGenerator) Generate(analysis *types.Analysis) ([]byte, error) {
 	g.writeDependencies(&buf, analysis.Dependencies)
 
 	return buf.Bytes(), nil
+}
+
+// writeProjectOverview writes the project overview from README
+func (g *ClaudeGenerator) writeProjectOverview(buf *bytes.Buffer, readme *types.ReadmeContent) {
+	if readme == nil {
+		return
+	}
+
+	hasContent := readme.Description != "" || len(readme.Features) > 0
+
+	if !hasContent {
+		return
+	}
+
+	buf.WriteString("## Project Overview\n\n")
+
+	// Description
+	if readme.Description != "" {
+		fmt.Fprintf(buf, "%s\n\n", readme.Description)
+	}
+
+	// Features
+	if len(readme.Features) > 0 {
+		buf.WriteString("### Key Features\n\n")
+		for _, feature := range readme.Features {
+			fmt.Fprintf(buf, "- %s\n", feature)
+		}
+		buf.WriteString("\n")
+	}
 }
 
 // writeTechStack writes the tech stack section

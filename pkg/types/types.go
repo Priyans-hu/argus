@@ -2,15 +2,26 @@ package types
 
 // Analysis represents the complete analysis of a codebase
 type Analysis struct {
-	ProjectName  string            `json:"project_name"`
-	RootPath     string            `json:"root_path"`
-	TechStack    TechStack         `json:"tech_stack"`
-	Structure    ProjectStructure  `json:"structure"`
-	Conventions  []Convention      `json:"conventions"`
-	Dependencies []Dependency      `json:"dependencies"`
-	Commands     []Command         `json:"commands"`
-	KeyFiles     []KeyFile         `json:"key_files"`
-	Endpoints    []Endpoint        `json:"endpoints,omitempty"`
+	ProjectName   string            `json:"project_name"`
+	RootPath      string            `json:"root_path"`
+	TechStack     TechStack         `json:"tech_stack"`
+	Structure     ProjectStructure  `json:"structure"`
+	Conventions   []Convention      `json:"conventions"`
+	Dependencies  []Dependency      `json:"dependencies"`
+	Commands      []Command         `json:"commands"`
+	KeyFiles      []KeyFile         `json:"key_files"`
+	Endpoints     []Endpoint        `json:"endpoints,omitempty"`
+	ReadmeContent *ReadmeContent    `json:"readme_content,omitempty"`
+}
+
+// ReadmeContent represents parsed README information
+type ReadmeContent struct {
+	Title        string   `json:"title,omitempty"`
+	Description  string   `json:"description,omitempty"`
+	Features     []string `json:"features,omitempty"`
+	Installation string   `json:"installation,omitempty"`
+	QuickStart   string   `json:"quick_start,omitempty"`
+	Usage        string   `json:"usage,omitempty"`
 }
 
 // Endpoint represents an API endpoint
