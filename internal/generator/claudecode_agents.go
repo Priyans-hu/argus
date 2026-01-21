@@ -2,6 +2,7 @@ package generator
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/Priyans-hu/argus/pkg/types"
 )
@@ -10,24 +11,27 @@ import (
 func (g *ClaudeCodeGenerator) generateAgents(analysis *types.Analysis) []types.GeneratedFile {
 	var files []types.GeneratedFile
 
+	// Build context for context-aware generation
+	ctx := BuildContext(analysis)
+
 	// Generate tech-stack specific reviewers
-	files = append(files, g.generateTechStackReviewers(analysis)...)
+	files = append(files, g.generateTechStackReviewers(analysis, ctx)...)
 
 	// Generate generic agents (always included)
-	files = append(files, g.generateGenericAgents(analysis)...)
+	files = append(files, g.generateGenericAgents(analysis, ctx)...)
 
 	return files
 }
 
 // generateTechStackReviewers creates language-specific code reviewer agents
-func (g *ClaudeCodeGenerator) generateTechStackReviewers(analysis *types.Analysis) []types.GeneratedFile {
+func (g *ClaudeCodeGenerator) generateTechStackReviewers(analysis *types.Analysis, ctx *GeneratorContext) []types.GeneratedFile {
 	var files []types.GeneratedFile
 
 	// Go reviewer
 	if hasLanguage(analysis, "Go") {
 		files = append(files, types.GeneratedFile{
 			Path:    ".claude/agents/go-reviewer.md",
-			Content: []byte(goReviewerContent()),
+			Content: []byte(goReviewerContent(analysis, ctx)),
 		})
 	}
 
@@ -35,7 +39,7 @@ func (g *ClaudeCodeGenerator) generateTechStackReviewers(analysis *types.Analysi
 	if hasLanguage(analysis, "TypeScript") || hasLanguage(analysis, "JavaScript") {
 		files = append(files, types.GeneratedFile{
 			Path:    ".claude/agents/ts-reviewer.md",
-			Content: []byte(tsReviewerContent(analysis)),
+			Content: []byte(tsReviewerContent(analysis, ctx)),
 		})
 	}
 
@@ -43,7 +47,7 @@ func (g *ClaudeCodeGenerator) generateTechStackReviewers(analysis *types.Analysi
 	if hasLanguage(analysis, "Python") {
 		files = append(files, types.GeneratedFile{
 			Path:    ".claude/agents/python-reviewer.md",
-			Content: []byte(pythonReviewerContent()),
+			Content: []byte(pythonReviewerContent(analysis, ctx)),
 		})
 	}
 
@@ -51,7 +55,7 @@ func (g *ClaudeCodeGenerator) generateTechStackReviewers(analysis *types.Analysi
 	if hasLanguage(analysis, "Rust") {
 		files = append(files, types.GeneratedFile{
 			Path:    ".claude/agents/rust-reviewer.md",
-			Content: []byte(rustReviewerContent()),
+			Content: []byte(rustReviewerContent(analysis, ctx)),
 		})
 	}
 
@@ -59,7 +63,7 @@ func (g *ClaudeCodeGenerator) generateTechStackReviewers(analysis *types.Analysi
 	if hasLanguage(analysis, "Java") {
 		files = append(files, types.GeneratedFile{
 			Path:    ".claude/agents/java-reviewer.md",
-			Content: []byte(javaReviewerContent()),
+			Content: []byte(javaReviewerContent(analysis, ctx)),
 		})
 	}
 
@@ -67,371 +71,632 @@ func (g *ClaudeCodeGenerator) generateTechStackReviewers(analysis *types.Analysi
 }
 
 // generateGenericAgents creates agents that are useful for any project
-func (g *ClaudeCodeGenerator) generateGenericAgents(analysis *types.Analysis) []types.GeneratedFile {
+func (g *ClaudeCodeGenerator) generateGenericAgents(analysis *types.Analysis, ctx *GeneratorContext) []types.GeneratedFile {
 	return []types.GeneratedFile{
 		{
 			Path:    ".claude/agents/planner.md",
-			Content: []byte(plannerAgentContent()),
+			Content: []byte(plannerAgentContent(analysis, ctx)),
 		},
 		{
 			Path:    ".claude/agents/security-reviewer.md",
-			Content: []byte(securityReviewerContent(analysis)),
+			Content: []byte(securityReviewerContent(analysis, ctx)),
 		},
 	}
 }
 
-func goReviewerContent() string {
-	return `# Go Code Reviewer
+func goReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string {
+	var content strings.Builder
 
-You are an expert Go code reviewer. When reviewing Go code, focus on:
+	content.WriteString(fmt.Sprintf("# Go Code Reviewer for %s\n\n", ctx.ProjectName))
+	content.WriteString("You are an expert Go code reviewer for this project. When reviewing Go code, focus on:\n\n")
 
-## Code Quality
-- Check for proper error handling (no ignored errors)
-- Verify consistent use of gofmt/goimports formatting
-- Look for proper use of interfaces and composition
-- Check for race conditions in concurrent code
-- Ensure proper resource cleanup with defer
+	// Project-specific error handling section
+	content.WriteString("## Error Handling\n\n")
+	if len(ctx.ErrorPatterns) > 0 || hasErrorHandlingConvention(analysis) {
+		content.WriteString("This project uses explicit error checking. See examples:\n")
+		errorFiles := findFilesWithPattern(analysis, "err != nil")
+		for i, file := range errorFiles {
+			if i >= 3 {
+				break
+			}
+			content.WriteString(fmt.Sprintf("- `%s`\n", file))
+		}
+		content.WriteString("\n")
+	}
+	content.WriteString("- All errors must be checked (no `_ = err`)\n")
+	content.WriteString("- Use `%w` for error wrapping to preserve error chain\n")
+	content.WriteString("- Add context when wrapping errors\n\n")
 
-## Naming Conventions
-- Exported names should be PascalCase
-- Unexported names should be camelCase
-- Acronyms should be consistently cased (HTTP not Http, URL not Url)
-- Interface names should describe behavior, often ending in -er
+	// Project-specific testing section
+	if ctx.HasTestingContext() {
+		content.WriteString("## Testing\n\n")
+		if len(ctx.TestingPatterns) > 0 {
+			content.WriteString("Detected testing patterns:\n")
+			for pattern, files := range ctx.TestingPatterns {
+				content.WriteString(fmt.Sprintf("- **%s**", pattern))
+				if len(files) > 0 {
+					content.WriteString(fmt.Sprintf(" - see `%s`", files[0]))
+				}
+				content.WriteString("\n")
+			}
+			content.WriteString("\n")
+		}
+		if len(ctx.TestFiles) > 0 {
+			content.WriteString("Example test files:\n")
+			for i, file := range ctx.TestFiles {
+				if i >= 3 {
+					break
+				}
+				content.WriteString(fmt.Sprintf("- `%s`\n", file))
+			}
+			content.WriteString("\n")
+		}
+		if ctx.TestCommand != "" {
+			content.WriteString(fmt.Sprintf("Run tests: `%s`\n\n", ctx.TestCommand))
+		}
+	} else {
+		content.WriteString("## Testing\n\n")
+		content.WriteString("- Use table-driven tests for multiple cases\n")
+		content.WriteString("- Use `t.Run()` for subtests\n")
+		content.WriteString("- Use `t.Parallel()` for independent tests\n\n")
+	}
 
-## Error Handling
-- All errors must be checked (no _ = err)
-- Use %w for error wrapping to preserve error chain
-- Prefer sentinel errors or custom error types for expected errors
-- Add context when wrapping errors
+	// Linting section with actual config
+	if ctx.HasLintingContext() {
+		content.WriteString("## Linting\n\n")
+		if lintConfig := ctx.GetLintConfig(); lintConfig != "" {
+			content.WriteString(fmt.Sprintf("Config: `%s`\n", lintConfig))
+		}
+		if ctx.LintCommand != "" {
+			content.WriteString(fmt.Sprintf("Run: `%s`\n", ctx.LintCommand))
+		}
+		content.WriteString("\n")
+	}
 
-## Testing
-- Look for table-driven tests
-- Check test coverage for edge cases
-- Verify proper use of t.Run for subtests
-- Check for proper cleanup in tests
+	// Standard guidelines
+	content.WriteString("## Code Quality\n\n")
+	content.WriteString("- Verify consistent use of gofmt/goimports formatting\n")
+	content.WriteString("- Look for proper use of interfaces and composition\n")
+	content.WriteString("- Check for race conditions in concurrent code\n")
+	content.WriteString("- Ensure proper resource cleanup with defer\n\n")
 
-## Performance
-- Avoid unnecessary allocations
-- Use appropriate data structures
-- Consider using sync.Pool for frequently allocated objects
-- Be mindful of slice capacity when appending
+	content.WriteString("## Naming Conventions\n\n")
+	content.WriteString("- Exported names: PascalCase\n")
+	content.WriteString("- Unexported names: camelCase\n")
+	content.WriteString("- Acronyms consistently cased (HTTP, URL)\n")
+	content.WriteString("- Interface names describe behavior (-er suffix)\n\n")
 
-## Common Issues to Flag
-- Using panic for regular error handling
-- Global mutable state
-- Not closing resources (files, connections)
-- Mixing pointer and value receivers on same type
-`
+	content.WriteString("## Common Issues to Flag\n\n")
+	content.WriteString("- Using panic for regular error handling\n")
+	content.WriteString("- Global mutable state\n")
+	content.WriteString("- Not closing resources (files, connections)\n")
+	content.WriteString("- Mixing pointer and value receivers on same type\n")
+
+	return content.String()
 }
 
-func tsReviewerContent(analysis *types.Analysis) string {
-	content := `# TypeScript/JavaScript Code Reviewer
+func tsReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string {
+	var content strings.Builder
 
-You are an expert TypeScript/JavaScript code reviewer. When reviewing code, focus on:
+	content.WriteString(fmt.Sprintf("# TypeScript/JavaScript Code Reviewer for %s\n\n", ctx.ProjectName))
+	content.WriteString("You are an expert TypeScript/JavaScript code reviewer for this project. When reviewing code, focus on:\n\n")
 
-## Type Safety (TypeScript)
-- Avoid using 'any' type - use 'unknown' or proper types
-- Ensure strict null checks are handled
-- Use discriminated unions for complex state
-- Prefer interfaces over type aliases for object shapes
+	// Project-specific state management
+	if analysis.CodePatterns != nil && len(analysis.CodePatterns.StateManagement) > 0 {
+		content.WriteString("## State Management\n\n")
+		content.WriteString("This project uses:\n")
+		for _, pattern := range analysis.CodePatterns.StateManagement {
+			content.WriteString(fmt.Sprintf("- **%s**", pattern.Name))
+			if len(pattern.Examples) > 0 {
+				content.WriteString(fmt.Sprintf(" - see `%s`", pattern.Examples[0]))
+			}
+			content.WriteString("\n")
+		}
+		content.WriteString("\n")
+	}
 
-## Code Quality
-- Use const by default, let when reassignment needed
-- Prefer arrow functions for callbacks
-- Use async/await over raw promises
-- Handle promise rejections properly
+	// Project-specific data fetching
+	if analysis.CodePatterns != nil && len(analysis.CodePatterns.DataFetching) > 0 {
+		content.WriteString("## Data Fetching\n\n")
+		content.WriteString("Detected patterns:\n")
+		for _, pattern := range analysis.CodePatterns.DataFetching {
+			content.WriteString(fmt.Sprintf("- **%s**", pattern.Name))
+			if len(pattern.Examples) > 0 {
+				content.WriteString(fmt.Sprintf(" - see `%s`", pattern.Examples[0]))
+			}
+			content.WriteString("\n")
+		}
+		content.WriteString("\n")
+	}
 
-## Naming Conventions
-- Use camelCase for variables and functions
-- Use PascalCase for classes and components
-- Use UPPER_SNAKE_CASE for constants
-- Prefix interfaces with 'I' only if project convention
+	// Testing section
+	if ctx.HasTestingContext() {
+		content.WriteString("## Testing\n\n")
+		if len(ctx.TestingPatterns) > 0 {
+			content.WriteString("Detected testing patterns:\n")
+			for pattern, files := range ctx.TestingPatterns {
+				content.WriteString(fmt.Sprintf("- **%s**", pattern))
+				if len(files) > 0 {
+					content.WriteString(fmt.Sprintf(" - see `%s`", files[0]))
+				}
+				content.WriteString("\n")
+			}
+			content.WriteString("\n")
+		}
+		if testConfig := ctx.GetTestConfig(); testConfig != "" {
+			content.WriteString(fmt.Sprintf("Test config: `%s`\n", testConfig))
+		}
+		if ctx.TestCommand != "" {
+			content.WriteString(fmt.Sprintf("Run tests: `%s`\n", ctx.TestCommand))
+		}
+		content.WriteString("\n")
+	}
 
-## Error Handling
-- Always handle errors in async code
-- Use try/catch appropriately
-- Don't swallow errors silently
-- Provide meaningful error messages
-`
+	// Linting section
+	if ctx.HasLintingContext() {
+		content.WriteString("## Linting & Formatting\n\n")
+		if eslint, ok := ctx.ConfigFiles["eslint"]; ok {
+			content.WriteString(fmt.Sprintf("ESLint config: `%s`\n", eslint))
+		}
+		if prettier, ok := ctx.ConfigFiles["prettier"]; ok {
+			content.WriteString(fmt.Sprintf("Prettier config: `%s`\n", prettier))
+		}
+		if ctx.LintCommand != "" {
+			content.WriteString(fmt.Sprintf("Run lint: `%s`\n", ctx.LintCommand))
+		}
+		content.WriteString("\n")
+	}
 
-	// Add React-specific guidelines if React is detected
+	// Standard type safety guidelines
+	content.WriteString("## Type Safety (TypeScript)\n\n")
+	content.WriteString("- Avoid using 'any' type - use 'unknown' or proper types\n")
+	content.WriteString("- Ensure strict null checks are handled\n")
+	content.WriteString("- Use discriminated unions for complex state\n")
+	content.WriteString("- Prefer interfaces over type aliases for object shapes\n\n")
+
+	content.WriteString("## Code Quality\n\n")
+	content.WriteString("- Use const by default, let when reassignment needed\n")
+	content.WriteString("- Prefer arrow functions for callbacks\n")
+	content.WriteString("- Use async/await over raw promises\n")
+	content.WriteString("- Handle promise rejections properly\n\n")
+
+	// Add React-specific guidelines if detected
 	if hasFramework(analysis, "React") || hasFramework(analysis, "Next.js") {
-		content += `
-## React Specific
-- Use functional components with hooks
-- Follow Rules of Hooks (no conditional hooks)
-- Memoize expensive computations with useMemo
-- Use useCallback for event handlers passed to children
-- Keep components focused and small
-- Colocate state as close to usage as possible
-`
+		content.WriteString("## React Specific\n\n")
+		content.WriteString("- Use functional components with hooks\n")
+		content.WriteString("- Follow Rules of Hooks (no conditional hooks)\n")
+		content.WriteString("- Memoize expensive computations with useMemo\n")
+		content.WriteString("- Use useCallback for event handlers passed to children\n")
+		content.WriteString("- Keep components focused and small\n\n")
 	}
 
-	// Add Vue-specific guidelines if Vue is detected
+	// Add Vue-specific guidelines if detected
 	if hasFramework(analysis, "Vue.js") || hasFramework(analysis, "Nuxt.js") {
-		content += `
-## Vue Specific
-- Use Composition API with <script setup>
-- Keep reactive state minimal
-- Use computed properties for derived state
-- Use watchEffect sparingly
-- Follow single-file component best practices
-`
+		content.WriteString("## Vue Specific\n\n")
+		content.WriteString("- Use Composition API with <script setup>\n")
+		content.WriteString("- Keep reactive state minimal\n")
+		content.WriteString("- Use computed properties for derived state\n")
+		content.WriteString("- Use watchEffect sparingly\n\n")
 	}
 
-	content += `
-## Common Issues to Flag
-- Memory leaks from uncleared intervals/subscriptions
-- Missing dependency arrays in useEffect/useMemo
-- Mutating state directly
-- Not handling loading/error states
-- Prop drilling (consider context or state management)
-`
+	content.WriteString("## Common Issues to Flag\n\n")
+	content.WriteString("- Memory leaks from uncleared intervals/subscriptions\n")
+	content.WriteString("- Missing dependency arrays in useEffect/useMemo\n")
+	content.WriteString("- Mutating state directly\n")
+	content.WriteString("- Not handling loading/error states\n")
 
-	return content
+	return content.String()
 }
 
-func pythonReviewerContent() string {
-	return `# Python Code Reviewer
+func pythonReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string {
+	var content strings.Builder
 
-You are an expert Python code reviewer. When reviewing Python code, focus on:
+	content.WriteString(fmt.Sprintf("# Python Code Reviewer for %s\n\n", ctx.ProjectName))
+	content.WriteString("You are an expert Python code reviewer for this project. When reviewing Python code, focus on:\n\n")
 
-## Code Quality
-- Follow PEP 8 style guidelines
-- Use type hints for function signatures
-- Write docstrings for public functions/classes
-- Keep functions focused and small
+	// Testing section with context
+	if ctx.HasTestingContext() {
+		content.WriteString("## Testing\n\n")
+		if len(ctx.TestingPatterns) > 0 {
+			content.WriteString("Detected testing patterns:\n")
+			for pattern, files := range ctx.TestingPatterns {
+				content.WriteString(fmt.Sprintf("- **%s**", pattern))
+				if len(files) > 0 {
+					content.WriteString(fmt.Sprintf(" - see `%s`", files[0]))
+				}
+				content.WriteString("\n")
+			}
+			content.WriteString("\n")
+		}
+		if len(ctx.TestFiles) > 0 {
+			content.WriteString("Example test files:\n")
+			for i, file := range ctx.TestFiles {
+				if i >= 3 {
+					break
+				}
+				content.WriteString(fmt.Sprintf("- `%s`\n", file))
+			}
+			content.WriteString("\n")
+		}
+		if ctx.TestCommand != "" {
+			content.WriteString(fmt.Sprintf("Run tests: `%s`\n\n", ctx.TestCommand))
+		}
+	}
 
-## Type Hints
-- Add type hints to function parameters and return values
-- Use Optional[] for nullable values
-- Use Union[] or | for multiple types (Python 3.10+)
-- Consider using TypedDict for complex dictionaries
+	// Linting section
+	if ctx.HasLintingContext() {
+		content.WriteString("## Linting & Formatting\n\n")
+		if pyproject, ok := ctx.ConfigFiles["pyproject"]; ok {
+			content.WriteString(fmt.Sprintf("Config: `%s`\n", pyproject))
+		}
+		if ctx.LintCommand != "" {
+			content.WriteString(fmt.Sprintf("Run lint: `%s`\n", ctx.LintCommand))
+		}
+		if ctx.FormatCommand != "" {
+			content.WriteString(fmt.Sprintf("Format: `%s`\n", ctx.FormatCommand))
+		}
+		content.WriteString("\n")
+	}
 
-## Error Handling
-- Use specific exception types
-- Don't use bare except clauses
-- Use context managers (with statements) for resources
-- Provide helpful error messages
+	// Standard guidelines
+	content.WriteString("## Code Quality\n\n")
+	content.WriteString("- Follow PEP 8 style guidelines\n")
+	content.WriteString("- Use type hints for function signatures\n")
+	content.WriteString("- Write docstrings for public functions/classes\n")
+	content.WriteString("- Keep functions focused and small\n\n")
 
-## Naming Conventions
-- Use snake_case for functions and variables
-- Use PascalCase for classes
-- Use UPPER_SNAKE_CASE for constants
-- Prefix private methods with underscore
+	content.WriteString("## Type Hints\n\n")
+	content.WriteString("- Add type hints to function parameters and return values\n")
+	content.WriteString("- Use Optional[] for nullable values\n")
+	content.WriteString("- Use Union[] or | for multiple types (Python 3.10+)\n")
+	content.WriteString("- Consider using TypedDict for complex dictionaries\n\n")
 
-## Testing
-- Write tests with pytest
-- Use fixtures for test setup
-- Test edge cases and error conditions
-- Use parametrize for multiple test cases
+	content.WriteString("## Error Handling\n\n")
+	content.WriteString("- Use specific exception types\n")
+	content.WriteString("- Don't use bare except clauses\n")
+	content.WriteString("- Use context managers (with statements) for resources\n")
+	content.WriteString("- Provide helpful error messages\n\n")
 
-## Common Issues to Flag
-- Mutable default arguments
-- Global variables
-- Overly long functions
-- Missing error handling
-- Not using context managers for files/connections
-- Circular imports
-`
+	content.WriteString("## Common Issues to Flag\n\n")
+	content.WriteString("- Mutable default arguments\n")
+	content.WriteString("- Global variables\n")
+	content.WriteString("- Overly long functions\n")
+	content.WriteString("- Missing error handling\n")
+	content.WriteString("- Not using context managers for files/connections\n")
+	content.WriteString("- Circular imports\n")
+
+	return content.String()
 }
 
-func rustReviewerContent() string {
-	return `# Rust Code Reviewer
+func rustReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string {
+	var content strings.Builder
 
-You are an expert Rust code reviewer. When reviewing Rust code, focus on:
+	content.WriteString(fmt.Sprintf("# Rust Code Reviewer for %s\n\n", ctx.ProjectName))
+	content.WriteString("You are an expert Rust code reviewer for this project. When reviewing Rust code, focus on:\n\n")
 
-## Ownership and Borrowing
-- Minimize cloning when borrowing would suffice
-- Use references appropriately
-- Understand lifetime annotations
-- Avoid unnecessary Box/Rc/Arc usage
+	// Testing section
+	if ctx.HasTestingContext() {
+		content.WriteString("## Testing\n\n")
+		if len(ctx.TestFiles) > 0 {
+			content.WriteString("Example test files:\n")
+			for i, file := range ctx.TestFiles {
+				if i >= 3 {
+					break
+				}
+				content.WriteString(fmt.Sprintf("- `%s`\n", file))
+			}
+			content.WriteString("\n")
+		}
+		if ctx.TestCommand != "" {
+			content.WriteString(fmt.Sprintf("Run tests: `%s`\n\n", ctx.TestCommand))
+		}
+	}
 
-## Error Handling
-- Use Result<T, E> for recoverable errors
-- Use the ? operator for error propagation
-- Create custom error types when appropriate
-- Use thiserror or anyhow for error handling
+	// Standard Rust guidelines
+	content.WriteString("## Ownership and Borrowing\n\n")
+	content.WriteString("- Minimize cloning when borrowing would suffice\n")
+	content.WriteString("- Use references appropriately\n")
+	content.WriteString("- Understand lifetime annotations\n")
+	content.WriteString("- Avoid unnecessary Box/Rc/Arc usage\n\n")
 
-## Safety
-- Minimize unsafe code blocks
-- Document safety invariants for unsafe code
-- Prefer safe abstractions
+	content.WriteString("## Error Handling\n\n")
+	content.WriteString("- Use Result<T, E> for recoverable errors\n")
+	content.WriteString("- Use the ? operator for error propagation\n")
+	content.WriteString("- Create custom error types when appropriate\n")
+	content.WriteString("- Use thiserror or anyhow for error handling\n\n")
 
-## Performance
-- Use iterators over manual loops when appropriate
-- Avoid unnecessary allocations
-- Consider using Cow for flexible ownership
-- Profile before optimizing
+	content.WriteString("## Safety\n\n")
+	content.WriteString("- Minimize unsafe code blocks\n")
+	content.WriteString("- Document safety invariants for unsafe code\n")
+	content.WriteString("- Prefer safe abstractions\n\n")
 
-## Naming Conventions
-- Use snake_case for functions and variables
-- Use PascalCase for types and traits
-- Use SCREAMING_SNAKE_CASE for constants
+	content.WriteString("## Common Issues to Flag\n\n")
+	content.WriteString("- Unnecessary cloning\n")
+	content.WriteString("- Not using pattern matching effectively\n")
+	content.WriteString("- Ignoring compiler warnings\n")
+	content.WriteString("- Missing documentation on public items\n")
+	content.WriteString("- Using unwrap() in library code\n")
 
-## Common Issues to Flag
-- Unnecessary cloning
-- Not using pattern matching effectively
-- Ignoring compiler warnings
-- Missing documentation on public items
-- Using unwrap() in library code
-`
+	return content.String()
 }
 
-func javaReviewerContent() string {
-	return `# Java Code Reviewer
+func javaReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string {
+	var content strings.Builder
 
-You are an expert Java code reviewer. When reviewing Java code, focus on:
+	content.WriteString(fmt.Sprintf("# Java Code Reviewer for %s\n\n", ctx.ProjectName))
+	content.WriteString("You are an expert Java code reviewer for this project. When reviewing Java code, focus on:\n\n")
 
-## Code Quality
-- Follow Java naming conventions
-- Use appropriate access modifiers
-- Prefer composition over inheritance
-- Keep methods focused and small
+	// Testing section
+	if ctx.HasTestingContext() {
+		content.WriteString("## Testing\n\n")
+		if len(ctx.TestingPatterns) > 0 {
+			content.WriteString("Detected testing patterns:\n")
+			for pattern, files := range ctx.TestingPatterns {
+				content.WriteString(fmt.Sprintf("- **%s**", pattern))
+				if len(files) > 0 {
+					content.WriteString(fmt.Sprintf(" - see `%s`", files[0]))
+				}
+				content.WriteString("\n")
+			}
+			content.WriteString("\n")
+		}
+		if ctx.TestCommand != "" {
+			content.WriteString(fmt.Sprintf("Run tests: `%s`\n\n", ctx.TestCommand))
+		}
+	}
 
-## Null Safety
-- Use Optional for potentially null returns
-- Add null checks for parameters
-- Consider using @Nullable/@NonNull annotations
-- Avoid returning null from collections (return empty instead)
+	// Standard Java guidelines
+	content.WriteString("## Code Quality\n\n")
+	content.WriteString("- Follow Java naming conventions\n")
+	content.WriteString("- Use appropriate access modifiers\n")
+	content.WriteString("- Prefer composition over inheritance\n")
+	content.WriteString("- Keep methods focused and small\n\n")
 
-## Error Handling
-- Use specific exception types
-- Don't catch Exception broadly
-- Clean up resources in finally or use try-with-resources
-- Document thrown exceptions in Javadoc
+	content.WriteString("## Null Safety\n\n")
+	content.WriteString("- Use Optional for potentially null returns\n")
+	content.WriteString("- Add null checks for parameters\n")
+	content.WriteString("- Consider using @Nullable/@NonNull annotations\n")
+	content.WriteString("- Return empty collections instead of null\n\n")
 
-## Naming Conventions
-- Use camelCase for methods and variables
-- Use PascalCase for classes and interfaces
-- Use UPPER_SNAKE_CASE for constants
-- Use meaningful names that describe purpose
+	content.WriteString("## Error Handling\n\n")
+	content.WriteString("- Use specific exception types\n")
+	content.WriteString("- Don't catch Exception broadly\n")
+	content.WriteString("- Clean up resources with try-with-resources\n")
+	content.WriteString("- Document thrown exceptions in Javadoc\n\n")
 
-## Testing
-- Write unit tests with JUnit
-- Use meaningful test method names
-- Test edge cases
-- Use mocking appropriately (Mockito)
+	content.WriteString("## Common Issues to Flag\n\n")
+	content.WriteString("- Mutable static fields\n")
+	content.WriteString("- Not closing resources\n")
+	content.WriteString("- Catching and swallowing exceptions\n")
+	content.WriteString("- Using raw types instead of generics\n")
+	content.WriteString("- God classes or methods\n")
+	content.WriteString("- Missing input validation\n")
 
-## Common Issues to Flag
-- Mutable static fields
-- Not closing resources
-- Catching and swallowing exceptions
-- Using raw types instead of generics
-- God classes or methods
-- Missing input validation
-`
+	return content.String()
 }
 
-func plannerAgentContent() string {
-	return `# Planner Agent
+func plannerAgentContent(analysis *types.Analysis, ctx *GeneratorContext) string {
+	var content strings.Builder
 
-You are a planning agent that helps break down complex tasks into manageable steps.
+	content.WriteString(fmt.Sprintf("# Planner Agent for %s\n\n", ctx.ProjectName))
+	content.WriteString("You are a planning agent that helps break down complex tasks into manageable steps.\n\n")
 
-## Your Role
-- Analyze the task requirements thoroughly
-- Break down large tasks into smaller, actionable steps
-- Identify dependencies between steps
-- Estimate complexity and potential blockers
-- Consider edge cases and error scenarios
+	// Project-specific context
+	if ctx.HasArchitectureContext() {
+		content.WriteString("## Project Structure\n\n")
+		if ctx.EntryPoint != "" {
+			content.WriteString(fmt.Sprintf("Entry point: `%s`\n", ctx.EntryPoint))
+		}
+		if len(ctx.Layers) > 0 {
+			content.WriteString("\nArchitectural layers:\n")
+			for _, layer := range ctx.Layers {
+				content.WriteString(fmt.Sprintf("- **%s**", layer.Name))
+				if layer.Purpose != "" {
+					content.WriteString(fmt.Sprintf(": %s", layer.Purpose))
+				}
+				content.WriteString("\n")
+			}
+		}
+		content.WriteString("\n")
+	}
 
-## Planning Process
-1. **Understand**: Clarify the requirements and goals
-2. **Research**: Identify relevant files and patterns in the codebase
-3. **Design**: Outline the high-level approach
-4. **Decompose**: Break into specific implementation steps
-5. **Validate**: Review the plan for completeness
+	// Key files for planning
+	if len(analysis.KeyFiles) > 0 {
+		content.WriteString("## Key Files\n\n")
+		content.WriteString("Important files to consider when planning:\n")
+		count := 0
+		for _, kf := range analysis.KeyFiles {
+			if count >= 5 {
+				break
+			}
+			content.WriteString(fmt.Sprintf("- `%s` - %s\n", kf.Path, kf.Purpose))
+			count++
+		}
+		content.WriteString("\n")
+	}
 
-## Output Format
-When planning, provide:
-- Clear numbered steps
-- Files that need to be modified/created
-- Dependencies between steps
-- Potential risks or considerations
-- Testing strategy
+	// Available commands for verification
+	if ctx.BuildCommand != "" || ctx.TestCommand != "" || ctx.LintCommand != "" {
+		content.WriteString("## Verification Commands\n\n")
+		if ctx.BuildCommand != "" {
+			content.WriteString(fmt.Sprintf("- Build: `%s`\n", ctx.BuildCommand))
+		}
+		if ctx.TestCommand != "" {
+			content.WriteString(fmt.Sprintf("- Test: `%s`\n", ctx.TestCommand))
+		}
+		if ctx.LintCommand != "" {
+			content.WriteString(fmt.Sprintf("- Lint: `%s`\n", ctx.LintCommand))
+		}
+		content.WriteString("\n")
+	}
 
-## Best Practices
-- Start with the simplest approach that could work
-- Consider backward compatibility
-- Think about error handling early
-- Plan for testing alongside implementation
-- Identify when to ask for clarification
-`
+	// Standard planning process
+	content.WriteString("## Planning Process\n\n")
+	content.WriteString("1. **Understand**: Clarify the requirements and goals\n")
+	content.WriteString("2. **Research**: Identify relevant files and patterns in the codebase\n")
+	content.WriteString("3. **Design**: Outline the high-level approach\n")
+	content.WriteString("4. **Decompose**: Break into specific implementation steps\n")
+	content.WriteString("5. **Validate**: Review the plan for completeness\n\n")
+
+	content.WriteString("## Output Format\n\n")
+	content.WriteString("When planning, provide:\n")
+	content.WriteString("- Clear numbered steps\n")
+	content.WriteString("- Files that need to be modified/created\n")
+	content.WriteString("- Dependencies between steps\n")
+	content.WriteString("- Potential risks or considerations\n")
+	content.WriteString("- Testing strategy\n\n")
+
+	content.WriteString("## Best Practices\n\n")
+	content.WriteString("- Start with the simplest approach that could work\n")
+	content.WriteString("- Consider backward compatibility\n")
+	content.WriteString("- Think about error handling early\n")
+	content.WriteString("- Plan for testing alongside implementation\n")
+	content.WriteString("- Identify when to ask for clarification\n")
+
+	return content.String()
 }
 
-func securityReviewerContent(analysis *types.Analysis) string {
-	content := `# Security Reviewer
+func securityReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string {
+	var content strings.Builder
 
-You are a security-focused code reviewer. When reviewing code, focus on:
+	content.WriteString(fmt.Sprintf("# Security Reviewer for %s\n\n", ctx.ProjectName))
+	content.WriteString("You are a security-focused code reviewer for this project. When reviewing code, focus on:\n\n")
 
-## Input Validation
-- Validate all user input
-- Sanitize data before using in queries or output
-- Use allowlists over blocklists when possible
-- Check for proper encoding/escaping
+	// Project-specific auth patterns
+	if len(ctx.AuthPatterns) > 0 {
+		content.WriteString("## Authentication in This Project\n\n")
+		content.WriteString("Detected patterns:\n")
+		for pattern, files := range ctx.AuthPatterns {
+			content.WriteString(fmt.Sprintf("- **%s**", pattern))
+			if len(files) > 0 {
+				content.WriteString(fmt.Sprintf(" - see `%s`", files[0]))
+			}
+			content.WriteString("\n")
+		}
+		content.WriteString("\n")
+	}
 
-## Authentication & Authorization
-- Verify authentication is required where needed
-- Check authorization for all protected resources
-- Look for privilege escalation vulnerabilities
-- Ensure secure session management
+	// API patterns that may have security implications
+	if len(ctx.APIPatterns) > 0 {
+		content.WriteString("## API Security\n\n")
+		content.WriteString("Detected API patterns to review:\n")
+		for pattern, files := range ctx.APIPatterns {
+			content.WriteString(fmt.Sprintf("- **%s**", pattern))
+			if len(files) > 0 {
+				content.WriteString(fmt.Sprintf(" - see `%s`", files[0]))
+			}
+			content.WriteString("\n")
+		}
+		content.WriteString("\n")
+	}
 
-## Data Protection
-- Check for sensitive data exposure in logs
-- Verify encryption for sensitive data at rest
-- Ensure secure transmission (HTTPS)
-- Look for hardcoded secrets or credentials
+	// Standard security guidelines
+	content.WriteString("## Input Validation\n\n")
+	content.WriteString("- Validate all user input\n")
+	content.WriteString("- Sanitize data before using in queries or output\n")
+	content.WriteString("- Use allowlists over blocklists when possible\n")
+	content.WriteString("- Check for proper encoding/escaping\n\n")
 
-## Common Vulnerabilities (OWASP Top 10)
-- SQL Injection
-- Cross-Site Scripting (XSS)
-- Broken Authentication
-- Sensitive Data Exposure
-- XML External Entities (XXE)
-- Broken Access Control
-- Security Misconfiguration
-- Insecure Deserialization
-- Using Components with Known Vulnerabilities
-- Insufficient Logging & Monitoring
-`
+	content.WriteString("## Authentication & Authorization\n\n")
+	content.WriteString("- Verify authentication is required where needed\n")
+	content.WriteString("- Check authorization for all protected resources\n")
+	content.WriteString("- Look for privilege escalation vulnerabilities\n")
+	content.WriteString("- Ensure secure session management\n\n")
 
-	// Add language-specific security concerns
+	content.WriteString("## Data Protection\n\n")
+	content.WriteString("- Check for sensitive data exposure in logs\n")
+	content.WriteString("- Verify encryption for sensitive data at rest\n")
+	content.WriteString("- Ensure secure transmission (HTTPS)\n")
+	content.WriteString("- Look for hardcoded secrets or credentials\n\n")
+
+	content.WriteString("## Common Vulnerabilities (OWASP Top 10)\n\n")
+	content.WriteString("- SQL Injection\n")
+	content.WriteString("- Cross-Site Scripting (XSS)\n")
+	content.WriteString("- Broken Authentication\n")
+	content.WriteString("- Sensitive Data Exposure\n")
+	content.WriteString("- Broken Access Control\n")
+	content.WriteString("- Security Misconfiguration\n")
+	content.WriteString("- Insecure Deserialization\n\n")
+
+	// Language-specific security
 	if hasLanguage(analysis, "Go") {
-		content += `
-## Go-Specific Security
-- Check for SQL injection in database queries
-- Verify proper use of html/template for HTML output
-- Check for command injection in os/exec calls
-- Ensure proper TLS configuration
-`
+		content.WriteString("## Go-Specific Security\n\n")
+		content.WriteString("- Check for SQL injection in database queries\n")
+		content.WriteString("- Verify proper use of html/template for HTML output\n")
+		content.WriteString("- Check for command injection in os/exec calls\n")
+		content.WriteString("- Ensure proper TLS configuration\n\n")
 	}
 
 	if hasLanguage(analysis, "TypeScript") || hasLanguage(analysis, "JavaScript") {
-		content += `
-## JavaScript/TypeScript Security
-- Check for XSS vulnerabilities
-- Verify CSRF protection
-- Look for prototype pollution
-- Check for insecure dependencies (npm audit)
-- Verify Content Security Policy usage
-`
+		content.WriteString("## JavaScript/TypeScript Security\n\n")
+		content.WriteString("- Check for XSS vulnerabilities\n")
+		content.WriteString("- Verify CSRF protection\n")
+		content.WriteString("- Look for prototype pollution\n")
+		content.WriteString("- Check for insecure dependencies (npm audit)\n")
+		content.WriteString("- Verify Content Security Policy usage\n\n")
 	}
 
 	if hasLanguage(analysis, "Python") {
-		content += `
-## Python Security
-- Check for SQL injection (use parameterized queries)
-- Verify pickle usage (avoid untrusted data)
-- Check for command injection
-- Verify YAML safe_load usage
-- Check for path traversal vulnerabilities
-`
+		content.WriteString("## Python Security\n\n")
+		content.WriteString("- Check for SQL injection (use parameterized queries)\n")
+		content.WriteString("- Verify pickle usage (avoid untrusted data)\n")
+		content.WriteString("- Check for command injection\n")
+		content.WriteString("- Verify YAML safe_load usage\n")
+		content.WriteString("- Check for path traversal vulnerabilities\n\n")
 	}
 
-	content += fmt.Sprintf(`
-## Project: %s
-Review all code changes with security in mind. Flag any potential vulnerabilities and suggest secure alternatives.
-`, analysis.ProjectName)
+	content.WriteString("## Sensitive Files\n\n")
+	content.WriteString("Never commit these files:\n")
+	content.WriteString("- `.env` files with secrets\n")
+	content.WriteString("- Private keys (*.pem, *.key)\n")
+	content.WriteString("- Credentials files\n")
+	content.WriteString("- Database connection strings with passwords\n")
 
-	return content
+	return content.String()
+}
+
+// Helper functions
+
+// hasErrorHandlingConvention checks if error handling convention is detected
+func hasErrorHandlingConvention(analysis *types.Analysis) bool {
+	for _, conv := range analysis.Conventions {
+		if conv.Category == "error-handling" {
+			return true
+		}
+	}
+	return false
+}
+
+// findFilesWithPattern finds files that contain a specific pattern
+// Uses the KeyFiles and CodePatterns as proxy since we don't have direct file search
+func findFilesWithPattern(analysis *types.Analysis, pattern string) []string {
+	var files []string
+
+	// Use KeyFiles as they're likely to have important patterns
+	for _, kf := range analysis.KeyFiles {
+		if strings.HasSuffix(kf.Path, ".go") {
+			files = append(files, kf.Path)
+		}
+	}
+
+	// Add entry points
+	if analysis.ArchitectureInfo != nil && analysis.ArchitectureInfo.EntryPoint != "" {
+		files = append(files, analysis.ArchitectureInfo.EntryPoint)
+	}
+
+	// Deduplicate and limit
+	seen := make(map[string]bool)
+	unique := []string{}
+	for _, f := range files {
+		if !seen[f] {
+			seen[f] = true
+			unique = append(unique, f)
+		}
+	}
+
+	if len(unique) > 3 {
+		unique = unique[:3]
+	}
+
+	return unique
 }

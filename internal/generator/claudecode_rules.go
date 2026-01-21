@@ -11,23 +11,33 @@ import (
 func (g *ClaudeCodeGenerator) generateRules(analysis *types.Analysis) []types.GeneratedFile {
 	var files []types.GeneratedFile
 
+	// Build context for context-aware generation
+	ctx := BuildContext(analysis)
+
 	// Git workflow rules (from GitConventions)
 	if analysis.GitConventions != nil {
-		if file := g.generateGitWorkflowRule(analysis); file != nil {
+		if file := g.generateGitWorkflowRule(analysis, ctx); file != nil {
 			files = append(files, *file)
 		}
 	}
 
 	// Testing rules (from CodePatterns)
 	if analysis.CodePatterns != nil && len(analysis.CodePatterns.Testing) > 0 {
-		if file := g.generateTestingRule(analysis); file != nil {
+		if file := g.generateTestingRule(analysis, ctx); file != nil {
 			files = append(files, *file)
 		}
 	}
 
 	// Coding style rules (from Conventions)
 	if len(analysis.Conventions) > 0 {
-		if file := g.generateCodingStyleRule(analysis); file != nil {
+		if file := g.generateCodingStyleRule(analysis, ctx); file != nil {
+			files = append(files, *file)
+		}
+	}
+
+	// Architecture rules (if architecture is detected)
+	if ctx.HasArchitectureContext() {
+		if file := g.generateArchitectureRule(analysis, ctx); file != nil {
 			files = append(files, *file)
 		}
 	}
@@ -35,20 +45,20 @@ func (g *ClaudeCodeGenerator) generateRules(analysis *types.Analysis) []types.Ge
 	// Security rules (always generated)
 	files = append(files, types.GeneratedFile{
 		Path:    ".claude/rules/security.md",
-		Content: []byte(g.securityRuleContent(analysis)),
+		Content: []byte(g.securityRuleContent(analysis, ctx)),
 	})
 
 	return files
 }
 
 // generateGitWorkflowRule creates git workflow rules from detected conventions
-func (g *ClaudeCodeGenerator) generateGitWorkflowRule(analysis *types.Analysis) *types.GeneratedFile {
+func (g *ClaudeCodeGenerator) generateGitWorkflowRule(analysis *types.Analysis, ctx *GeneratorContext) *types.GeneratedFile {
 	if analysis.GitConventions == nil {
 		return nil
 	}
 
 	var content strings.Builder
-	content.WriteString("# Git Workflow Rules\n\n")
+	content.WriteString(fmt.Sprintf("# Git Workflow Rules for %s\n\n", ctx.ProjectName))
 	content.WriteString("Follow these git conventions for this project.\n\n")
 
 	// Commit conventions
@@ -115,16 +125,16 @@ func (g *ClaudeCodeGenerator) generateGitWorkflowRule(analysis *types.Analysis) 
 }
 
 // generateTestingRule creates testing rules from detected patterns
-func (g *ClaudeCodeGenerator) generateTestingRule(analysis *types.Analysis) *types.GeneratedFile {
+func (g *ClaudeCodeGenerator) generateTestingRule(analysis *types.Analysis, ctx *GeneratorContext) *types.GeneratedFile {
 	if analysis.CodePatterns == nil || len(analysis.CodePatterns.Testing) == 0 {
 		return nil
 	}
 
 	var content strings.Builder
-	content.WriteString("# Testing Rules\n\n")
+	content.WriteString(fmt.Sprintf("# Testing Rules for %s\n\n", ctx.ProjectName))
 	content.WriteString("Follow these testing conventions for this project.\n\n")
 
-	// Detected testing patterns
+	// Detected testing patterns with file examples
 	content.WriteString("## Detected Testing Patterns\n\n")
 	for _, pattern := range analysis.CodePatterns.Testing {
 		content.WriteString(fmt.Sprintf("- **%s**: %s", pattern.Name, pattern.Description))
@@ -132,8 +142,36 @@ func (g *ClaudeCodeGenerator) generateTestingRule(analysis *types.Analysis) *typ
 			content.WriteString(fmt.Sprintf(" (%d files)", pattern.FileCount))
 		}
 		content.WriteString("\n")
+		// Add example file if available
+		if len(pattern.Examples) > 0 {
+			content.WriteString(fmt.Sprintf("  - See: `%s`\n", pattern.Examples[0]))
+		}
 	}
 	content.WriteString("\n")
+
+	// Test file examples section
+	if len(ctx.TestFiles) > 0 {
+		content.WriteString("## Test File Examples\n\n")
+		content.WriteString("Reference these files for test patterns:\n")
+		for _, file := range ctx.TestFiles {
+			content.WriteString(fmt.Sprintf("- `%s`\n", file))
+		}
+		content.WriteString("\n")
+	}
+
+	// Test command section
+	if ctx.TestCommand != "" {
+		content.WriteString("## Running Tests\n\n")
+		content.WriteString("```bash\n")
+		content.WriteString(ctx.TestCommand)
+		content.WriteString("\n```\n\n")
+	}
+
+	// Test configuration
+	if testConfig := ctx.GetTestConfig(); testConfig != "" {
+		content.WriteString("## Test Configuration\n\n")
+		content.WriteString(fmt.Sprintf("Config file: `%s`\n\n", testConfig))
+	}
 
 	// Language-specific testing guidelines
 	content.WriteString("## Testing Guidelines\n\n")
@@ -183,10 +221,43 @@ func (g *ClaudeCodeGenerator) generateTestingRule(analysis *types.Analysis) *typ
 }
 
 // generateCodingStyleRule creates coding style rules from detected conventions
-func (g *ClaudeCodeGenerator) generateCodingStyleRule(analysis *types.Analysis) *types.GeneratedFile {
+func (g *ClaudeCodeGenerator) generateCodingStyleRule(analysis *types.Analysis, ctx *GeneratorContext) *types.GeneratedFile {
 	var content strings.Builder
-	content.WriteString("# Coding Style Rules\n\n")
+	content.WriteString(fmt.Sprintf("# Coding Style Rules for %s\n\n", ctx.ProjectName))
 	content.WriteString("Follow these coding conventions for this project.\n\n")
+
+	// Configuration files section
+	if len(ctx.ConfigFiles) > 0 {
+		content.WriteString("## Configuration Files\n\n")
+		if eslint, ok := ctx.ConfigFiles["eslint"]; ok {
+			content.WriteString(fmt.Sprintf("- **ESLint**: `%s`\n", eslint))
+		}
+		if prettier, ok := ctx.ConfigFiles["prettier"]; ok {
+			content.WriteString(fmt.Sprintf("- **Prettier**: `%s`\n", prettier))
+		}
+		if golangci, ok := ctx.ConfigFiles["golangci"]; ok {
+			content.WriteString(fmt.Sprintf("- **golangci-lint**: `%s`\n", golangci))
+		}
+		if tsconfig, ok := ctx.ConfigFiles["tsconfig"]; ok {
+			content.WriteString(fmt.Sprintf("- **TypeScript**: `%s`\n", tsconfig))
+		}
+		if pyproject, ok := ctx.ConfigFiles["pyproject"]; ok {
+			content.WriteString(fmt.Sprintf("- **Python**: `%s`\n", pyproject))
+		}
+		content.WriteString("\n")
+	}
+
+	// Lint/format commands
+	if ctx.LintCommand != "" || ctx.FormatCommand != "" {
+		content.WriteString("## Commands\n\n")
+		if ctx.LintCommand != "" {
+			content.WriteString(fmt.Sprintf("- Lint: `%s`\n", ctx.LintCommand))
+		}
+		if ctx.FormatCommand != "" {
+			content.WriteString(fmt.Sprintf("- Format: `%s`\n", ctx.FormatCommand))
+		}
+		content.WriteString("\n")
+	}
 
 	// Group conventions by category
 	categories := make(map[string][]types.Convention)
@@ -243,11 +314,104 @@ func (g *ClaudeCodeGenerator) generateCodingStyleRule(analysis *types.Analysis) 
 	}
 }
 
-// securityRuleContent generates security rules
-func (g *ClaudeCodeGenerator) securityRuleContent(analysis *types.Analysis) string {
+// generateArchitectureRule creates architecture rules from detected patterns
+func (g *ClaudeCodeGenerator) generateArchitectureRule(analysis *types.Analysis, ctx *GeneratorContext) *types.GeneratedFile {
 	var content strings.Builder
-	content.WriteString("# Security Rules\n\n")
+
+	arch := analysis.ArchitectureInfo
+	styleName := "Modular"
+	if arch != nil && arch.Style != "" {
+		styleName = arch.Style
+	}
+
+	content.WriteString(fmt.Sprintf("# Architecture Rules for %s\n\n", ctx.ProjectName))
+	content.WriteString(fmt.Sprintf("This project follows a **%s** architecture.\n\n", styleName))
+
+	// Entry point
+	if ctx.EntryPoint != "" {
+		content.WriteString("## Entry Point\n\n")
+		content.WriteString(fmt.Sprintf("Main entry: `%s`\n\n", ctx.EntryPoint))
+	}
+
+	// Layer structure
+	if len(ctx.Layers) > 0 {
+		content.WriteString("## Layer Structure\n\n")
+		content.WriteString("Follow the dependency rules between layers:\n\n")
+
+		for _, layer := range ctx.Layers {
+			content.WriteString(fmt.Sprintf("### %s\n\n", layer.Name))
+			if layer.Purpose != "" {
+				content.WriteString(fmt.Sprintf("%s\n\n", layer.Purpose))
+			}
+			if len(layer.Packages) > 0 {
+				content.WriteString("**Packages**: ")
+				content.WriteString("`" + strings.Join(layer.Packages, "`, `") + "`\n\n")
+			}
+			if len(layer.DependsOn) > 0 {
+				content.WriteString("**Can depend on**: ")
+				content.WriteString("`" + strings.Join(layer.DependsOn, "`, `") + "`\n\n")
+			}
+		}
+	}
+
+	// Key directories from structure
+	if len(analysis.Structure.Directories) > 0 {
+		content.WriteString("## Key Directories\n\n")
+		count := 0
+		for _, dir := range analysis.Structure.Directories {
+			if count >= 8 {
+				break
+			}
+			if dir.Purpose != "" {
+				content.WriteString(fmt.Sprintf("- `%s/` - %s\n", dir.Path, dir.Purpose))
+				count++
+			}
+		}
+		if count > 0 {
+			content.WriteString("\n")
+		}
+	}
+
+	// Architecture diagram
+	if ctx.Diagram != "" {
+		content.WriteString("## Diagram\n\n")
+		content.WriteString("```\n")
+		content.WriteString(ctx.Diagram)
+		content.WriteString("\n```\n\n")
+	}
+
+	// Guidelines
+	content.WriteString("## Guidelines\n\n")
+	content.WriteString("- Respect layer boundaries - lower layers should not depend on higher layers\n")
+	content.WriteString("- Keep business logic in the appropriate layer\n")
+	content.WriteString("- Use dependency injection for cross-layer dependencies\n")
+	content.WriteString("- New features should follow the existing architectural patterns\n")
+
+	return &types.GeneratedFile{
+		Path:    ".claude/rules/architecture.md",
+		Content: []byte(content.String()),
+	}
+}
+
+// securityRuleContent generates security rules
+func (g *ClaudeCodeGenerator) securityRuleContent(analysis *types.Analysis, ctx *GeneratorContext) string {
+	var content strings.Builder
+	content.WriteString(fmt.Sprintf("# Security Rules for %s\n\n", ctx.ProjectName))
 	content.WriteString("Follow these security practices for all code changes.\n\n")
+
+	// Project-specific auth patterns
+	if len(ctx.AuthPatterns) > 0 {
+		content.WriteString("## Authentication in This Project\n\n")
+		content.WriteString("Detected patterns:\n")
+		for pattern, files := range ctx.AuthPatterns {
+			content.WriteString(fmt.Sprintf("- **%s**", pattern))
+			if len(files) > 0 {
+				content.WriteString(fmt.Sprintf(" - see `%s`", files[0]))
+			}
+			content.WriteString("\n")
+		}
+		content.WriteString("\n")
+	}
 
 	content.WriteString("## General Security\n\n")
 	content.WriteString("- Never commit secrets, API keys, or credentials\n")
