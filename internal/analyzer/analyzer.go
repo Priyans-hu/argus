@@ -125,6 +125,18 @@ func (a *Analyzer) Analyze() (*types.Analysis, error) {
 	archDetector := detector.NewArchitectureDetector(absPath, files)
 	analysis.ArchitectureInfo = archDetector.Detect()
 
+	// Detect development setup info
+	devDetector := detector.NewDevelopmentDetector(absPath, files)
+	analysis.DevelopmentInfo = devDetector.Detect()
+
+	// Detect config files
+	configDetector := detector.NewConfigDetector(absPath, files)
+	analysis.ConfigFiles = configDetector.Detect()
+
+	// Detect CLI info (if applicable)
+	cliDetector := detector.NewCLIDetector(absPath, files, &analysis.TechStack)
+	analysis.CLIInfo = cliDetector.Detect()
+
 	return analysis, nil
 }
 
@@ -230,7 +242,6 @@ func findSubstring(s, substr string) int {
 	}
 	return -1
 }
-
 
 // Helper functions to avoid importing strings package multiple times
 func splitLines(s string) []string {

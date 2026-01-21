@@ -16,6 +16,9 @@ type Analysis struct {
 	CodePatterns     *CodePatterns     `json:"code_patterns,omitempty"`
 	GitConventions   *GitConventions   `json:"git_conventions,omitempty"`
 	ArchitectureInfo *ArchitectureInfo `json:"architecture_info,omitempty"`
+	DevelopmentInfo  *DevelopmentInfo  `json:"development_info,omitempty"`
+	ConfigFiles      []ConfigFileInfo  `json:"config_files,omitempty"`
+	CLIInfo          *CLIInfo          `json:"cli_info,omitempty"`
 }
 
 // ReadmeContent represents parsed README information
@@ -229,6 +232,51 @@ type GeneratedFile struct {
 type MultiFileGenerator interface {
 	Name() string
 	Generate(analysis *Analysis) ([]GeneratedFile, error)
+}
+
+// DevelopmentInfo captures development environment setup information
+type DevelopmentInfo struct {
+	Prerequisites []Prerequisite `json:"prerequisites,omitempty"`
+	SetupSteps    []SetupStep    `json:"setup_steps,omitempty"`
+	GitHooks      []GitHook      `json:"git_hooks,omitempty"`
+}
+
+// Prerequisite represents a required tool/runtime
+type Prerequisite struct {
+	Name    string `json:"name"`
+	Version string `json:"version,omitempty"`
+}
+
+// SetupStep represents a setup instruction
+type SetupStep struct {
+	Description string `json:"description"`
+	Command     string `json:"command,omitempty"`
+}
+
+// GitHook represents a git hook configuration
+type GitHook struct {
+	Name    string   `json:"name"`
+	Actions []string `json:"actions,omitempty"`
+}
+
+// ConfigFileInfo represents a configuration file in the project
+type ConfigFileInfo struct {
+	Path    string `json:"path"`
+	Type    string `json:"type"`
+	Purpose string `json:"purpose"`
+}
+
+// CLIInfo represents CLI tool information
+type CLIInfo struct {
+	VerboseFlag string      `json:"verbose_flag,omitempty"`
+	DryRunFlag  string      `json:"dry_run_flag,omitempty"`
+	Indicators  []Indicator `json:"indicators,omitempty"`
+}
+
+// Indicator represents a CLI output indicator
+type Indicator struct {
+	Symbol  string `json:"symbol"`
+	Meaning string `json:"meaning"`
 }
 
 // ClaudeCodeConfig controls what Claude Code configs to generate

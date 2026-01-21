@@ -38,6 +38,9 @@ func (g *ClaudeGenerator) Generate(analysis *types.Analysis) ([]byte, error) {
 	// Project Overview from README
 	g.writeProjectOverview(&buf, analysis.ReadmeContent)
 
+	// Quick Reference (commands table)
+	g.writeQuickReference(&buf, analysis.Commands)
+
 	// Architecture section for monorepos
 	g.writeArchitecture(&buf, analysis.MonorepoInfo)
 
@@ -53,8 +56,17 @@ func (g *ClaudeGenerator) Generate(analysis *types.Analysis) ([]byte, error) {
 	// Key Files
 	g.writeKeyFiles(&buf, analysis.KeyFiles)
 
-	// Available Commands
+	// Configuration System
+	g.writeConfigurationSystem(&buf, analysis.ConfigFiles)
+
+	// Development Setup
+	g.writeDevelopmentSetup(&buf, analysis.DevelopmentInfo)
+
+	// Available Commands (detailed)
 	g.writeCommands(&buf, analysis.Commands)
+
+	// CLI Output & Verbosity
+	g.writeCLIOutput(&buf, analysis.CLIInfo)
 
 	// API Endpoints
 	g.writeEndpoints(&buf, analysis.Endpoints)
@@ -976,6 +988,213 @@ func (g *ClaudeGenerator) writeDependencies(buf *bytes.Buffer, deps []types.Depe
 		}
 		if len(dev) > 15 {
 			fmt.Fprintf(buf, "\n*...and %d more*\n", len(dev)-15)
+		}
+		buf.WriteString("\n")
+	}
+}
+
+// writeQuickReference writes a quick reference section for common commands
+func (g *ClaudeGenerator) writeQuickReference(buf *bytes.Buffer, commands []types.Command) {
+	if len(commands) == 0 {
+		return
+	}
+
+	// Classify commands
+	classified := g.classifyAllCommands(commands)
+
+	// Check if we have any meaningful categories
+	categories := []string{"Development", "Build", "Test", "Lint", "Format", "Setup"}
+	hasContent := false
+	for _, cat := range categories {
+		if cmds, ok := classified[cat]; ok && len(cmds) > 0 {
+			hasContent = true
+			break
+		}
+	}
+
+	if !hasContent {
+		return
+	}
+
+	buf.WriteString("## Quick Reference\n\n")
+	buf.WriteString("```bash\n")
+
+	for _, cat := range categories {
+		cmds, ok := classified[cat]
+		if !ok || len(cmds) == 0 {
+			continue
+		}
+
+		fmt.Fprintf(buf, "# %s\n", cat)
+		for _, cmd := range cmds {
+			// Format command with description as comment
+			if cmd.Description != "" {
+				fmt.Fprintf(buf, "%-24s # %s\n", cmd.Name, cmd.Description)
+			} else {
+				fmt.Fprintf(buf, "%s\n", cmd.Name)
+			}
+		}
+		buf.WriteString("\n")
+	}
+
+	buf.WriteString("```\n\n")
+}
+
+// classifyAllCommands groups commands by category
+func (g *ClaudeGenerator) classifyAllCommands(commands []types.Command) map[string][]types.Command {
+	result := make(map[string][]types.Command)
+
+	for _, cmd := range commands {
+		category := g.categorizeCommand(cmd)
+		result[category] = append(result[category], cmd)
+	}
+
+	return result
+}
+
+// categorizeCommand determines the category of a command
+func (g *ClaudeGenerator) categorizeCommand(cmd types.Command) string {
+	nameLower := strings.ToLower(cmd.Name)
+	cmdLower := strings.ToLower(cmd.Command)
+
+	switch {
+	case strings.Contains(nameLower, "test") || strings.Contains(cmdLower, "test"):
+		return "Test"
+	case strings.Contains(nameLower, "lint") || strings.Contains(cmdLower, "lint"):
+		return "Lint"
+	case strings.Contains(nameLower, "build") || strings.Contains(cmdLower, "build"):
+		return "Build"
+	case strings.Contains(nameLower, "fmt") || strings.Contains(nameLower, "format") ||
+		strings.Contains(cmdLower, "fmt") || strings.Contains(cmdLower, "format"):
+		return "Format"
+	case nameLower == "dev" || nameLower == "start" || strings.Contains(nameLower, "serve") ||
+		strings.Contains(nameLower, "watch"):
+		return "Development"
+	case strings.Contains(nameLower, "setup") || strings.Contains(nameLower, "install") ||
+		strings.Contains(nameLower, "deps"):
+		return "Setup"
+	default:
+		return "Other"
+	}
+}
+
+// writeDevelopmentSetup writes the development setup section
+func (g *ClaudeGenerator) writeDevelopmentSetup(buf *bytes.Buffer, devInfo *types.DevelopmentInfo) {
+	if devInfo == nil {
+		return
+	}
+
+	hasContent := len(devInfo.Prerequisites) > 0 ||
+		len(devInfo.SetupSteps) > 0 ||
+		len(devInfo.GitHooks) > 0
+
+	if !hasContent {
+		return
+	}
+
+	buf.WriteString("## Development Setup\n\n")
+
+	// Prerequisites
+	if len(devInfo.Prerequisites) > 0 {
+		buf.WriteString("### Prerequisites\n\n")
+		for _, p := range devInfo.Prerequisites {
+			if p.Version != "" {
+				fmt.Fprintf(buf, "- %s %s\n", p.Name, p.Version)
+			} else {
+				fmt.Fprintf(buf, "- %s\n", p.Name)
+			}
+		}
+		buf.WriteString("\n")
+	}
+
+	// Setup Steps
+	if len(devInfo.SetupSteps) > 0 {
+		buf.WriteString("### Initial Setup\n\n")
+		buf.WriteString("```bash\n")
+		for _, step := range devInfo.SetupSteps {
+			if step.Command != "" {
+				if step.Description != "" {
+					fmt.Fprintf(buf, "%-24s # %s\n", step.Command, step.Description)
+				} else {
+					fmt.Fprintf(buf, "%s\n", step.Command)
+				}
+			}
+		}
+		buf.WriteString("```\n\n")
+	}
+
+	// Git Hooks
+	if len(devInfo.GitHooks) > 0 {
+		buf.WriteString("### Git Hooks\n\n")
+		for _, hook := range devInfo.GitHooks {
+			fmt.Fprintf(buf, "- **%s**", hook.Name)
+			if len(hook.Actions) > 0 {
+				fmt.Fprintf(buf, ": %s", strings.Join(hook.Actions, ", "))
+			}
+			buf.WriteString("\n")
+		}
+		buf.WriteString("\n")
+	}
+}
+
+// writeConfigurationSystem writes the configuration files section
+func (g *ClaudeGenerator) writeConfigurationSystem(buf *bytes.Buffer, configs []types.ConfigFileInfo) {
+	if len(configs) == 0 {
+		return
+	}
+
+	buf.WriteString("## Configuration\n\n")
+
+	// Sort configs by type for better organization
+	sort.Slice(configs, func(i, j int) bool {
+		if configs[i].Type == configs[j].Type {
+			return configs[i].Path < configs[j].Path
+		}
+		return configs[i].Type < configs[j].Type
+	})
+
+	buf.WriteString("| File | Type | Purpose |\n")
+	buf.WriteString("|------|------|--------|\n")
+
+	for _, cfg := range configs {
+		fmt.Fprintf(buf, "| `%s` | %s | %s |\n", cfg.Path, cfg.Type, cfg.Purpose)
+	}
+	buf.WriteString("\n")
+}
+
+// writeCLIOutput writes the CLI output and verbosity section
+func (g *ClaudeGenerator) writeCLIOutput(buf *bytes.Buffer, cliInfo *types.CLIInfo) {
+	if cliInfo == nil {
+		return
+	}
+
+	hasContent := cliInfo.VerboseFlag != "" || cliInfo.DryRunFlag != "" || len(cliInfo.Indicators) > 0
+
+	if !hasContent {
+		return
+	}
+
+	buf.WriteString("## CLI Output & Verbosity\n\n")
+
+	// Output levels table
+	if cliInfo.VerboseFlag != "" || cliInfo.DryRunFlag != "" {
+		buf.WriteString("| Flag | Output |\n")
+		buf.WriteString("|------|--------|\n")
+		buf.WriteString("| (none) | Progress indicators, success/error messages |\n")
+		if cliInfo.VerboseFlag != "" {
+			fmt.Fprintf(buf, "| `%s` | Detailed analysis results, file-by-file processing |\n", cliInfo.VerboseFlag)
+		}
+		if cliInfo.DryRunFlag != "" {
+			fmt.Fprintf(buf, "| `%s` | Preview output without writing files |\n", cliInfo.DryRunFlag)
+		}
+		buf.WriteString("\n")
+	}
+
+	// Output indicators
+	if len(cliInfo.Indicators) > 0 {
+		buf.WriteString("### Output Indicators\n\n")
+		for _, ind := range cliInfo.Indicators {
+			fmt.Fprintf(buf, "- `%s` - %s\n", ind.Symbol, ind.Meaning)
 		}
 		buf.WriteString("\n")
 	}
