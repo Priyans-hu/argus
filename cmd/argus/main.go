@@ -1,10 +1,17 @@
 package main
 
 import (
+	"archive/tar"
+	"archive/zip"
+	"compress/gzip"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -18,7 +25,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var version = "0.1.0"
+var version = "dev"
 
 // Flags
 var (
@@ -88,6 +95,18 @@ var versionCmd = &cobra.Command{
 	},
 }
 
+var upgradeCmd = &cobra.Command{
+	Use:   "upgrade",
+	Short: "Upgrade argus to the latest version",
+	Long: `Check for and install the latest version of argus from GitHub releases.
+
+This command will:
+1. Check for the latest release on GitHub
+2. Download the appropriate binary for your OS/architecture
+3. Replace the current binary with the new version`,
+	RunE: runUpgrade,
+}
+
 func init() {
 	// Init command flags
 	initCmd.Flags().BoolVarP(&force, "force", "f", false, "Overwrite existing config file")
@@ -115,6 +134,7 @@ func init() {
 	rootCmd.AddCommand(syncCmd)
 	rootCmd.AddCommand(watchCmd)
 	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(upgradeCmd)
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
@@ -636,4 +656,260 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+// GitHubRelease represents a GitHub release
+type GitHubRelease struct {
+	TagName string `json:"tag_name"`
+	Assets  []struct {
+		Name               string `json:"name"`
+		BrowserDownloadURL string `json:"browser_download_url"`
+	} `json:"assets"`
+}
+
+func runUpgrade(cmd *cobra.Command, args []string) error {
+	fmt.Printf("🔍 Current version: %s\n", version)
+	fmt.Println("📡 Checking for updates...")
+
+	// Fetch latest release info
+	release, err := getLatestRelease()
+	if err != nil {
+		return fmt.Errorf("failed to check for updates: %w", err)
+	}
+
+	latestVersion := strings.TrimPrefix(release.TagName, "v")
+	currentVersion := strings.TrimPrefix(version, "v")
+
+	if latestVersion == currentVersion {
+		fmt.Printf("✅ Already on the latest version (%s)\n", version)
+		return nil
+	}
+
+	fmt.Printf("📦 New version available: %s → %s\n", version, release.TagName)
+
+	// Find the right asset for this OS/arch
+	assetName := getAssetName(latestVersion)
+	var downloadURL string
+	for _, asset := range release.Assets {
+		if asset.Name == assetName {
+			downloadURL = asset.BrowserDownloadURL
+			break
+		}
+	}
+
+	if downloadURL == "" {
+		return fmt.Errorf("no release found for %s/%s (looking for %s)", runtime.GOOS, runtime.GOARCH, assetName)
+	}
+
+	fmt.Printf("⬇️  Downloading %s...\n", assetName)
+
+	// Download the asset
+	tmpFile, err := downloadAsset(downloadURL)
+	if err != nil {
+		return fmt.Errorf("failed to download: %w", err)
+	}
+	defer func() { _ = os.Remove(tmpFile) }()
+
+	// Extract the binary
+	fmt.Println("📂 Extracting...")
+	binaryPath, err := extractBinary(tmpFile, assetName)
+	if err != nil {
+		return fmt.Errorf("failed to extract: %w", err)
+	}
+	defer func() { _ = os.Remove(binaryPath) }()
+
+	// Get current executable path
+	execPath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("failed to get executable path: %w", err)
+	}
+	execPath, err = filepath.EvalSymlinks(execPath)
+	if err != nil {
+		return fmt.Errorf("failed to resolve executable path: %w", err)
+	}
+
+	// Replace the binary
+	fmt.Println("🔄 Installing...")
+	if err := replaceBinary(binaryPath, execPath); err != nil {
+		return fmt.Errorf("failed to install: %w", err)
+	}
+
+	fmt.Printf("✅ Successfully upgraded to %s!\n", release.TagName)
+	return nil
+}
+
+func getLatestRelease() (*GitHubRelease, error) {
+	resp, err := http.Get("https://api.github.com/repos/Priyans-hu/argus/releases/latest")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+
+	var release GitHubRelease
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		return nil, err
+	}
+
+	return &release, nil
+}
+
+func getAssetName(ver string) string {
+	goos := runtime.GOOS
+	arch := runtime.GOARCH
+
+	ext := ".tar.gz"
+	if goos == "windows" {
+		ext = ".zip"
+	}
+
+	return fmt.Sprintf("argus_%s_%s_%s%s", ver, goos, arch, ext)
+}
+
+func downloadAsset(url string) (string, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("download failed with status %d", resp.StatusCode)
+	}
+
+	tmpFile, err := os.CreateTemp("", "argus-upgrade-*")
+	if err != nil {
+		return "", err
+	}
+
+	_, err = io.Copy(tmpFile, resp.Body)
+	if closeErr := tmpFile.Close(); closeErr != nil && err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		_ = os.Remove(tmpFile.Name())
+		return "", err
+	}
+
+	return tmpFile.Name(), nil
+}
+
+func extractBinary(archivePath, assetName string) (string, error) {
+	if strings.HasSuffix(assetName, ".zip") {
+		return extractZip(archivePath)
+	}
+	return extractTarGz(archivePath)
+}
+
+func extractTarGz(archivePath string) (string, error) {
+	file, err := os.Open(archivePath)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = file.Close() }()
+
+	gzr, err := gzip.NewReader(file)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = gzr.Close() }()
+
+	tr := tar.NewReader(gzr)
+
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", err
+		}
+
+		if header.Typeflag == tar.TypeReg && (header.Name == "argus" || strings.HasSuffix(header.Name, "/argus")) {
+			tmpFile, err := os.CreateTemp("", "argus-binary-*")
+			if err != nil {
+				return "", err
+			}
+
+			if _, err := io.Copy(tmpFile, tr); err != nil {
+				_ = tmpFile.Close()
+				_ = os.Remove(tmpFile.Name())
+				return "", err
+			}
+			_ = tmpFile.Close()
+
+			if err := os.Chmod(tmpFile.Name(), 0755); err != nil {
+				_ = os.Remove(tmpFile.Name())
+				return "", err
+			}
+
+			return tmpFile.Name(), nil
+		}
+	}
+
+	return "", fmt.Errorf("argus binary not found in archive")
+}
+
+func extractZip(archivePath string) (string, error) {
+	r, err := zip.OpenReader(archivePath)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = r.Close() }()
+
+	for _, f := range r.File {
+		if f.Name == "argus.exe" || strings.HasSuffix(f.Name, "/argus.exe") {
+			rc, err := f.Open()
+			if err != nil {
+				return "", err
+			}
+
+			tmpFile, err := os.CreateTemp("", "argus-binary-*.exe")
+			if err != nil {
+				_ = rc.Close()
+				return "", err
+			}
+
+			if _, err := io.Copy(tmpFile, rc); err != nil {
+				_ = tmpFile.Close()
+				_ = rc.Close()
+				_ = os.Remove(tmpFile.Name())
+				return "", err
+			}
+			_ = tmpFile.Close()
+			_ = rc.Close()
+
+			return tmpFile.Name(), nil
+		}
+	}
+
+	return "", fmt.Errorf("argus.exe not found in archive")
+}
+
+func replaceBinary(newBinary, targetPath string) error {
+	// On Windows, we can't replace a running executable directly
+	// So we rename the old one first
+	if runtime.GOOS == "windows" {
+		oldPath := targetPath + ".old"
+		_ = os.Remove(oldPath) // Remove any existing .old file
+		if err := os.Rename(targetPath, oldPath); err != nil {
+			return err
+		}
+	}
+
+	// Read the new binary
+	data, err := os.ReadFile(newBinary)
+	if err != nil {
+		return err
+	}
+
+	// Write to target
+	if err := os.WriteFile(targetPath, data, 0755); err != nil {
+		return err
+	}
+
+	return nil
 }
