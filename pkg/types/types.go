@@ -31,7 +31,7 @@ type ReadmeContent struct {
 // MonorepoInfo represents monorepo/workspace configuration
 type MonorepoInfo struct {
 	IsMonorepo     bool               `json:"is_monorepo"`
-	Tool           string             `json:"tool,omitempty"`           // Turborepo, Lerna, Nx, etc.
+	Tool           string             `json:"tool,omitempty"`            // Turborepo, Lerna, Nx, etc.
 	PackageManager string             `json:"package_manager,omitempty"` // npm, yarn, pnpm, bun
 	WorkspacePaths []string           `json:"workspace_paths,omitempty"`
 	Packages       []WorkspacePackage `json:"packages,omitempty"`
@@ -82,16 +82,16 @@ type Endpoint struct {
 
 // TechStack represents detected technologies
 type TechStack struct {
-	Languages   []Language  `json:"languages"`
-	Frameworks  []Framework `json:"frameworks"`
-	Databases   []string    `json:"databases"`
-	Tools       []string    `json:"tools"`
+	Languages  []Language  `json:"languages"`
+	Frameworks []Framework `json:"frameworks"`
+	Databases  []string    `json:"databases"`
+	Tools      []string    `json:"tools"`
 }
 
 // Language represents a programming language
 type Language struct {
-	Name       string `json:"name"`
-	Version    string `json:"version,omitempty"`
+	Name       string  `json:"name"`
+	Version    string  `json:"version,omitempty"`
 	Percentage float64 `json:"percentage,omitempty"`
 }
 
@@ -110,9 +110,9 @@ type ProjectStructure struct {
 
 // Directory represents a directory in the project
 type Directory struct {
-	Path        string `json:"path"`
-	Purpose     string `json:"purpose,omitempty"`
-	FileCount   int    `json:"file_count"`
+	Path      string `json:"path"`
+	Purpose   string `json:"purpose,omitempty"`
+	FileCount int    `json:"file_count"`
 }
 
 // Convention represents a detected coding convention
@@ -198,8 +198,8 @@ type CommitConvention struct {
 
 // BranchConvention represents detected branch naming conventions
 type BranchConvention struct {
-	Prefixes []string `json:"prefixes"`         // feat, fix, chore, etc.
-	Format   string   `json:"format"`           // e.g., "<prefix>/<description>"
+	Prefixes []string `json:"prefixes"` // feat, fix, chore, etc.
+	Format   string   `json:"format"`   // e.g., "<prefix>/<description>"
 	Examples []string `json:"examples,omitempty"`
 }
 
@@ -217,4 +217,23 @@ type ArchitectureLayer struct {
 	Purpose   string   `json:"purpose,omitempty"`
 	Packages  []string `json:"packages,omitempty"`
 	DependsOn []string `json:"depends_on,omitempty"`
+}
+
+// GeneratedFile represents a file to be written by a multi-file generator
+type GeneratedFile struct {
+	Path    string // Relative path, e.g., ".claude/agents/go-reviewer.md"
+	Content []byte
+}
+
+// MultiFileGenerator generates multiple output files
+type MultiFileGenerator interface {
+	Name() string
+	Generate(analysis *Analysis) ([]GeneratedFile, error)
+}
+
+// ClaudeCodeConfig controls what Claude Code configs to generate
+type ClaudeCodeConfig struct {
+	Agents   bool `yaml:"agents"`
+	Commands bool `yaml:"commands"`
+	Rules    bool `yaml:"rules"`
 }

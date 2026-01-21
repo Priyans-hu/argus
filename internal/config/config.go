@@ -12,6 +12,13 @@ const (
 	ConfigFileName = ".argus.yaml"
 )
 
+// ClaudeCodeConfig controls what Claude Code configs to generate
+type ClaudeCodeConfig struct {
+	Agents   bool `yaml:"agents"`
+	Commands bool `yaml:"commands"`
+	Rules    bool `yaml:"rules"`
+}
+
 // Config represents Argus configuration
 type Config struct {
 	// Output formats to generate
@@ -25,6 +32,9 @@ type Config struct {
 
 	// Override detected values
 	Overrides map[string]string `yaml:"overrides,omitempty"`
+
+	// Claude Code specific configuration
+	ClaudeCode *ClaudeCodeConfig `yaml:"claude_code,omitempty"`
 }
 
 // DefaultConfig returns a config with sensible defaults
@@ -106,9 +116,10 @@ func ConfigWithComments() string {
 # https://github.com/Priyans-hu/argus
 
 # Output formats to generate
-# Options: claude, cursor, copilot, all
+# Options: claude, claude-code, cursor, copilot, all
 output:
   - claude
+  # - claude-code  # Generate .claude/ directory with agents, commands, rules
   # - cursor
   # - copilot
 
@@ -132,5 +143,12 @@ custom_conventions:
 # overrides:
 #   project_name: "My Project"
 #   framework: "Next.js 14"
+
+# Claude Code configuration (for --format claude-code)
+# Controls which configs are generated in .claude/ directory
+# claude_code:
+#   agents: true    # Generate .claude/agents/*.md
+#   commands: true  # Generate .claude/commands/*.md
+#   rules: true     # Generate .claude/rules/*.md
 `
 }
