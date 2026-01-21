@@ -24,7 +24,6 @@ func NewArchitectureDetector(rootPath string, files []types.FileInfo) *Architect
 	}
 }
 
-
 // Detect analyzes and returns architecture information
 func (d *ArchitectureDetector) Detect() *types.ArchitectureInfo {
 	info := &types.ArchitectureInfo{}
@@ -166,6 +165,8 @@ func (d *ArchitectureDetector) detectLayerDependencies(layer string) []string {
 	deps := make(map[string]bool)
 	// Match individual import lines: "path/to/pkg" or alias "path/to/pkg"
 	importLineRegex := regexp.MustCompile(`"([^"]+/internal/([^"/]+))"`)
+	// Valid Go package names: alphanumeric and underscore only
+	validPkgRegex := regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_]*$`)
 
 	layerPath := filepath.Join(d.rootPath, layer)
 	_ = filepath.WalkDir(layerPath, func(path string, entry os.DirEntry, err error) error {
@@ -187,7 +188,8 @@ func (d *ArchitectureDetector) detectLayerDependencies(layer string) []string {
 		for _, match := range matches {
 			if len(match) >= 3 {
 				pkg := match[2]
-				if pkg != "" && pkg != layer {
+				// Validate it's a real package name (not regex artifacts)
+				if pkg != "" && pkg != layer && validPkgRegex.MatchString(pkg) {
 					deps[pkg] = true
 				}
 			}

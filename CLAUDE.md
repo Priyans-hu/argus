@@ -5,6 +5,38 @@
 
 The all-seeing code analyzer. Help AI grok your codebase.
 
+## Architecture
+
+**Style:** Standard Go Layout
+
+**Entry Point:** `cmd/argus/main.go`
+
+```
+                    ┌─────────────┐
+                    │    argus    │
+                    └──────┬──────┘
+                           │
+┌─────────────┐  ┌─────────────┐  ┌─────────────┐
+│  analyzer   │  │   config    │  │  detector   │
+└─────────────┘  └─────────────┘  └─────────────┘
+       │              │
+┌─────────────┐  ┌─────────────┐
+│  generator  │  │   merger    │
+└─────────────┘  └─────────────┘
+                           │
+                           ▼
+                   [External Services]
+```
+
+**Package Dependencies:**
+- `cmd` → `analyzer`, `config`, `generator`, `merger`
+- `internal` → `
+		matches := importLineRegex.FindAllStringSubmatch(string(content), -1)
+		for _, match := range matches {
+			if len(match) >= 3 {
+				pkg := match[2]
+				if pkg != `, `([^`, `config`, `detector`
+
 ## Tech Stack
 
 ### Languages
@@ -39,6 +71,7 @@ The all-seeing code analyzer. Help AI grok your codebase.
 ├── CLAUDE.md
 ├── CONTRIBUTING.md
 ├── LICENSE
+├── Makefile
 ├── README.md
 ├── SETUP.md
 ├── go.mod
@@ -54,17 +87,70 @@ The all-seeing code analyzer. Help AI grok your codebase.
 | `cmd/argus/main.go` | Entry point | Go application entry |
 | `go.mod` | Go module | Go dependencies |
 
+## Available Commands
+
+```bash
+# Build all packages
+go build ./...
+
+# Run all tests
+go test ./...
+
+# Run all tests with verbose output
+go test -v ./...
+
+# Format all Go files
+go fmt ./...
+
+make check-hooks
+
+# Build the project
+make build
+
+# Run tests
+make test
+
+make test-v
+
+# Run linter
+make lint
+
+make lint-fix
+
+make setup-hooks
+
+make setup
+
+# Clean build artifacts
+make clean
+
+# Run the application
+make run
+
+# Format code
+make fmt
+
+```
+
 ## Coding Conventions
+
+### Testing
+
+- Test files use _test suffix (Go style)
+  ```
+  handler_test.go, utils_test.go
+  ```
+- Tests are colocated with source files
 
 ### Code-style
 
 - Go project - use 'go fmt' or 'gofmt' for formatting
 
-### Git
+### Documentation
 
-- Branch naming uses prefixes: feat, chore
+- Go doc comments (start with function name)
   ```
-  feat/user-auth, fix/login-bug, chore/update-deps
+  // HandleRequest processes incoming HTTP requests
   ```
 
 ### Error-handling
@@ -72,6 +158,22 @@ The all-seeing code analyzer. Help AI grok your codebase.
 - Go-style explicit error checking (if err != nil)
   ```
   if err != nil { return fmt.Errorf("context: %w", err) }
+  ```
+
+### Async
+
+- Async/await pattern for asynchronous operations
+
+### Git
+
+- Commit style: **Conventional Commits**
+  - Format: `<type>(<scope>): <description>`
+  - Types: `feat`, `chore`, `fix`, `docs`
+  - Scopes: `detector`, `generator`, `ci`, `analyzer`, `cli`
+  - Example: `feat(detector): add new feature`
+- Branch naming uses prefixes: feat, chore, fix
+  ```
+  feat/user-auth, chore/login-bug, fix/update-deps
   ```
 
 ## Guidelines
@@ -96,80 +198,80 @@ The all-seeing code analyzer. Help AI grok your codebase.
 
 ### Data Fetching
 
-- **resty.** - Resty HTTP client
-- **http.Get** - Go standard HTTP GET
+- **http.Get** - Go standard HTTP GET (2 files)
 - **http.Post** - Go standard HTTP POST
 - **http.Client** - Go HTTP client
+- **resty.** - Resty HTTP client
 
 ### Routing
 
-- **fiber.Ctx** - Fiber framework context (2 files)
-- **chi.Router** - Chi router
-- **http.HandleFunc** - Go standard HTTP handler
-- **echo.Context** - Echo framework context
 - **mux.NewRouter** - Gorilla Mux router
-- **fiber.New** - Fiber app initialization
 - **gin.Context** - Gin framework context (2 files)
-- **chi.NewRouter** - Chi router initialization
-- **http.Handle** - Go standard HTTP handler
+- **http.HandleFunc** - Go standard HTTP handler (2 files)
 - **gin.Default** - Gin default router
+- **echo.Context** - Echo framework context
 - **echo.New** - Echo router initialization
+- **fiber.Ctx** - Fiber framework context (2 files)
+- **chi.NewRouter** - Chi router initialization
+- **fiber.New** - Fiber app initialization
+- **chi.Router** - Chi router
+- **http.Handle** - Go standard HTTP handler (2 files)
 
 ### Testing
 
-- **t.Error** - Go test error (6 files)
-  - Found in: `cmd/argus/main.go`, `internal/analyzer/analyzer.go`, `internal/config/config.go`
+- **t.Error** - Go test assertions (6 files)
+  - Found in: `internal/detector/architecture_test.go`, `internal/detector/codepatterns_test.go`, `internal/detector/endpoints_test.go`
+- **t.Fatal** - Go test fatal assertions (6 files)
+  - Found in: `internal/detector/architecture_test.go`, `internal/detector/codepatterns_test.go`, `internal/detector/endpoints_test.go`
+- **func Test** - Go test function (6 files)
+  - Found in: `internal/detector/architecture_test.go`, `internal/detector/codepatterns_test.go`, `internal/detector/endpoints_test.go`
+- **t.Run** - Go subtest (4 files)
+  - Found in: `internal/detector/architecture_test.go`, `internal/detector/codepatterns_test.go`, `internal/detector/git_test.go`
 - **httptest** - Go HTTP testing
-- **t.Run** - Go subtest (2 files)
-- **func Test** - Go test function (2 files)
-- **t.Fatal** - Go test fatal (2 files)
-- **require.** - Testify require assertions
-- **assert.** - Testify assert
+- **require** - Testify require assertions
+- **assert** - Testify assert
 - **gomock** - GoMock mocking
 
 ### Authentication
 
-- **jwt.** - JWT handling
+- **Authorization** - Authorization header (4 files)
+  - Found in: `internal/detector/codepatterns.go`, `internal/detector/structure.go`, `internal/generator/claudecode_agents.go`
+- **Bearer** - Bearer token
+- **jwt.** - JWT handling (2 files)
 - **middleware** - Auth middleware (4 files)
   - Found in: `internal/detector/codepatterns.go`, `internal/detector/endpoints.go`, `internal/detector/frameworks.go`
-- **Authorization** - Authorization header (2 files)
-- **Bearer** - Bearer token
 
 ### API Patterns
 
-- **protobuf** - Protocol Buffers
-- **websocket** - WebSocket communication
-- **useQuery** - GraphQL/React Query (2 files)
+- **OpenAPI** - OpenAPI/Swagger spec
 - **swagger** - Swagger documentation
-- **grpc** - gRPC protocol (2 files)
-- **REST** - RESTful API design (3 files)
-  - Found in: `internal/detector/codepatterns.go`, `internal/detector/frameworks.go`, `internal/detector/structure.go`
-- **GraphQL** - GraphQL API (2 files)
-- **gql`** - GraphQL query
-- **socket.io** - Socket.IO real-time
 - **useMutation** - GraphQL/React Query mutation
 - **tRPC** - tRPC type-safe API
-- **OpenAPI** - OpenAPI/Swagger spec
+- **websocket** - WebSocket communication
+- **socket.io** - Socket.IO real-time
+- **GraphQL** - GraphQL API (2 files)
+- **protobuf** - Protocol Buffers (2 files)
+- **REST** - RESTful API design (3 files)
+  - Found in: `internal/detector/codepatterns.go`, `internal/detector/frameworks.go`, `internal/detector/structure.go`
+- **gql`** - GraphQL query
+- **useQuery** - GraphQL/React Query (2 files)
+- **grpc** - gRPC protocol (3 files)
+  - Found in: `internal/detector/codepatterns.go`, `internal/detector/codepatterns_test.go`, `internal/detector/structure.go`
 
 ### Database & ORM
 
-- **gorm.Model** - GORM model embedding
-- **pgx** - pgx PostgreSQL driver
-- **sqlx** - sqlx database library (2 files)
-- **sql.DB** - Go standard SQL
-- **ent.** - Ent ORM (3 files)
-  - Found in: `cmd/argus/main.go`, `internal/detector/codepatterns.go`, `internal/generator/claude.go`
-- **mongo.** - MongoDB Go driver
-- **bun.** - Bun ORM
-- **gorm.** - GORM ORM (2 files)
-
-## Dependencies
-
-### Runtime
-
-- `github.com/fsnotify/fsnotify` v1.9.0
-- `github.com/inconshreveable/mousetrap` v1.1.0
-- `github.com/spf13/pflag` v1.0.9
-- `golang.org/x/sys` v0.13.0
-- `gopkg.in/yaml.v3` v3.0.1
+- **sql.Open** - Go standard SQL
+- **bun.NewDB** - Bun ORM
+- **gorm.Open** - GORM ORM (2 files)
+- **gorm.Model** - GORM model embedding (2 files)
+- **sqlx.Connect** - sqlx database library
+- **sqlx.Open** - sqlx database library
+- **pgx.Connect** - pgx PostgreSQL driver
+- **mongo.Connect** - MongoDB Go driver
 <!-- /ARGUS:AUTO -->
+
+<!-- ARGUS:CUSTOM -->
+## My Custom Notes
+
+This is a test custom section that should be preserved.
+<!-- /ARGUS:CUSTOM -->
