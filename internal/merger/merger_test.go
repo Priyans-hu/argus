@@ -45,16 +45,50 @@ func TestMerge_NoMarkersInExisting(t *testing.T) {
 	new := []byte("new generated content")
 
 	result := m.Merge(existing, new)
+	resultStr := string(result)
 
-	// Should wrap new content with markers
-	if !strings.Contains(string(result), AutoStartMarker) {
+	// Should wrap new content with auto markers
+	if !strings.Contains(resultStr, AutoStartMarker) {
 		t.Error("Result should contain AutoStartMarker")
 	}
-	if !strings.Contains(string(result), AutoEndMarker) {
+	if !strings.Contains(resultStr, AutoEndMarker) {
 		t.Error("Result should contain AutoEndMarker")
 	}
-	if !strings.Contains(string(result), "new generated content") {
+	if !strings.Contains(resultStr, "new generated content") {
 		t.Error("Result should contain new content")
+	}
+
+	// Should preserve existing content in custom section
+	if !strings.Contains(resultStr, CustomStartMarker) {
+		t.Error("Result should contain CustomStartMarker for preserved content")
+	}
+	if !strings.Contains(resultStr, "existing content without markers") {
+		t.Error("Result should preserve existing content")
+	}
+	if !strings.Contains(resultStr, "Previous Content") {
+		t.Error("Result should have 'Previous Content' heading for preserved content")
+	}
+}
+
+func TestMerge_EmptyExistingNoMarkers(t *testing.T) {
+	m := NewMerger(true)
+	existing := []byte("   \n\t  ") // whitespace only
+	new := []byte("new generated content")
+
+	result := m.Merge(existing, new)
+	resultStr := string(result)
+
+	// Should wrap new content with markers
+	if !strings.Contains(resultStr, AutoStartMarker) {
+		t.Error("Result should contain AutoStartMarker")
+	}
+	if !strings.Contains(resultStr, "new generated content") {
+		t.Error("Result should contain new content")
+	}
+
+	// Should NOT add custom section for empty/whitespace content
+	if strings.Contains(resultStr, CustomStartMarker) {
+		t.Error("Result should not contain CustomStartMarker for empty content")
 	}
 }
 
