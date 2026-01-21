@@ -45,10 +45,16 @@ func (m *Merger) Merge(existingContent, newContent []byte) []byte {
 	existing := string(existingContent)
 	new := string(newContent)
 
-	// If existing file has no markers, check if it has custom content we should preserve
+	// If existing file has no markers, preserve entire content as custom
 	if !hasMarkers(existing) {
-		// If existing file exists but has no markers, wrap new content with markers
-		// and append a custom section placeholder
+		// If existing file has content, treat it all as user's custom content
+		if len(strings.TrimSpace(existing)) > 0 {
+			result := wrapWithMarkers(new)
+			result += "\n\n" + CustomStartMarker + "\n## Previous Content\n\n"
+			result += "The following content was preserved from your original file:\n\n"
+			result += strings.TrimSpace(existing) + "\n" + CustomEndMarker
+			return []byte(result)
+		}
 		return []byte(wrapWithMarkers(new))
 	}
 
