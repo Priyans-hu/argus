@@ -281,11 +281,101 @@ func (d *ArchitectureDetector) findEntryPoint() string {
 		return ""
 	}
 
+	// Get project name from go.mod for prioritization
+	projectName := d.getProjectNameFromGoMod()
+
+	// Utility command patterns to skip
+	utilityPatterns := []string{"gen", "doc", "test", "mock", "tool", "util", "example", "demo"}
+
+	// Find all valid cmd directories with main.go
+	type cmdEntry struct {
+		name string
+		path string
+		size int64
+	}
+	var candidates []cmdEntry
+
 	for _, entry := range entries {
 		if entry.IsDir() {
 			mainPath := filepath.Join(cmdDir, entry.Name(), "main.go")
-			if _, err := os.Stat(mainPath); err == nil {
-				return "cmd/" + entry.Name() + "/main.go"
+			if stat, err := os.Stat(mainPath); err == nil {
+				candidates = append(candidates, cmdEntry{
+					name: entry.Name(),
+					path: "cmd/" + entry.Name() + "/main.go",
+					size: stat.Size(),
+				})
+			}
+		}
+	}
+
+	if len(candidates) == 0 {
+		return ""
+	}
+
+	// Priority 1: cmd/{project-name}/main.go
+	if projectName != "" {
+		for _, c := range candidates {
+			if c.name == projectName {
+				return c.path
+			}
+		}
+	}
+
+	// Priority 2: Skip utility commands and select the main binary
+	var nonUtility []cmdEntry
+	for _, c := range candidates {
+		isUtility := false
+		lowerName := strings.ToLower(c.name)
+		for _, pattern := range utilityPatterns {
+			if strings.Contains(lowerName, pattern) {
+				isUtility = true
+				break
+			}
+		}
+		if !isUtility {
+			nonUtility = append(nonUtility, c)
+		}
+	}
+
+	// If we filtered to only utilities or nothing, use all candidates
+	if len(nonUtility) == 0 {
+		nonUtility = candidates
+	}
+
+	// Priority 3: Select the one with most code (largest main.go)
+	if len(nonUtility) > 0 {
+		largestIdx := 0
+		for i, c := range nonUtility {
+			if c.size > nonUtility[largestIdx].size {
+				largestIdx = i
+			}
+		}
+		return nonUtility[largestIdx].path
+	}
+
+	// Fallback: return first candidate
+	return candidates[0].path
+}
+
+// getProjectNameFromGoMod extracts project name from go.mod
+func (d *ArchitectureDetector) getProjectNameFromGoMod() string {
+	goModPath := filepath.Join(d.rootPath, "go.mod")
+	content, err := os.ReadFile(goModPath)
+	if err != nil {
+		return ""
+	}
+
+	// Parse module line: "module github.com/user/project"
+	lines := strings.Split(string(content), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "module ") {
+			modulePath := strings.TrimPrefix(line, "module ")
+			modulePath = strings.TrimSpace(modulePath)
+			// Extract last component
+			parts := strings.Split(modulePath, "/")
+			if len(parts) > 0 {
+				return parts[len(parts)-1]
 			}
 		}
 	}

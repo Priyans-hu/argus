@@ -132,21 +132,52 @@ func (d *ReadmeDetector) extractDescription(lines []string) string {
 	foundTitle := false
 	var descLines []string
 	inDescription := false
+	inCodeBlock := false
 
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
+		original := line
 
-		// Skip until we find the title
+		// Skip until we find the title (markdown or HTML)
 		if !foundTitle {
-			if strings.HasPrefix(trimmed, "# ") {
+			if strings.HasPrefix(trimmed, "# ") ||
+				strings.Contains(trimmed, "<h1") {
 				foundTitle = true
 			}
+			continue
+		}
+
+		// Track code blocks (``` delimiters)
+		if strings.HasPrefix(trimmed, "```") {
+			inCodeBlock = !inCodeBlock
+			continue
+		}
+
+		// Skip content inside code blocks
+		if inCodeBlock {
+			continue
+		}
+
+		// Skip indented code blocks (4 spaces or 1 tab)
+		if len(original) > 0 && (strings.HasPrefix(original, "    ") || strings.HasPrefix(original, "\t")) {
 			continue
 		}
 
 		// Skip badges, empty lines at start
 		if !inDescription {
 			if trimmed == "" {
+				continue
+			}
+			// Skip HTML tags that are not description
+			if strings.HasPrefix(trimmed, "<p align=") || strings.HasPrefix(trimmed, "<img") ||
+				strings.HasPrefix(trimmed, "<a href=") || strings.HasPrefix(trimmed, "</") ||
+				trimmed == "</p>" || trimmed == "</a>" {
+				// Check if this line contains actual text content (not just HTML)
+				textContent := d.extractTextFromHTML(trimmed)
+				if textContent != "" && !strings.Contains(trimmed, "shields.io") && !strings.Contains(trimmed, "<img") {
+					descLines = append(descLines, textContent)
+					inDescription = true
+				}
 				continue
 			}
 			// Skip badge lines (contain shields.io, badge, etc.)
@@ -159,32 +190,69 @@ func (d *ReadmeDetector) extractDescription(lines []string) string {
 			if strings.HasPrefix(trimmed, "<!--") {
 				continue
 			}
+			// Skip blockquotes
+			if strings.HasPrefix(trimmed, ">") {
+				continue
+			}
 			// Skip next heading
 			if strings.HasPrefix(trimmed, "#") {
 				break
+			}
+			// Skip horizontal rules
+			if trimmed == "---" || trimmed == "***" || trimmed == "___" {
+				continue
 			}
 			inDescription = true
 		}
 
 		// Stop at next heading or empty line after content
-		if strings.HasPrefix(trimmed, "#") {
+		if strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "##") {
 			break
 		}
 		if trimmed == "" && len(descLines) > 0 {
 			break
 		}
 
-		descLines = append(descLines, trimmed)
+		// Only add non-empty lines
+		if trimmed != "" {
+			descLines = append(descLines, trimmed)
+		}
 	}
 
 	desc := strings.Join(descLines, " ")
-	// Clean up markdown formatting
+	// Clean up markdown and HTML formatting
 	desc = d.cleanMarkdown(desc)
+	desc = d.cleanHTML(desc)
 	// Limit length
 	if len(desc) > 500 {
 		desc = desc[:497] + "..."
 	}
 	return desc
+}
+
+// extractTextFromHTML extracts text content from HTML tags
+func (d *ReadmeDetector) extractTextFromHTML(html string) string {
+	// Remove HTML tags
+	htmlPattern := regexp.MustCompile(`<[^>]+>`)
+	text := htmlPattern.ReplaceAllString(html, "")
+	return strings.TrimSpace(text)
+}
+
+// cleanHTML removes HTML tags and entities
+func (d *ReadmeDetector) cleanHTML(text string) string {
+	// Remove HTML tags
+	htmlPattern := regexp.MustCompile(`<[^>]+>`)
+	text = htmlPattern.ReplaceAllString(text, "")
+
+	// Decode common HTML entities
+	text = strings.ReplaceAll(text, "&lt;", "<")
+	text = strings.ReplaceAll(text, "&gt;", ">")
+	text = strings.ReplaceAll(text, "&amp;", "&")
+	text = strings.ReplaceAll(text, "&quot;", "\"")
+	text = strings.ReplaceAll(text, "&#39;", "'")
+	text = strings.ReplaceAll(text, "&nbsp;", " ")
+
+	return strings.TrimSpace(text)
 }
 
 // parseSections extracts all markdown sections into a map
