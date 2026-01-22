@@ -14,10 +14,10 @@ const (
 
 // ClaudeCodeConfig controls what Claude Code configs to generate
 type ClaudeCodeConfig struct {
-	Agents   bool `yaml:"agents"`
-	Commands bool `yaml:"commands"`
-	Rules    bool `yaml:"rules"`
-	MCP      bool `yaml:"mcp"`
+	Agents bool `yaml:"agents"`
+	Skills bool `yaml:"skills"` // Skills replace commands in Claude Code
+	Rules  bool `yaml:"rules"`
+	MCP    bool `yaml:"mcp"`
 }
 
 // Config represents Argus configuration
@@ -149,7 +149,7 @@ custom_conventions:
 # Controls which configs are generated in .claude/ directory
 # claude_code:
 #   agents: true    # Generate .claude/agents/*.md
-#   commands: true  # Generate .claude/commands/*.md
+#   skills: true    # Generate .claude/skills/*/SKILL.md (replaces commands)
 #   rules: true     # Generate .claude/rules/*.md
 #   mcp: true       # Generate .claude/mcp.json (MCP server configs)
 `
