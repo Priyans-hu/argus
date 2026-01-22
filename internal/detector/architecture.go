@@ -46,10 +46,33 @@ func (d *ArchitectureDetector) Detect() *types.ArchitectureInfo {
 // detectArchitectureStyle determines the architecture pattern
 func (d *ArchitectureDetector) detectArchitectureStyle() string {
 	dirs := make(map[string]bool)
+	pyFiles := make(map[string]bool)
 	for _, f := range d.files {
 		if f.IsDir {
 			dirs[strings.ToLower(f.Name)] = true
 		}
+		// Track Python entry point files
+		if !f.IsDir && strings.HasSuffix(f.Name, ".py") {
+			pyFiles[strings.ToLower(f.Name)] = true
+		}
+	}
+
+	// Check for Django
+	if pyFiles["manage.py"] || pyFiles["wsgi.py"] || dirs["apps"] || hasPyFile(d.rootPath, "settings.py") {
+		return "Django"
+	}
+
+	// Check for Flask
+	if (pyFiles["app.py"] || pyFiles["wsgi.py"] || pyFiles["asgi.py"]) && (dirs["blueprints"] || dirs["routes"] || dirs["views"]) {
+		return "Flask (Blueprints)"
+	}
+	if pyFiles["app.py"] || pyFiles["wsgi.py"] {
+		return "Flask"
+	}
+
+	// Check for FastAPI
+	if (pyFiles["main.py"] || pyFiles["app.py"]) && (dirs["routers"] || dirs["schemas"] || dirs["api"]) {
+		return "FastAPI"
 	}
 
 	// Check for common Go project structure
@@ -89,6 +112,21 @@ func (d *ArchitectureDetector) detectArchitectureStyle() string {
 	return ""
 }
 
+// hasPyFile checks if a Python file exists anywhere in the project
+func hasPyFile(rootPath, filename string) bool {
+	found := false
+	_ = filepath.WalkDir(rootPath, func(path string, d os.DirEntry, err error) error {
+		if err != nil || found {
+			return nil
+		}
+		if !d.IsDir() && strings.ToLower(d.Name()) == filename {
+			found = true
+		}
+		return nil
+	})
+	return found
+}
+
 // detectLayers identifies architectural layers and their dependencies
 func (d *ArchitectureDetector) detectLayers() []types.ArchitectureLayer {
 	var layers []types.ArchitectureLayer
@@ -122,14 +160,21 @@ func (d *ArchitectureDetector) detectLayers() []types.ArchitectureLayer {
 	}{
 		{"cmd", "Entry points / CLI"},
 		{"api", "API handlers"},
+		{"routers", "API routes"},
+		{"blueprints", "Flask blueprints"},
+		{"apps", "Django apps"},
 		{"internal", "Private packages"},
 		{"pkg", "Public packages"},
 		{"domain", "Business logic"},
 		{"services", "Service layer"},
 		{"handlers", "Request handlers"},
+		{"views", "View layer"},
+		{"controllers", "Controllers"},
 		{"models", "Data models"},
+		{"schemas", "Data schemas"},
 		{"repository", "Data access"},
 		{"config", "Configuration"},
+		{"middleware", "Middleware"},
 	}
 
 	for _, layerDef := range layerOrder {
@@ -208,6 +253,23 @@ func (d *ArchitectureDetector) detectLayerDependencies(layer string) []string {
 
 // findEntryPoint finds the main entry point
 func (d *ArchitectureDetector) findEntryPoint() string {
+	// Python entry points
+	pythonEntryPoints := []string{
+		"manage.py",   // Django
+		"wsgi.py",     // Flask/Django WSGI
+		"asgi.py",     // FastAPI/Django ASGI
+		"app.py",      // Flask/FastAPI
+		"main.py",     // Generic Python
+		"run.py",      // Common Flask pattern
+		"__main__.py", // Python module entry
+	}
+
+	for _, entry := range pythonEntryPoints {
+		if _, err := os.Stat(filepath.Join(d.rootPath, entry)); err == nil {
+			return entry
+		}
+	}
+
 	// Look for main.go in cmd/
 	cmdDir := filepath.Join(d.rootPath, "cmd")
 	entries, err := os.ReadDir(cmdDir)
