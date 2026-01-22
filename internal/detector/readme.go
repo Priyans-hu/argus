@@ -125,12 +125,12 @@ func (d *ReadmeDetector) parseReadme(content string) *types.ReadmeContent {
 	}
 
 	// Extract prerequisites
-	result.Prerequisites = d.extractPrerequisites(content, sections)
+	result.Prerequisites = d.extractPrerequisites(sections)
 
 	// Extract key commands from code blocks
 	result.KeyCommands = d.extractKeyCommands(content)
 
-	// Extract ML model specs (for ML projects)
+	// Extract ML model specifications
 	result.ModelSpecs = d.extractModelSpecs(content, sections)
 
 	// Infer project type
@@ -352,96 +352,38 @@ func (d *ReadmeDetector) cleanMarkdown(text string) string {
 	return strings.TrimSpace(text)
 }
 
-// extractPrerequisites extracts required tools/dependencies from README
-func (d *ReadmeDetector) extractPrerequisites(content string, sections map[string]string) []string {
+// extractPrerequisites extracts prerequisites/requirements from content
+func (d *ReadmeDetector) extractPrerequisites(sections map[string]string) []string {
 	var prereqs []string
-	seen := make(map[string]bool)
 
-	// Look for prerequisites/requirements section
-	prereqSections := []string{"prerequisites", "requirements", "dependencies", "before you begin", "pre-requisites"}
-	var prereqContent string
-	for _, name := range prereqSections {
+	// Check common section names
+	sectionNames := []string{"prerequisites", "requirements", "system requirements", "dependencies"}
+	for _, name := range sectionNames {
 		if section, ok := sections[name]; ok {
-			prereqContent = section
-			break
+			prereqs = append(prereqs, d.extractBulletPoints(section)...)
 		}
 	}
 
-	if prereqContent != "" {
-		// Extract bullet points from prerequisites section
-		lines := strings.Split(prereqContent, "\n")
-		for _, line := range lines {
-			trimmed := strings.TrimSpace(line)
-			if strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* ") {
-				prereq := strings.TrimPrefix(trimmed, "- ")
-				prereq = strings.TrimPrefix(prereq, "* ")
-				prereq = d.cleanMarkdown(prereq)
-				if prereq != "" && !seen[prereq] && len(prereq) < 100 {
-					prereqs = append(prereqs, prereq)
-					seen[prereq] = true
-				}
-			}
+	// Deduplicate
+	seen := make(map[string]bool)
+	var unique []string
+	for _, p := range prereqs {
+		if !seen[p] {
+			seen[p] = true
+			unique = append(unique, p)
 		}
 	}
 
-	// Also scan for common tool mentions
-	toolPatterns := []struct {
-		pattern *regexp.Regexp
-		name    string
-	}{
-		{regexp.MustCompile(`(?i)python\s*([0-9.]+)`), "Python"},
-		{regexp.MustCompile(`(?i)node\.?js?\s*([0-9.]+)?`), "Node.js"},
-		{regexp.MustCompile(`(?i)go\s*([0-9.]+)`), "Go"},
-		{regexp.MustCompile(`(?i)rust\s*([0-9.]+)?`), "Rust"},
-		{regexp.MustCompile(`(?i)docker`), "Docker"},
-		{regexp.MustCompile(`(?i)cuda\s*([0-9.]+)?`), "CUDA"},
-	}
-
-	for _, tp := range toolPatterns {
-		if matches := tp.pattern.FindStringSubmatch(content); len(matches) > 0 {
-			prereq := tp.name
-			if len(matches) > 1 && matches[1] != "" {
-				prereq += " " + matches[1]
-			}
-			if !seen[prereq] {
-				prereqs = append(prereqs, prereq)
-				seen[prereq] = true
-			}
-		}
-	}
-
-	// Limit to 10 prerequisites
-	if len(prereqs) > 10 {
-		prereqs = prereqs[:10]
-	}
-
-	return prereqs
+	return unique
 }
 
-// extractKeyCommands extracts important commands from code blocks
+// extractKeyCommands extracts important commands from code blocks in README
 func (d *ReadmeDetector) extractKeyCommands(content string) []string {
 	var commands []string
-	seen := make(map[string]bool)
 
-	// Match code blocks with common shell commands
-	codeBlockPattern := regexp.MustCompile("```(?:bash|shell|sh|zsh)?\\s*\\n([^`]+)```")
-	matches := codeBlockPattern.FindAllStringSubmatch(content, -1)
-
-	// Common command patterns to extract
-	cmdPatterns := []*regexp.Regexp{
-		regexp.MustCompile(`^\s*(pip install\s+.+)$`),
-		regexp.MustCompile(`^\s*(npm\s+(?:install|run|start|test).*)$`),
-		regexp.MustCompile(`^\s*(yarn\s+(?:install|add|start|test).*)$`),
-		regexp.MustCompile(`^\s*(pnpm\s+(?:install|add|start|test).*)$`),
-		regexp.MustCompile(`^\s*(go\s+(?:build|run|test|install).*)$`),
-		regexp.MustCompile(`^\s*(cargo\s+(?:build|run|test).*)$`),
-		regexp.MustCompile(`^\s*(make\s+\w+.*)$`),
-		regexp.MustCompile(`^\s*(python\s+.+\.py.*)$`),
-		regexp.MustCompile(`^\s*(docker\s+(?:build|run|compose).*)$`),
-		regexp.MustCompile(`^\s*(git clone\s+.+)$`),
-		regexp.MustCompile(`^\s*(curl\s+.+)$`),
-		regexp.MustCompile(`^\s*(wget\s+.+)$`),
-	}
+	// Match shell code blocks
+	shellBlockPattern := regexp.MustCompile("```(?:bash|shell|sh|zsh)?\\s*\\n([^`]+)```")
+	matches := shellBlockPattern.FindAllStringSubmatch(content, -1)
 
 	for _, match := range matches {
 		if len(match) < 2 {
@@ -452,37 +394,62 @@ func (d *ReadmeDetector) extractKeyCommands(content string) []string {
 
 		for _, line := range lines {
 			line = strings.TrimSpace(line)
+			// Skip empty lines and comments
 			if line == "" || strings.HasPrefix(line, "#") {
 				continue
 			}
-
-			// Check against command patterns
-			for _, pattern := range cmdPatterns {
-				if cmdMatch := pattern.FindStringSubmatch(line); len(cmdMatch) > 1 {
-					cmd := strings.TrimSpace(cmdMatch[1])
-					if !seen[cmd] && len(cmd) < 200 {
-						commands = append(commands, cmd)
-						seen[cmd] = true
-					}
-					break
+			// Skip lines that are just output (usually don't start with common commands)
+			if d.isLikelyCommand(line) {
+				// Clean up the command
+				cmd := strings.TrimPrefix(line, "$ ")
+				cmd = strings.TrimPrefix(cmd, "> ")
+				if len(cmd) < 200 && cmd != "" {
+					commands = append(commands, cmd)
 				}
 			}
 		}
 	}
 
-	// Limit to 15 key commands
-	if len(commands) > 15 {
-		commands = commands[:15]
+	// Limit and deduplicate
+	seen := make(map[string]bool)
+	var unique []string
+	for _, c := range commands {
+		if !seen[c] && len(unique) < 15 {
+			seen[c] = true
+			unique = append(unique, c)
+		}
 	}
 
-	return commands
+	return unique
+}
+
+// isLikelyCommand checks if a line looks like a shell command
+func (d *ReadmeDetector) isLikelyCommand(line string) bool {
+	// Common command prefixes
+	commandStarters := []string{
+		"pip ", "npm ", "yarn ", "pnpm ", "cargo ", "go ",
+		"python ", "python3 ", "node ", "npx ",
+		"docker ", "docker-compose ", "kubectl ",
+		"git ", "make ", "brew ", "apt ", "curl ", "wget ",
+		"cd ", "mkdir ", "export ", "source ",
+		"./", "$ ", "> ",
+	}
+
+	lineLower := strings.ToLower(line)
+	for _, starter := range commandStarters {
+		if strings.HasPrefix(lineLower, starter) || strings.HasPrefix(line, starter) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // extractModelSpecs extracts ML model specifications from README
 func (d *ReadmeDetector) extractModelSpecs(content string, sections map[string]string) map[string]string {
 	specs := make(map[string]string)
 
-	// Patterns for common model specifications
+	// Look for common ML model spec patterns (handle markdown **bold** format)
 	specPatterns := map[string]*regexp.Regexp{
 		"parameters":     regexp.MustCompile(`(?i)\*?\*?(?:parameters|params)\*?\*?[:\s*]+([0-9.]+[BMK]?(?:\s*(?:billion|million))?)`),
 		"architecture":   regexp.MustCompile(`(?i)\*?\*?architecture\*?\*?[:\s*]+([A-Za-z0-9\-_()\s]+?)(?:\n|$)`),
@@ -492,25 +459,21 @@ func (d *ReadmeDetector) extractModelSpecs(content string, sections map[string]s
 		"embedding":      regexp.MustCompile(`(?i)\*?\*?(?:embedding|hidden)[:\s*]*(?:size|dim)?\*?\*?[:\s*]*([0-9,]+)`),
 	}
 
-	// Look in model/architecture sections first
-	searchContent := content
-	for _, sectionName := range []string{"model", "architecture", "specifications", "specs", "details"} {
-		if section, ok := sections[sectionName]; ok {
-			searchContent = section + "\n" + content
-			break
+	// Check model specs section first
+	specSections := []string{"model specifications", "model specs", "specifications", "architecture", "model"}
+	for _, name := range specSections {
+		if section, ok := sections[name]; ok {
+			content = section + "\n" + content
 		}
 	}
 
 	for name, pattern := range specPatterns {
-		if matches := pattern.FindStringSubmatch(searchContent); len(matches) > 1 {
-			value := strings.TrimSpace(matches[1])
-			if value != "" {
-				specs[name] = value
-			}
+		if match := pattern.FindStringSubmatch(content); len(match) > 1 {
+			specs[name] = strings.TrimSpace(match[1])
 		}
 	}
 
-	// Only return if we found at least 2 specs (indicates this is an ML project)
+	// Only return if we found at least 2 specs (indicates ML project)
 	if len(specs) < 2 {
 		return nil
 	}
@@ -518,16 +481,19 @@ func (d *ReadmeDetector) extractModelSpecs(content string, sections map[string]s
 	return specs
 }
 
-// inferProjectType infers the project type from README content
+// inferProjectType infers the project type from README content and sections
 func (d *ReadmeDetector) inferProjectType(content string, sections map[string]string) string {
 	contentLower := strings.ToLower(content)
 
-	// Check for ML project indicators
-	mlIndicators := []string{"model", "training", "inference", "neural network", "deep learning",
-		"machine learning", "pytorch", "tensorflow", "hugging face", "transformers"}
+	// Check for ML/AI indicators
+	mlIndicators := []string{
+		"model", "training", "inference", "neural", "deep learning",
+		"machine learning", "transformer", "parameters", "weights",
+		"pytorch", "tensorflow", "jax", "hugging face", "llm",
+	}
 	mlScore := 0
-	for _, ind := range mlIndicators {
-		if strings.Contains(contentLower, ind) {
+	for _, indicator := range mlIndicators {
+		if strings.Contains(contentLower, indicator) {
 			mlScore++
 		}
 	}
@@ -535,26 +501,14 @@ func (d *ReadmeDetector) inferProjectType(content string, sections map[string]st
 		return "ml"
 	}
 
-	// Check for documentation project
-	if _, ok := sections["documentation"]; ok {
-		return "docs"
+	// Check for CLI tool indicators
+	cliIndicators := []string{
+		"command line", "cli", "terminal", "usage:", "options:",
+		"--help", "flags", "arguments",
 	}
-	docIndicators := []string{"documentation", "guide", "tutorial", "handbook", "reference"}
-	docScore := 0
-	for _, ind := range docIndicators {
-		if strings.Contains(contentLower, ind) {
-			docScore++
-		}
-	}
-	if docScore >= 2 {
-		return "docs"
-	}
-
-	// Check for CLI tool
-	cliIndicators := []string{"command line", "cli", "terminal", "shell", "flags", "arguments"}
 	cliScore := 0
-	for _, ind := range cliIndicators {
-		if strings.Contains(contentLower, ind) {
+	for _, indicator := range cliIndicators {
+		if strings.Contains(contentLower, indicator) {
 			cliScore++
 		}
 	}
@@ -562,15 +516,30 @@ func (d *ReadmeDetector) inferProjectType(content string, sections map[string]st
 		return "cli"
 	}
 
-	// Check for library/package
-	libIndicators := []string{"install", "import", "usage", "api", "package", "library", "sdk"}
+	// Check for documentation project
+	if _, hasContrib := sections["contributing"]; hasContrib {
+		if _, hasTranslation := sections["translations"]; hasTranslation {
+			return "docs"
+		}
+	}
+	// High ratio of markdown to code indicates docs
+	codeBlockCount := strings.Count(content, "```")
+	if len(content) > 5000 && codeBlockCount < 5 {
+		return "docs"
+	}
+
+	// Check for library indicators
+	libIndicators := []string{
+		"import", "require", "install", "npm install", "pip install",
+		"go get", "cargo add", "api", "sdk",
+	}
 	libScore := 0
-	for _, ind := range libIndicators {
-		if strings.Contains(contentLower, ind) {
+	for _, indicator := range libIndicators {
+		if strings.Contains(contentLower, indicator) {
 			libScore++
 		}
 	}
-	if libScore >= 3 {
+	if libScore >= 2 {
 		return "library"
 	}
 
