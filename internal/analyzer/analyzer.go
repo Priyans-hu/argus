@@ -70,6 +70,20 @@ func (a *Analyzer) Analyze() (*types.Analysis, error) {
 	// Detect commands
 	analysis.Commands = detector.DetectCommands(absPath)
 
+	// Detect additional commands from pyproject.toml (Python)
+	pyprojectDetector := detector.NewPyProjectDetector(absPath)
+	if pyInfo := pyprojectDetector.Detect(); pyInfo != nil && pyInfo.HasPyProject {
+		analysis.Commands = append(analysis.Commands, detectPyProjectCommands(pyInfo)...)
+	}
+
+	// Detect additional commands from Cargo.toml (Rust)
+	cargoDetector := detector.NewCargoDetector(absPath)
+	if cargoInfo := cargoDetector.Detect(); cargoInfo != nil && cargoInfo.HasCargo {
+		// Replace basic cargo commands with enhanced ones
+		analysis.Commands = filterNonCargoCommands(analysis.Commands)
+		analysis.Commands = append(analysis.Commands, cargoDetector.DetectCargoCommands()...)
+	}
+
 	// Detect dependencies
 	analysis.Dependencies = a.detectDependencies(absPath)
 
@@ -301,4 +315,111 @@ func splitFields(s string) []string {
 		fields = append(fields, s[start:])
 	}
 	return fields
+}
+
+// detectPyProjectCommands extracts commands from pyproject.toml
+func detectPyProjectCommands(info *detector.PyProjectInfo) []types.Command {
+	var commands []types.Command
+
+	// Add script commands
+	for name, cmd := range info.Scripts {
+		commands = append(commands, types.Command{
+			Name:        name,
+			Command:     cmd,
+			Description: "Script from pyproject.toml",
+		})
+	}
+
+	// Add tool-specific commands
+	for _, tool := range info.Tools {
+		switch tool {
+		case "pytest":
+			commands = append(commands, types.Command{
+				Name:        "pytest",
+				Description: "Run tests with pytest",
+			})
+			commands = append(commands, types.Command{
+				Name:        "pytest -v",
+				Description: "Run tests with verbose output",
+			})
+		case "black":
+			commands = append(commands, types.Command{
+				Name:        "black .",
+				Description: "Format code with Black",
+			})
+		case "ruff":
+			commands = append(commands, types.Command{
+				Name:        "ruff check .",
+				Description: "Lint code with Ruff",
+			})
+			commands = append(commands, types.Command{
+				Name:        "ruff format .",
+				Description: "Format code with Ruff",
+			})
+		case "mypy":
+			commands = append(commands, types.Command{
+				Name:        "mypy .",
+				Description: "Type check with mypy",
+			})
+		case "poetry":
+			commands = append(commands, types.Command{
+				Name:        "poetry install",
+				Description: "Install dependencies with Poetry",
+			})
+			commands = append(commands, types.Command{
+				Name:        "poetry shell",
+				Description: "Activate Poetry virtual environment",
+			})
+		case "pdm":
+			commands = append(commands, types.Command{
+				Name:        "pdm install",
+				Description: "Install dependencies with PDM",
+			})
+		case "hatch":
+			commands = append(commands, types.Command{
+				Name:        "hatch run",
+				Description: "Run commands in Hatch environment",
+			})
+		case "coverage":
+			commands = append(commands, types.Command{
+				Name:        "coverage run -m pytest",
+				Description: "Run tests with coverage",
+			})
+			commands = append(commands, types.Command{
+				Name:        "coverage report",
+				Description: "Show coverage report",
+			})
+		}
+	}
+
+	return commands
+}
+
+// filterNonCargoCommands removes basic cargo commands to be replaced with enhanced ones
+func filterNonCargoCommands(commands []types.Command) []types.Command {
+	var filtered []types.Command
+	for _, cmd := range commands {
+		// Keep non-cargo commands
+		if !isBasicCargoCommand(cmd.Name) {
+			filtered = append(filtered, cmd)
+		}
+	}
+	return filtered
+}
+
+// isBasicCargoCommand checks if a command is a basic cargo command
+func isBasicCargoCommand(name string) bool {
+	basicCargo := []string{
+		"cargo build",
+		"cargo build --release",
+		"cargo test",
+		"cargo fmt",
+		"cargo clippy",
+	}
+	for _, basic := range basicCargo {
+		if name == basic {
+			return true
+		}
+	}
+	return false
 }

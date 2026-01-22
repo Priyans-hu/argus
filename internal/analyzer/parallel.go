@@ -114,7 +114,24 @@ func (pa *ParallelAnalyzer) runPhase2(files []types.FileInfo, analysis *types.An
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		analysis.Commands = detector.DetectCommands(pa.rootPath)
+		commands := detector.DetectCommands(pa.rootPath)
+
+		// Add pyproject.toml commands (Python)
+		pyprojectDetector := detector.NewPyProjectDetector(pa.rootPath)
+		if pyInfo := pyprojectDetector.Detect(); pyInfo != nil && pyInfo.HasPyProject {
+			commands = append(commands, detectPyProjectCommands(pyInfo)...)
+		}
+
+		// Add Cargo.toml commands (Rust)
+		cargoDetector := detector.NewCargoDetector(pa.rootPath)
+		if cargoInfo := cargoDetector.Detect(); cargoInfo != nil && cargoInfo.HasCargo {
+			commands = filterNonCargoCommands(commands)
+			commands = append(commands, cargoDetector.DetectCargoCommands()...)
+		}
+
+		mu.Lock()
+		analysis.Commands = commands
+		mu.Unlock()
 	}()
 
 	// Dependencies (no dependencies)
