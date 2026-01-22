@@ -53,6 +53,8 @@ func (d *CodePatternDetector) Detect() *types.CodePatterns {
 		DatabaseORM:     d.detectDatabasePatterns(),
 		Utilities:       d.detectUtilityPatterns(),
 		GoPatterns:      d.detectGoPatterns(),
+		RustPatterns:    d.detectRustPatterns(),
+		PythonPatterns:  d.detectPythonPatterns(),
 	}
 
 	return patterns
@@ -132,6 +134,75 @@ func (d *CodePatternDetector) scanForRegex(pattern string, extensions []string) 
 	return matches
 }
 
+// PatternWithImport defines a pattern that requires a specific import to be valid
+type PatternWithImport struct {
+	Keyword     string   // The keyword to search for
+	Description string   // Description of the pattern
+	Imports     []string // Required imports (any of these must be present)
+}
+
+// scanForKeywordsWithImports scans for keywords only in files that have required imports
+// This reduces false positives by ensuring framework-specific patterns only match
+// when the framework is actually imported
+func (d *CodePatternDetector) scanForKeywordsWithImports(patterns []PatternWithImport, extensions []string) map[string][]string {
+	results := make(map[string][]string)
+
+	for _, f := range d.files {
+		if f.IsDir {
+			continue
+		}
+
+		// Check file extension
+		hasExt := false
+		for _, ext := range extensions {
+			if strings.HasSuffix(f.Name, ext) {
+				hasExt = true
+				break
+			}
+		}
+		if !hasExt {
+			continue
+		}
+
+		// Read file content
+		fullPath := filepath.Join(d.rootPath, f.Path)
+		content, err := os.ReadFile(fullPath)
+		if err != nil {
+			continue
+		}
+
+		contentStr := string(content)
+
+		for _, p := range patterns {
+			// First check if the keyword exists
+			if !strings.Contains(contentStr, p.Keyword) {
+				continue
+			}
+
+			// If no imports required, add directly
+			if len(p.Imports) == 0 {
+				results[p.Keyword] = append(results[p.Keyword], f.Path)
+				continue
+			}
+
+			// Check if any required import is present
+			hasImport := false
+			for _, imp := range p.Imports {
+				if strings.Contains(contentStr, imp) {
+					hasImport = true
+					break
+				}
+			}
+
+			if hasImport {
+				results[p.Keyword] = append(results[p.Keyword], f.Path)
+			}
+		}
+	}
+
+	return results
+}
+
 // detectStateManagement detects state management patterns
 func (d *CodePatternDetector) detectStateManagement() []types.PatternInfo {
 	var patterns []types.PatternInfo
@@ -198,21 +269,26 @@ func (d *CodePatternDetector) detectStateManagement() []types.PatternInfo {
 		}
 	}
 
-	// Python state patterns
-	pyKeywords := map[string]string{
-		"session[":    "Flask session management",
-		"g.":          "Flask application context globals",
-		"current_app": "Flask current application context",
-		"request.":    "Flask/FastAPI request object",
+	// Python state patterns - use import-aware scanning to reduce false positives
+	pyPatterns := []PatternWithImport{
+		{Keyword: "session[", Description: "Flask session management", Imports: []string{"from flask", "import flask"}},
+		{Keyword: "g.", Description: "Flask application context globals", Imports: []string{"from flask import g", "from flask import", "import flask"}},
+		{Keyword: "current_app", Description: "Flask current application context", Imports: []string{"from flask", "import flask"}},
+		{Keyword: "request.", Description: "Flask/FastAPI request object", Imports: []string{"from flask", "import flask", "from fastapi", "import fastapi", "from starlette", "import starlette"}},
 	}
 
-	pyResults := d.scanForKeywords(keys(pyKeywords), pyExts)
+	pyResults := d.scanForKeywordsWithImports(pyPatterns, pyExts)
+	pyDescriptions := make(map[string]string)
+	for _, p := range pyPatterns {
+		pyDescriptions[p.Keyword] = p.Description
+	}
+
 	for kw, files := range pyResults {
 		if len(files) > 0 {
 			patterns = append(patterns, types.PatternInfo{
 				Name:        kw,
 				Category:    "state",
-				Description: pyKeywords[kw],
+				Description: pyDescriptions[kw],
 				FileCount:   len(files),
 				Examples:    limitSlice(files, 3),
 			})
@@ -340,25 +416,30 @@ func (d *CodePatternDetector) detectRouting() []types.PatternInfo {
 		}
 	}
 
-	// Python routing
-	pyKeywords := map[string]string{
-		"@app.route": "Flask route decorator",
-		"@router.":   "FastAPI router decorator",
-		"@app.get":   "FastAPI GET endpoint",
-		"@app.post":  "FastAPI POST endpoint",
-		"Blueprint":  "Flask Blueprint for modular routing",
-		"APIRouter":  "FastAPI APIRouter",
-		"path(":      "Django URL path",
-		"include(":   "Django URL includes",
+	// Python routing - use import-aware scanning to reduce false positives
+	pyRoutingPatterns := []PatternWithImport{
+		{Keyword: "@app.route", Description: "Flask route decorator", Imports: []string{"from flask", "import flask"}},
+		{Keyword: "@router.", Description: "FastAPI router decorator", Imports: []string{"from fastapi", "import fastapi"}},
+		{Keyword: "@app.get", Description: "FastAPI GET endpoint", Imports: []string{"from fastapi", "import fastapi"}},
+		{Keyword: "@app.post", Description: "FastAPI POST endpoint", Imports: []string{"from fastapi", "import fastapi"}},
+		{Keyword: "Blueprint", Description: "Flask Blueprint for modular routing", Imports: []string{"from flask", "import flask"}},
+		{Keyword: "APIRouter", Description: "FastAPI APIRouter", Imports: []string{"from fastapi", "import fastapi"}},
+		{Keyword: "path(", Description: "Django URL path", Imports: []string{"from django.urls", "django.urls.path"}},
+		{Keyword: "include(", Description: "Django URL includes", Imports: []string{"from django.urls", "django.urls.include"}},
 	}
 
-	pyResults := d.scanForKeywords(keys(pyKeywords), pyExts)
-	for kw, files := range pyResults {
+	pyRoutingResults := d.scanForKeywordsWithImports(pyRoutingPatterns, pyExts)
+	pyRoutingDescriptions := make(map[string]string)
+	for _, p := range pyRoutingPatterns {
+		pyRoutingDescriptions[p.Keyword] = p.Description
+	}
+
+	for kw, files := range pyRoutingResults {
 		if len(files) > 0 {
 			patterns = append(patterns, types.PatternInfo{
 				Name:        kw,
 				Category:    "routing",
-				Description: pyKeywords[kw],
+				Description: pyRoutingDescriptions[kw],
 				FileCount:   len(files),
 				Examples:    limitSlice(files, 3),
 			})
@@ -1042,6 +1123,392 @@ func (d *CodePatternDetector) detectGoPatterns() []types.PatternInfo {
 				Name:        kw,
 				Category:    "go-serialization",
 				Description: serializationKeywords[kw],
+				FileCount:   len(files),
+				Examples:    limitSlice(files, 3),
+			})
+		}
+	}
+
+	return patterns
+}
+
+// detectRustPatterns detects Rust-specific patterns
+func (d *CodePatternDetector) detectRustPatterns() []types.PatternInfo {
+	var patterns []types.PatternInfo
+	rsExts := []string{".rs"}
+
+	// Async runtime
+	asyncKeywords := map[string]string{
+		"tokio::":        "Tokio async runtime",
+		"#[tokio::main]": "Tokio main entry point",
+		"#[tokio::test]": "Tokio async test",
+		"async_std::":    "async-std runtime",
+		"async fn":       "Async function definition",
+		".await":         "Await syntax",
+		"futures::":      "Futures crate utilities",
+		"Pin<":           "Pinned futures",
+		"poll(":          "Future polling",
+	}
+
+	asyncResults := d.scanForKeywords(keys(asyncKeywords), rsExts)
+	for kw, files := range asyncResults {
+		if len(files) > 0 {
+			patterns = append(patterns, types.PatternInfo{
+				Name:        kw,
+				Category:    "rust-async",
+				Description: asyncKeywords[kw],
+				FileCount:   len(files),
+				Examples:    limitSlice(files, 3),
+			})
+		}
+	}
+
+	// Web frameworks
+	webKeywords := map[string]string{
+		"actix_web::":   "Actix-web framework",
+		"#[get(":        "Actix/Rocket route macro",
+		"#[post(":       "Actix/Rocket POST route",
+		"axum::":        "Axum web framework",
+		"Router::new()": "Axum router",
+		"rocket::":      "Rocket web framework",
+		"#[launch]":     "Rocket launch macro",
+		"warp::":        "Warp web framework",
+		"hyper::":       "Hyper HTTP library",
+	}
+
+	webResults := d.scanForKeywords(keys(webKeywords), rsExts)
+	for kw, files := range webResults {
+		if len(files) > 0 {
+			patterns = append(patterns, types.PatternInfo{
+				Name:        kw,
+				Category:    "rust-web",
+				Description: webKeywords[kw],
+				FileCount:   len(files),
+				Examples:    limitSlice(files, 3),
+			})
+		}
+	}
+
+	// Serialization
+	serdeKeywords := map[string]string{
+		"serde::":              "Serde serialization",
+		"#[derive(Serialize":   "Serde Serialize derive",
+		"#[derive(Deserialize": "Serde Deserialize derive",
+		"serde_json::":         "Serde JSON",
+		"serde_yaml::":         "Serde YAML",
+		"toml::":               "TOML parsing",
+	}
+
+	serdeResults := d.scanForKeywords(keys(serdeKeywords), rsExts)
+	for kw, files := range serdeResults {
+		if len(files) > 0 {
+			patterns = append(patterns, types.PatternInfo{
+				Name:        kw,
+				Category:    "rust-serde",
+				Description: serdeKeywords[kw],
+				FileCount:   len(files),
+				Examples:    limitSlice(files, 3),
+			})
+		}
+	}
+
+	// Error handling
+	errorKeywords := map[string]string{
+		"anyhow::":    "Anyhow error handling",
+		"thiserror::": "thiserror derive macros",
+		"#[error(":    "thiserror error attribute",
+		"Result<":     "Result type usage",
+		"?;":          "Question mark operator",
+		".unwrap()":   "Unwrap (panic on error)",
+		".expect(":    "Expect (panic with message)",
+		".unwrap_or(": "Unwrap with default",
+		".map_err(":   "Error mapping",
+	}
+
+	errorResults := d.scanForKeywords(keys(errorKeywords), rsExts)
+	for kw, files := range errorResults {
+		if len(files) > 0 {
+			patterns = append(patterns, types.PatternInfo{
+				Name:        kw,
+				Category:    "rust-error",
+				Description: errorKeywords[kw],
+				FileCount:   len(files),
+				Examples:    limitSlice(files, 3),
+			})
+		}
+	}
+
+	// CLI
+	cliKeywords := map[string]string{
+		"clap::":          "Clap CLI framework",
+		"#[derive(Parser": "Clap derive Parser",
+		"#[command(":      "Clap command attribute",
+		"#[arg(":          "Clap argument attribute",
+		"structopt::":     "StructOpt (deprecated, use clap)",
+		"argh::":          "Argh CLI parser",
+	}
+
+	cliResults := d.scanForKeywords(keys(cliKeywords), rsExts)
+	for kw, files := range cliResults {
+		if len(files) > 0 {
+			patterns = append(patterns, types.PatternInfo{
+				Name:        kw,
+				Category:    "rust-cli",
+				Description: cliKeywords[kw],
+				FileCount:   len(files),
+				Examples:    limitSlice(files, 3),
+			})
+		}
+	}
+
+	// Database
+	dbKeywords := map[string]string{
+		"sqlx::":           "SQLx async database",
+		"diesel::":         "Diesel ORM",
+		"sea_orm::":        "SeaORM async ORM",
+		"rusqlite::":       "Rusqlite SQLite",
+		"tokio_postgres::": "Tokio PostgreSQL",
+		"mongodb::":        "MongoDB driver",
+		"redis::":          "Redis client",
+	}
+
+	dbResults := d.scanForKeywords(keys(dbKeywords), rsExts)
+	for kw, files := range dbResults {
+		if len(files) > 0 {
+			patterns = append(patterns, types.PatternInfo{
+				Name:        kw,
+				Category:    "rust-database",
+				Description: dbKeywords[kw],
+				FileCount:   len(files),
+				Examples:    limitSlice(files, 3),
+			})
+		}
+	}
+
+	// Testing
+	testKeywords := map[string]string{
+		"#[test]":      "Rust unit test",
+		"#[cfg(test)]": "Test module configuration",
+		"assert!":      "Assert macro",
+		"assert_eq!":   "Assert equality macro",
+		"assert_ne!":   "Assert not equal macro",
+		"mockall::":    "Mockall mocking",
+		"#[mock]":      "Mockall mock attribute",
+		"proptest::":   "Property-based testing",
+	}
+
+	testResults := d.scanForKeywords(keys(testKeywords), rsExts)
+	for kw, files := range testResults {
+		if len(files) > 0 {
+			patterns = append(patterns, types.PatternInfo{
+				Name:        kw,
+				Category:    "rust-testing",
+				Description: testKeywords[kw],
+				FileCount:   len(files),
+				Examples:    limitSlice(files, 3),
+			})
+		}
+	}
+
+	// Concurrency
+	concKeywords := map[string]string{
+		"std::thread":   "Standard library threads",
+		"Arc<":          "Atomic reference counting",
+		"Mutex<":        "Mutex synchronization",
+		"RwLock<":       "Read-write lock",
+		"mpsc::":        "Multi-producer single-consumer channels",
+		"crossbeam::":   "Crossbeam concurrency utilities",
+		"rayon::":       "Rayon data parallelism",
+		"parking_lot::": "Parking lot synchronization",
+	}
+
+	concResults := d.scanForKeywords(keys(concKeywords), rsExts)
+	for kw, files := range concResults {
+		if len(files) > 0 {
+			patterns = append(patterns, types.PatternInfo{
+				Name:        kw,
+				Category:    "rust-concurrency",
+				Description: concKeywords[kw],
+				FileCount:   len(files),
+				Examples:    limitSlice(files, 3),
+			})
+		}
+	}
+
+	// Logging and tracing
+	logKeywords := map[string]string{
+		"log::":         "Log crate",
+		"tracing::":     "Tracing framework",
+		"#[instrument]": "Tracing instrument macro",
+		"info!":         "Info log macro",
+		"debug!":        "Debug log macro",
+		"error!":        "Error log macro",
+		"warn!":         "Warning log macro",
+		"env_logger::":  "Environment logger",
+	}
+
+	logResults := d.scanForKeywords(keys(logKeywords), rsExts)
+	for kw, files := range logResults {
+		if len(files) > 0 {
+			patterns = append(patterns, types.PatternInfo{
+				Name:        kw,
+				Category:    "rust-logging",
+				Description: logKeywords[kw],
+				FileCount:   len(files),
+				Examples:    limitSlice(files, 3),
+			})
+		}
+	}
+
+	return patterns
+}
+
+// detectPythonPatterns detects Python-specific patterns beyond Flask/FastAPI
+func (d *CodePatternDetector) detectPythonPatterns() []types.PatternInfo {
+	var patterns []types.PatternInfo
+	pyExts := []string{".py"}
+
+	// Type hints
+	typeKeywords := map[string]string{
+		"from typing import": "Python typing imports",
+		"Optional[":          "Optional type hint",
+		"List[":              "List type hint",
+		"Dict[":              "Dict type hint",
+		"Union[":             "Union type hint",
+		"Callable[":          "Callable type hint",
+		"TypeVar":            "Generic type variable",
+		"@dataclass":         "Dataclass decorator",
+		"@dataclasses":       "Dataclass module",
+		"pydantic":           "Pydantic validation",
+		"BaseModel":          "Pydantic BaseModel",
+	}
+
+	typeResults := d.scanForKeywords(keys(typeKeywords), pyExts)
+	for kw, files := range typeResults {
+		if len(files) > 0 {
+			patterns = append(patterns, types.PatternInfo{
+				Name:        kw,
+				Category:    "python-typing",
+				Description: typeKeywords[kw],
+				FileCount:   len(files),
+				Examples:    limitSlice(files, 3),
+			})
+		}
+	}
+
+	// Async patterns
+	asyncKeywords := map[string]string{
+		"async def":   "Async function definition",
+		"await ":      "Await expression",
+		"asyncio.":    "Asyncio module",
+		"aiohttp.":    "Aiohttp async HTTP",
+		"httpx.Async": "HTTPX async client",
+		"anyio.":      "AnyIO async library",
+		"trio.":       "Trio async library",
+	}
+
+	asyncResults := d.scanForKeywords(keys(asyncKeywords), pyExts)
+	for kw, files := range asyncResults {
+		if len(files) > 0 {
+			patterns = append(patterns, types.PatternInfo{
+				Name:        kw,
+				Category:    "python-async",
+				Description: asyncKeywords[kw],
+				FileCount:   len(files),
+				Examples:    limitSlice(files, 3),
+			})
+		}
+	}
+
+	// Data science / ML
+	dsKeywords := map[string]string{
+		"import pandas":       "Pandas data analysis",
+		"import numpy":        "NumPy numerical computing",
+		"import matplotlib":   "Matplotlib plotting",
+		"import seaborn":      "Seaborn visualization",
+		"import sklearn":      "Scikit-learn ML",
+		"import torch":        "PyTorch deep learning",
+		"import tensorflow":   "TensorFlow deep learning",
+		"import keras":        "Keras deep learning",
+		"import transformers": "Hugging Face Transformers",
+		"import langchain":    "LangChain LLM framework",
+		"import openai":       "OpenAI API",
+		"import anthropic":    "Anthropic API",
+	}
+
+	dsResults := d.scanForKeywords(keys(dsKeywords), pyExts)
+	for kw, files := range dsResults {
+		if len(files) > 0 {
+			patterns = append(patterns, types.PatternInfo{
+				Name:        kw,
+				Category:    "python-data-science",
+				Description: dsKeywords[kw],
+				FileCount:   len(files),
+				Examples:    limitSlice(files, 3),
+			})
+		}
+	}
+
+	// CLI patterns
+	cliKeywords := map[string]string{
+		"argparse.": "Argparse CLI",
+		"click.":    "Click CLI framework",
+		"@click.":   "Click decorator",
+		"typer.":    "Typer CLI framework",
+		"fire.":     "Python Fire CLI",
+		"rich.":     "Rich terminal formatting",
+	}
+
+	cliResults := d.scanForKeywords(keys(cliKeywords), pyExts)
+	for kw, files := range cliResults {
+		if len(files) > 0 {
+			patterns = append(patterns, types.PatternInfo{
+				Name:        kw,
+				Category:    "python-cli",
+				Description: cliKeywords[kw],
+				FileCount:   len(files),
+				Examples:    limitSlice(files, 3),
+			})
+		}
+	}
+
+	// Logging and debugging
+	logKeywords := map[string]string{
+		"import logging":    "Python logging module",
+		"logging.getLogger": "Logger instance",
+		"structlog.":        "Structlog structured logging",
+		"loguru.":           "Loguru logging",
+	}
+
+	logResults := d.scanForKeywords(keys(logKeywords), pyExts)
+	for kw, files := range logResults {
+		if len(files) > 0 {
+			patterns = append(patterns, types.PatternInfo{
+				Name:        kw,
+				Category:    "python-logging",
+				Description: logKeywords[kw],
+				FileCount:   len(files),
+				Examples:    limitSlice(files, 3),
+			})
+		}
+	}
+
+	// Task queues and background jobs
+	taskKeywords := map[string]string{
+		"from celery":     "Celery task queue",
+		"@celery.task":    "Celery task decorator",
+		"import rq":       "RQ (Redis Queue)",
+		"import dramatiq": "Dramatiq task processing",
+		"import huey":     "Huey task queue",
+	}
+
+	taskResults := d.scanForKeywords(keys(taskKeywords), pyExts)
+	for kw, files := range taskResults {
+		if len(files) > 0 {
+			patterns = append(patterns, types.PatternInfo{
+				Name:        kw,
+				Category:    "python-tasks",
+				Description: taskKeywords[kw],
 				FileCount:   len(files),
 				Examples:    limitSlice(files, 3),
 			})

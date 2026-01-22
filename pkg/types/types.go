@@ -24,12 +24,16 @@ type Analysis struct {
 
 // ReadmeContent represents parsed README information
 type ReadmeContent struct {
-	Title        string   `json:"title,omitempty"`
-	Description  string   `json:"description,omitempty"`
-	Features     []string `json:"features,omitempty"`
-	Installation string   `json:"installation,omitempty"`
-	QuickStart   string   `json:"quick_start,omitempty"`
-	Usage        string   `json:"usage,omitempty"`
+	Title         string            `json:"title,omitempty"`
+	Description   string            `json:"description,omitempty"`
+	Features      []string          `json:"features,omitempty"`
+	Installation  string            `json:"installation,omitempty"`
+	QuickStart    string            `json:"quick_start,omitempty"`
+	Usage         string            `json:"usage,omitempty"`
+	Prerequisites []string          `json:"prerequisites,omitempty"` // Required tools/dependencies
+	KeyCommands   []string          `json:"key_commands,omitempty"`  // Important commands from code blocks
+	ModelSpecs    map[string]string `json:"model_specs,omitempty"`   // ML model specifications
+	ProjectType   string            `json:"project_type,omitempty"`  // docs, ml, cli, library, app
 }
 
 // MonorepoInfo represents monorepo/workspace configuration
@@ -62,6 +66,8 @@ type CodePatterns struct {
 	DatabaseORM     []PatternInfo `json:"database_orm,omitempty"`
 	Utilities       []PatternInfo `json:"utilities,omitempty"`
 	GoPatterns      []PatternInfo `json:"go_patterns,omitempty"`
+	RustPatterns    []PatternInfo `json:"rust_patterns,omitempty"`
+	PythonPatterns  []PatternInfo `json:"python_patterns,omitempty"`
 }
 
 // PatternInfo represents a detected pattern

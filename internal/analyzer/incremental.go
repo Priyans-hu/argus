@@ -244,7 +244,22 @@ func (ia *IncrementalAnalyzer) runDetector(impact string, files []types.FileInfo
 		analysis.ArchitectureInfo = archDetector.Detect()
 
 	case ImpactCommands:
-		analysis.Commands = detector.DetectCommands(ia.rootPath)
+		commands := detector.DetectCommands(ia.rootPath)
+
+		// Add pyproject.toml commands (Python)
+		pyprojectDetector := detector.NewPyProjectDetector(ia.rootPath)
+		if pyInfo := pyprojectDetector.Detect(); pyInfo != nil && pyInfo.HasPyProject {
+			commands = append(commands, detectPyProjectCommands(pyInfo)...)
+		}
+
+		// Add Cargo.toml commands (Rust)
+		cargoDetector := detector.NewCargoDetector(ia.rootPath)
+		if cargoInfo := cargoDetector.Detect(); cargoInfo != nil && cargoInfo.HasCargo {
+			commands = filterNonCargoCommands(commands)
+			commands = append(commands, cargoDetector.DetectCargoCommands()...)
+		}
+
+		analysis.Commands = commands
 
 	case ImpactConventions:
 		conventionDetector := detector.NewConventionDetector(ia.rootPath, files)
