@@ -52,6 +52,7 @@ func (d *CodePatternDetector) Detect() *types.CodePatterns {
 		APIPatterns:     d.detectAPIPatterns(),
 		DatabaseORM:     d.detectDatabasePatterns(),
 		Utilities:       d.detectUtilityPatterns(),
+		GoPatterns:      d.detectGoPatterns(),
 	}
 
 	return patterns
@@ -140,23 +141,23 @@ func (d *CodePatternDetector) detectStateManagement() []types.PatternInfo {
 
 	// React state management
 	reactKeywords := map[string]string{
-		"useState":       "React useState hook for local component state",
-		"useReducer":     "React useReducer for complex state logic",
-		"useContext":     "React Context API for prop drilling avoidance",
-		"createContext":  "React Context creation",
-		"zustand":        "Zustand - lightweight state management",
-		"create(":        "Zustand store creation",
-		"useStore":       "Zustand/generic store hook",
-		"jotai":          "Jotai - atomic state management",
-		"atom(":          "Jotai/Recoil atom definition",
-		"useAtom":        "Jotai atom hook",
-		"recoil":         "Recoil state management",
-		"useRecoilState": "Recoil state hook",
+		"useState":         "React useState hook for local component state",
+		"useReducer":       "React useReducer for complex state logic",
+		"useContext":       "React Context API for prop drilling avoidance",
+		"createContext":    "React Context creation",
+		"zustand":          "Zustand - lightweight state management",
+		"create(":          "Zustand store creation",
+		"useStore":         "Zustand/generic store hook",
+		"jotai":            "Jotai - atomic state management",
+		"atom(":            "Jotai/Recoil atom definition",
+		"useAtom":          "Jotai atom hook",
+		"recoil":           "Recoil state management",
+		"useRecoilState":   "Recoil state hook",
 		"@reduxjs/toolkit": "Redux Toolkit",
-		"createSlice":    "Redux Toolkit slice",
-		"useSelector":    "Redux selector hook",
-		"useDispatch":    "Redux dispatch hook",
-		"configureStore": "Redux store configuration",
+		"createSlice":      "Redux Toolkit slice",
+		"useSelector":      "Redux selector hook",
+		"useDispatch":      "Redux dispatch hook",
+		"configureStore":   "Redux store configuration",
 	}
 
 	jsResults := d.scanForKeywords(keys(reactKeywords), jsExts)
@@ -199,10 +200,10 @@ func (d *CodePatternDetector) detectStateManagement() []types.PatternInfo {
 
 	// Python state patterns
 	pyKeywords := map[string]string{
-		"session[":     "Flask session management",
-		"g.":           "Flask application context globals",
-		"current_app":  "Flask current application context",
-		"request.":     "Flask/FastAPI request object",
+		"session[":    "Flask session management",
+		"g.":          "Flask application context globals",
+		"current_app": "Flask current application context",
+		"request.":    "Flask/FastAPI request object",
 	}
 
 	pyResults := d.scanForKeywords(keys(pyKeywords), pyExts)
@@ -230,21 +231,21 @@ func (d *CodePatternDetector) detectDataFetching() []types.PatternInfo {
 
 	// React/JS data fetching
 	jsKeywords := map[string]string{
-		"useQuery":        "TanStack Query (React Query) for server state",
-		"useMutation":     "TanStack Query mutation hook",
-		"useInfiniteQuery": "TanStack Query infinite scrolling",
-		"QueryClient":     "TanStack Query client setup",
-		"useSWR":          "SWR data fetching hook",
-		"axios":           "Axios HTTP client",
-		"axios.get":       "Axios GET request",
-		"axios.post":      "Axios POST request",
-		"fetch(":          "Native Fetch API",
-		"$fetch":          "Nuxt/ofetch utility",
-		"useFetch":        "Nuxt/custom fetch hook",
+		"useQuery":           "TanStack Query (React Query) for server state",
+		"useMutation":        "TanStack Query mutation hook",
+		"useInfiniteQuery":   "TanStack Query infinite scrolling",
+		"QueryClient":        "TanStack Query client setup",
+		"useSWR":             "SWR data fetching hook",
+		"axios":              "Axios HTTP client",
+		"axios.get":          "Axios GET request",
+		"axios.post":         "Axios POST request",
+		"fetch(":             "Native Fetch API",
+		"$fetch":             "Nuxt/ofetch utility",
+		"useFetch":           "Nuxt/custom fetch hook",
 		"getServerSideProps": "Next.js server-side data fetching",
-		"getStaticProps":  "Next.js static data fetching",
-		"useLoaderData":   "Remix loader data hook",
-		"trpc":            "tRPC type-safe API calls",
+		"getStaticProps":     "Next.js static data fetching",
+		"useLoaderData":      "Remix loader data hook",
+		"trpc":               "tRPC type-safe API calls",
 	}
 
 	jsResults := d.scanForKeywords(keys(jsKeywords), jsExts)
@@ -262,10 +263,10 @@ func (d *CodePatternDetector) detectDataFetching() []types.PatternInfo {
 
 	// Python data fetching
 	pyKeywords := map[string]string{
-		"requests.":   "Python requests library",
-		"httpx.":      "HTTPX async HTTP client",
-		"aiohttp.":    "aiohttp async HTTP client",
-		"urllib":      "Python urllib",
+		"requests.": "Python requests library",
+		"httpx.":    "HTTPX async HTTP client",
+		"aiohttp.":  "aiohttp async HTTP client",
+		"urllib":    "Python urllib",
 	}
 
 	pyResults := d.scanForKeywords(keys(pyKeywords), pyExts)
@@ -283,10 +284,10 @@ func (d *CodePatternDetector) detectDataFetching() []types.PatternInfo {
 
 	// Go HTTP clients
 	goKeywords := map[string]string{
-		"http.Get":      "Go standard HTTP GET",
-		"http.Post":     "Go standard HTTP POST",
-		"http.Client":   "Go HTTP client",
-		"resty.":        "Resty HTTP client",
+		"http.Get":    "Go standard HTTP GET",
+		"http.Post":   "Go standard HTTP POST",
+		"http.Client": "Go HTTP client",
+		"resty.":      "Resty HTTP client",
 	}
 
 	goResults := d.scanForKeywords(keys(goKeywords), goExts)
@@ -314,16 +315,16 @@ func (d *CodePatternDetector) detectRouting() []types.PatternInfo {
 
 	// React routing
 	jsKeywords := map[string]string{
-		"useRouter":      "Next.js/custom router hook",
-		"useNavigate":    "React Router navigation hook",
-		"useParams":      "React Router URL params",
-		"useSearchParams": "React Router/Next.js search params",
-		"<Link":          "Router Link component",
-		"<Route":         "React Router Route component",
+		"useRouter":           "Next.js/custom router hook",
+		"useNavigate":         "React Router navigation hook",
+		"useParams":           "React Router URL params",
+		"useSearchParams":     "React Router/Next.js search params",
+		"<Link":               "Router Link component",
+		"<Route":              "React Router Route component",
 		"createBrowserRouter": "React Router v6 browser router",
-		"next/navigation": "Next.js App Router navigation",
-		"next/link":      "Next.js Link component",
-		"usePathname":    "Next.js pathname hook",
+		"next/navigation":     "Next.js App Router navigation",
+		"next/link":           "Next.js Link component",
+		"usePathname":         "Next.js pathname hook",
 	}
 
 	jsResults := d.scanForKeywords(keys(jsKeywords), jsExts)
@@ -341,14 +342,14 @@ func (d *CodePatternDetector) detectRouting() []types.PatternInfo {
 
 	// Python routing
 	pyKeywords := map[string]string{
-		"@app.route":      "Flask route decorator",
-		"@router.":        "FastAPI router decorator",
-		"@app.get":        "FastAPI GET endpoint",
-		"@app.post":       "FastAPI POST endpoint",
-		"Blueprint":       "Flask Blueprint for modular routing",
-		"APIRouter":       "FastAPI APIRouter",
-		"path(":           "Django URL path",
-		"include(":        "Django URL includes",
+		"@app.route": "Flask route decorator",
+		"@router.":   "FastAPI router decorator",
+		"@app.get":   "FastAPI GET endpoint",
+		"@app.post":  "FastAPI POST endpoint",
+		"Blueprint":  "Flask Blueprint for modular routing",
+		"APIRouter":  "FastAPI APIRouter",
+		"path(":      "Django URL path",
+		"include(":   "Django URL includes",
 	}
 
 	pyResults := d.scanForKeywords(keys(pyKeywords), pyExts)
@@ -417,19 +418,19 @@ func (d *CodePatternDetector) detectForms() []types.PatternInfo {
 	jsExts := []string{".js", ".jsx", ".ts", ".tsx"}
 
 	jsKeywords := map[string]string{
-		"useForm":         "React Hook Form / TanStack Form",
-		"useFormContext":  "React Hook Form context",
-		"zodResolver":     "Zod schema validation with forms",
-		"yupResolver":     "Yup schema validation with forms",
-		"Formik":          "Formik form library",
-		"useFormik":       "Formik hook",
-		"<form":           "HTML form element",
-		"onSubmit":        "Form submission handler",
-		"handleSubmit":    "Form submit handler pattern",
-		"register(":       "React Hook Form field registration",
-		"Controller":      "React Hook Form Controller",
-		"z.object":        "Zod object schema",
-		"z.string":        "Zod string validation",
+		"useForm":        "React Hook Form / TanStack Form",
+		"useFormContext": "React Hook Form context",
+		"zodResolver":    "Zod schema validation with forms",
+		"yupResolver":    "Yup schema validation with forms",
+		"Formik":         "Formik form library",
+		"useFormik":      "Formik hook",
+		"<form":          "HTML form element",
+		"onSubmit":       "Form submission handler",
+		"handleSubmit":   "Form submit handler pattern",
+		"register(":      "React Hook Form field registration",
+		"Controller":     "React Hook Form Controller",
+		"z.object":       "Zod object schema",
+		"z.string":       "Zod string validation",
 	}
 
 	jsResults := d.scanForKeywords(keys(jsKeywords), jsExts)
@@ -596,18 +597,18 @@ func (d *CodePatternDetector) detectStyling() []types.PatternInfo {
 	jsExts := []string{".js", ".jsx", ".ts", ".tsx", ".css", ".scss"}
 
 	jsKeywords := map[string]string{
-		"className=":     "CSS class usage",
-		"tailwind":       "Tailwind CSS",
-		"@apply":         "Tailwind @apply directive",
-		"styled.":        "styled-components",
-		"css`":           "Emotion/styled-components CSS",
-		"makeStyles":     "Material-UI makeStyles",
-		"useStyles":      "Material-UI styles hook",
-		"sx={":           "MUI sx prop",
-		"clsx":           "clsx class utility",
-		"cn(":            "shadcn/ui cn utility",
-		"cva(":           "Class Variance Authority",
-		"module.css":     "CSS Modules",
+		"className=": "CSS class usage",
+		"tailwind":   "Tailwind CSS",
+		"@apply":     "Tailwind @apply directive",
+		"styled.":    "styled-components",
+		"css`":       "Emotion/styled-components CSS",
+		"makeStyles": "Material-UI makeStyles",
+		"useStyles":  "Material-UI styles hook",
+		"sx={":       "MUI sx prop",
+		"clsx":       "clsx class utility",
+		"cn(":        "shadcn/ui cn utility",
+		"cva(":       "Class Variance Authority",
+		"module.css": "CSS Modules",
 	}
 
 	jsResults := d.scanForKeywords(keys(jsKeywords), jsExts)
@@ -635,18 +636,18 @@ func (d *CodePatternDetector) detectAuthentication() []types.PatternInfo {
 
 	// JS auth
 	jsKeywords := map[string]string{
-		"useAuth":        "Custom auth hook",
-		"useSession":     "NextAuth/custom session hook",
-		"signIn":         "Auth sign in function",
-		"signOut":        "Auth sign out function",
-		"getSession":     "NextAuth getSession",
-		"NextAuth":       "NextAuth.js",
-		"Auth0":          "Auth0 integration",
-		"clerk":          "Clerk authentication",
-		"supabase.auth":  "Supabase authentication",
-		"firebase.auth":  "Firebase authentication",
-		"jwt":            "JWT handling",
-		"Bearer":         "Bearer token auth",
+		"useAuth":       "Custom auth hook",
+		"useSession":    "NextAuth/custom session hook",
+		"signIn":        "Auth sign in function",
+		"signOut":       "Auth sign out function",
+		"getSession":    "NextAuth getSession",
+		"NextAuth":      "NextAuth.js",
+		"Auth0":         "Auth0 integration",
+		"clerk":         "Clerk authentication",
+		"supabase.auth": "Supabase authentication",
+		"firebase.auth": "Firebase authentication",
+		"jwt":           "JWT handling",
+		"Bearer":        "Bearer token auth",
 	}
 
 	jsResults := d.scanForKeywords(keys(jsKeywords), jsExts)
@@ -664,12 +665,12 @@ func (d *CodePatternDetector) detectAuthentication() []types.PatternInfo {
 
 	// Python auth
 	pyKeywords := map[string]string{
-		"login_required":  "Flask login decorator",
-		"current_user":    "Flask-Login current user",
-		"@jwt_required":   "JWT required decorator",
-		"OAuth":           "OAuth integration",
-		"HTTPBearer":      "FastAPI HTTP Bearer auth",
-		"Depends(":        "FastAPI dependency injection",
+		"login_required": "Flask login decorator",
+		"current_user":   "Flask-Login current user",
+		"@jwt_required":  "JWT required decorator",
+		"OAuth":          "OAuth integration",
+		"HTTPBearer":     "FastAPI HTTP Bearer auth",
+		"Depends(":       "FastAPI dependency injection",
 	}
 
 	pyResults := d.scanForKeywords(keys(pyKeywords), pyExts)
@@ -715,18 +716,18 @@ func (d *CodePatternDetector) detectAPIPatterns() []types.PatternInfo {
 	allExts := []string{".js", ".jsx", ".ts", ".tsx", ".py", ".go"}
 
 	keywords := map[string]string{
-		"REST":           "RESTful API design",
-		"GraphQL":        "GraphQL API",
-		"gql`":           "GraphQL query",
-		"useQuery":       "GraphQL/React Query",
-		"useMutation":    "GraphQL/React Query mutation",
-		"tRPC":           "tRPC type-safe API",
-		"OpenAPI":        "OpenAPI/Swagger spec",
-		"swagger":        "Swagger documentation",
-		"grpc":           "gRPC protocol",
-		"protobuf":       "Protocol Buffers",
-		"websocket":      "WebSocket communication",
-		"socket.io":      "Socket.IO real-time",
+		"REST":        "RESTful API design",
+		"GraphQL":     "GraphQL API",
+		"gql`":        "GraphQL query",
+		"useQuery":    "GraphQL/React Query",
+		"useMutation": "GraphQL/React Query mutation",
+		"tRPC":        "tRPC type-safe API",
+		"OpenAPI":     "OpenAPI/Swagger spec",
+		"swagger":     "Swagger documentation",
+		"grpc":        "gRPC protocol",
+		"protobuf":    "Protocol Buffers",
+		"websocket":   "WebSocket communication",
+		"socket.io":   "Socket.IO real-time",
 	}
 
 	results := d.scanForKeywords(keys(keywords), allExts)
@@ -754,16 +755,16 @@ func (d *CodePatternDetector) detectDatabasePatterns() []types.PatternInfo {
 
 	// JS/TS ORMs
 	jsKeywords := map[string]string{
-		"prisma":         "Prisma ORM",
-		"PrismaClient":   "Prisma client",
-		"drizzle":        "Drizzle ORM",
-		"typeorm":        "TypeORM",
-		"@Entity":        "TypeORM entity decorator",
-		"sequelize":      "Sequelize ORM",
-		"mongoose":       "Mongoose ODM (MongoDB)",
-		"knex":           "Knex.js query builder",
-		"kysely":         "Kysely type-safe SQL",
-		"supabase":       "Supabase client",
+		"prisma":       "Prisma ORM",
+		"PrismaClient": "Prisma client",
+		"drizzle":      "Drizzle ORM",
+		"typeorm":      "TypeORM",
+		"@Entity":      "TypeORM entity decorator",
+		"sequelize":    "Sequelize ORM",
+		"mongoose":     "Mongoose ODM (MongoDB)",
+		"knex":         "Knex.js query builder",
+		"kysely":       "Kysely type-safe SQL",
+		"supabase":     "Supabase client",
 	}
 
 	jsResults := d.scanForKeywords(keys(jsKeywords), jsExts)
@@ -781,14 +782,14 @@ func (d *CodePatternDetector) detectDatabasePatterns() []types.PatternInfo {
 
 	// Python ORMs
 	pyKeywords := map[string]string{
-		"SQLAlchemy":     "SQLAlchemy ORM",
-		"Base.metadata":  "SQLAlchemy models",
-		"django.db":      "Django ORM",
-		"models.Model":   "Django model",
-		"tortoise":       "Tortoise ORM",
-		"peewee":         "Peewee ORM",
-		"mongoengine":    "MongoEngine ODM",
-		"motor":          "Motor async MongoDB",
+		"SQLAlchemy":    "SQLAlchemy ORM",
+		"Base.metadata": "SQLAlchemy models",
+		"django.db":     "Django ORM",
+		"models.Model":  "Django model",
+		"tortoise":      "Tortoise ORM",
+		"peewee":        "Peewee ORM",
+		"mongoengine":   "MongoEngine ODM",
+		"motor":         "Motor async MongoDB",
 	}
 
 	pyResults := d.scanForKeywords(keys(pyKeywords), pyExts)
@@ -806,14 +807,14 @@ func (d *CodePatternDetector) detectDatabasePatterns() []types.PatternInfo {
 
 	// Go ORMs - use more specific patterns to avoid false positives
 	goKeywords := map[string]string{
-		"gorm.Open(":     "GORM ORM",
-		"gorm.Model":     "GORM model embedding",
-		"sqlx.Connect":   "sqlx database library",
-		"sqlx.Open":      "sqlx database library",
-		"sql.Open(":      "Go standard SQL",
-		"pgx.Connect":    "pgx PostgreSQL driver",
-		"mongo.Connect":  "MongoDB Go driver",
-		"bun.NewDB":      "Bun ORM",
+		"gorm.Open(":    "GORM ORM",
+		"gorm.Model":    "GORM model embedding",
+		"sqlx.Connect":  "sqlx database library",
+		"sqlx.Open":     "sqlx database library",
+		"sql.Open(":     "Go standard SQL",
+		"pgx.Connect":   "pgx PostgreSQL driver",
+		"mongo.Connect": "MongoDB Go driver",
+		"bun.NewDB":     "Bun ORM",
 	}
 
 	goResults := d.scanForKeywords(keys(goKeywords), goExts)
@@ -853,17 +854,17 @@ func (d *CodePatternDetector) detectUtilityPatterns() []types.PatternInfo {
 	jsExts := []string{".js", ".jsx", ".ts", ".tsx"}
 
 	jsKeywords := map[string]string{
-		"lodash":         "Lodash utility library",
-		"dayjs":          "Day.js date library",
-		"moment":         "Moment.js date library",
-		"date-fns":       "date-fns date utilities",
-		"uuid":           "UUID generation",
-		"nanoid":         "Nano ID generation",
-		"zod":            "Zod schema validation",
-		"yup":            "Yup schema validation",
-		"ajv":            "AJV JSON schema validation",
-		"immer":          "Immer immutable updates",
-		"ramda":          "Ramda FP utilities",
+		"lodash":   "Lodash utility library",
+		"dayjs":    "Day.js date library",
+		"moment":   "Moment.js date library",
+		"date-fns": "date-fns date utilities",
+		"uuid":     "UUID generation",
+		"nanoid":   "Nano ID generation",
+		"zod":      "Zod schema validation",
+		"yup":      "Yup schema validation",
+		"ajv":      "AJV JSON schema validation",
+		"immer":    "Immer immutable updates",
+		"ramda":    "Ramda FP utilities",
 	}
 
 	jsResults := d.scanForKeywords(keys(jsKeywords), jsExts)
@@ -873,6 +874,174 @@ func (d *CodePatternDetector) detectUtilityPatterns() []types.PatternInfo {
 				Name:        kw,
 				Category:    "utilities",
 				Description: jsKeywords[kw],
+				FileCount:   len(files),
+				Examples:    limitSlice(files, 3),
+			})
+		}
+	}
+
+	return patterns
+}
+
+// detectGoPatterns detects Go-specific patterns
+func (d *CodePatternDetector) detectGoPatterns() []types.PatternInfo {
+	var patterns []types.PatternInfo
+	goExts := []string{".go"}
+
+	// CLI frameworks
+	cliKeywords := map[string]string{
+		"cobra.Command": "Cobra CLI framework",
+		"urfave/cli":    "urfave/cli framework",
+		"kingpin.":      "Kingpin CLI framework",
+		"spf13/pflag":   "spf13 pflag for flags",
+	}
+
+	cliResults := d.scanForKeywords(keys(cliKeywords), goExts)
+	for kw, files := range cliResults {
+		if len(files) > 0 {
+			patterns = append(patterns, types.PatternInfo{
+				Name:        kw,
+				Category:    "go-cli",
+				Description: cliKeywords[kw],
+				FileCount:   len(files),
+				Examples:    limitSlice(files, 3),
+			})
+		}
+	}
+
+	// Configuration management
+	configKeywords := map[string]string{
+		"viper.":      "Viper configuration",
+		"spf13/viper": "Viper config library",
+		"godotenv":    "GoDotEnv environment variables",
+		"envconfig":   "Kelseyhightower envconfig",
+	}
+
+	configResults := d.scanForKeywords(keys(configKeywords), goExts)
+	for kw, files := range configResults {
+		if len(files) > 0 {
+			patterns = append(patterns, types.PatternInfo{
+				Name:        kw,
+				Category:    "go-config",
+				Description: configKeywords[kw],
+				FileCount:   len(files),
+				Examples:    limitSlice(files, 3),
+			})
+		}
+	}
+
+	// Concurrency patterns
+	concurrencyKeywords := map[string]string{
+		"go func":             "Goroutines",
+		"make(chan":           "Channels",
+		"sync.Mutex":          "Mutex synchronization",
+		"sync.RWMutex":        "Read-write mutex",
+		"sync.WaitGroup":      "WaitGroup for goroutine coordination",
+		"sync.Once":           "sync.Once for one-time initialization",
+		"select {":            "Select statement for channel operations",
+		"context.Context":     "Context for cancellation and deadlines",
+		"context.WithCancel":  "Cancelable context",
+		"context.WithTimeout": "Context with timeout",
+	}
+
+	concurrencyResults := d.scanForKeywords(keys(concurrencyKeywords), goExts)
+	for kw, files := range concurrencyResults {
+		// Filter out test files for some patterns to reduce noise
+		filteredFiles := files
+		if strings.Contains(kw, "context.") {
+			filteredFiles = filterOutTestFiles(files)
+		}
+
+		if len(filteredFiles) > 0 {
+			patterns = append(patterns, types.PatternInfo{
+				Name:        kw,
+				Category:    "go-concurrency",
+				Description: concurrencyKeywords[kw],
+				FileCount:   len(filteredFiles),
+				Examples:    limitSlice(filteredFiles, 3),
+			})
+		}
+	}
+
+	// Logging libraries
+	loggingKeywords := map[string]string{
+		"logrus.":  "Logrus structured logging",
+		"zap.":     "Zap high-performance logging",
+		"zerolog.": "Zerolog logging",
+		"slog.":    "Go 1.21+ structured logging",
+	}
+
+	loggingResults := d.scanForKeywords(keys(loggingKeywords), goExts)
+	for kw, files := range loggingResults {
+		if len(files) > 0 {
+			patterns = append(patterns, types.PatternInfo{
+				Name:        kw,
+				Category:    "go-logging",
+				Description: loggingKeywords[kw],
+				FileCount:   len(files),
+				Examples:    limitSlice(files, 3),
+			})
+		}
+	}
+
+	// Error handling patterns
+	errorKeywords := map[string]string{
+		"errors.Is":   "Go 1.13+ error comparison",
+		"errors.As":   "Go 1.13+ error type assertion",
+		"errors.Wrap": "pkg/errors error wrapping",
+		"fmt.Errorf":  "Error formatting",
+	}
+
+	errorResults := d.scanForKeywords(keys(errorKeywords), goExts)
+	for kw, files := range errorResults {
+		if len(files) > 0 {
+			patterns = append(patterns, types.PatternInfo{
+				Name:        kw,
+				Category:    "go-errors",
+				Description: errorKeywords[kw],
+				FileCount:   len(files),
+				Examples:    limitSlice(files, 3),
+			})
+		}
+	}
+
+	// Dependency injection
+	diKeywords := map[string]string{
+		"wire.": "Google Wire dependency injection",
+		"dig.":  "Uber Dig dependency injection",
+		"fx.":   "Uber Fx application framework",
+	}
+
+	diResults := d.scanForKeywords(keys(diKeywords), goExts)
+	for kw, files := range diResults {
+		if len(files) > 0 {
+			patterns = append(patterns, types.PatternInfo{
+				Name:        kw,
+				Category:    "go-di",
+				Description: diKeywords[kw],
+				FileCount:   len(files),
+				Examples:    limitSlice(files, 3),
+			})
+		}
+	}
+
+	// Serialization and data formats
+	serializationKeywords := map[string]string{
+		"json.Marshal":   "JSON serialization",
+		"json.Unmarshal": "JSON deserialization",
+		"yaml.Marshal":   "YAML serialization",
+		"yaml.Unmarshal": "YAML deserialization",
+		"protobuf":       "Protocol Buffers",
+		"encoding/xml":   "XML encoding",
+	}
+
+	serializationResults := d.scanForKeywords(keys(serializationKeywords), goExts)
+	for kw, files := range serializationResults {
+		if len(files) > 0 {
+			patterns = append(patterns, types.PatternInfo{
+				Name:        kw,
+				Category:    "go-serialization",
+				Description: serializationKeywords[kw],
 				FileCount:   len(files),
 				Examples:    limitSlice(files, 3),
 			})

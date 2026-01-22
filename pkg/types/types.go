@@ -61,6 +61,7 @@ type CodePatterns struct {
 	APIPatterns     []PatternInfo `json:"api_patterns,omitempty"`
 	DatabaseORM     []PatternInfo `json:"database_orm,omitempty"`
 	Utilities       []PatternInfo `json:"utilities,omitempty"`
+	GoPatterns      []PatternInfo `json:"go_patterns,omitempty"`
 }
 
 // PatternInfo represents a detected pattern
@@ -197,10 +198,28 @@ type FileInfo struct {
 	IsDir     bool
 }
 
+// GitRepository represents git repository information
+type GitRepository struct {
+	RemoteURL string `json:"remote_url,omitempty"` // e.g., https://github.com/user/repo.git
+	Owner     string `json:"owner,omitempty"`      // e.g., user or organization
+	Name      string `json:"name,omitempty"`       // e.g., repo name
+	Platform  string `json:"platform,omitempty"`   // e.g., github, gitlab, bitbucket
+}
+
+// GitCommit represents a git commit
+type GitCommit struct {
+	Hash    string `json:"hash"`
+	Message string `json:"message"`
+	Author  string `json:"author,omitempty"`
+	Date    string `json:"date,omitempty"`
+}
+
 // GitConventions represents detected git conventions
 type GitConventions struct {
 	CommitConvention *CommitConvention `json:"commit_convention,omitempty"`
 	BranchConvention *BranchConvention `json:"branch_convention,omitempty"`
+	Repository       *GitRepository    `json:"repository,omitempty"`
+	RecentCommits    []GitCommit       `json:"recent_commits,omitempty"`
 }
 
 // CommitConvention represents detected commit message conventions
