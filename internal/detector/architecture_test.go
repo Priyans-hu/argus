@@ -11,39 +11,46 @@ import (
 
 func TestArchitectureDetector_DetectStyle(t *testing.T) {
 	tests := []struct {
-		name     string
-		dirs     []string
-		expected string
+		name        string
+		dirs        []string
+		createGoMod bool // Whether to create go.mod for Go detection
+		expected    string
 	}{
 		{
-			name:     "standard go layout",
-			dirs:     []string{"cmd", "internal", "pkg"},
-			expected: "Standard Go Layout",
+			name:        "standard go layout",
+			dirs:        []string{"cmd", "internal", "pkg"},
+			createGoMod: true,
+			expected:    "Standard Go Layout",
 		},
 		{
-			name:     "clean architecture",
-			dirs:     []string{"domain", "infrastructure", "adapters"},
-			expected: "Clean Architecture",
+			name:        "clean architecture (go)",
+			dirs:        []string{"domain", "infrastructure", "adapters"},
+			createGoMod: true,
+			expected:    "Clean Architecture",
 		},
 		{
-			name:     "hexagonal architecture",
-			dirs:     []string{"ports", "adapters"},
-			expected: "Hexagonal Architecture",
+			name:        "hexagonal architecture (go)",
+			dirs:        []string{"ports", "adapters"},
+			createGoMod: true,
+			expected:    "Hexagonal Architecture",
 		},
 		{
-			name:     "mvc pattern",
-			dirs:     []string{"models", "views", "controllers"},
-			expected: "MVC",
+			name:        "mvc pattern (generic)",
+			dirs:        []string{"models", "views", "controllers"},
+			createGoMod: false,
+			expected:    "MVC",
 		},
 		{
-			name:     "feature-based",
-			dirs:     []string{"features", "shared"},
-			expected: "Feature-based",
+			name:        "feature-based (generic)",
+			dirs:        []string{"features", "shared"},
+			createGoMod: false,
+			expected:    "Feature-based",
 		},
 		{
-			name:     "go package layout",
-			dirs:     []string{"pkg", "lib"},
-			expected: "Go Package Layout",
+			name:        "go package layout",
+			dirs:        []string{"pkg", "lib"},
+			createGoMod: true,
+			expected:    "Go Package Layout",
 		},
 	}
 
@@ -55,6 +62,14 @@ func TestArchitectureDetector_DetectStyle(t *testing.T) {
 				t.Fatalf("failed to create temp dir: %v", err)
 			}
 			defer func() { _ = os.RemoveAll(tmpDir) }()
+
+			// Create go.mod for Go projects
+			if tt.createGoMod {
+				goModPath := filepath.Join(tmpDir, "go.mod")
+				if err := os.WriteFile(goModPath, []byte("module test/project\n\ngo 1.21\n"), 0644); err != nil {
+					t.Fatalf("failed to create go.mod: %v", err)
+				}
+			}
 
 			// Create directory structure
 			var files []types.FileInfo
