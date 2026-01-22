@@ -48,11 +48,17 @@ func (g *ClaudeGenerator) Generate(analysis *types.Analysis) ([]byte, error) {
 	// Quick Reference (commands table)
 	g.writeQuickReference(&buf, analysis.Commands)
 
-	// Architecture section for monorepos
-	g.writeArchitecture(&buf, analysis.MonorepoInfo)
+	// Architecture section for monorepos (skip in compact mode if not monorepo)
+	if !g.compact || analysis.MonorepoInfo != nil {
+		g.writeArchitecture(&buf, analysis.MonorepoInfo)
+	}
 
-	// Architecture diagram
-	g.writeArchitectureDiagram(&buf, analysis.ArchitectureInfo)
+	// Architecture diagram (simplified in compact mode)
+	if g.compact {
+		g.writeArchitectureDiagramCompact(&buf, analysis.ArchitectureInfo)
+	} else {
+		g.writeArchitectureDiagram(&buf, analysis.ArchitectureInfo)
+	}
 
 	// Tech Stack Summary
 	g.writeTechStack(&buf, &analysis.TechStack)
@@ -60,23 +66,37 @@ func (g *ClaudeGenerator) Generate(analysis *types.Analysis) ([]byte, error) {
 	// Project Structure
 	g.writeStructure(&buf, &analysis.Structure)
 
-	// Key Files
-	g.writeKeyFiles(&buf, analysis.KeyFiles)
+	// Key Files (limit in compact mode)
+	if g.compact {
+		g.writeKeyFilesCompact(&buf, analysis.KeyFiles)
+	} else {
+		g.writeKeyFiles(&buf, analysis.KeyFiles)
+	}
 
-	// Configuration System
-	g.writeConfigurationSystem(&buf, analysis.ConfigFiles)
+	// Configuration System (skip in compact mode)
+	if !g.compact {
+		g.writeConfigurationSystem(&buf, analysis.ConfigFiles)
+	}
 
 	// Development Setup
 	g.writeDevelopmentSetup(&buf, analysis.DevelopmentInfo)
 
-	// Available Commands (detailed)
-	g.writeCommands(&buf, analysis.Commands)
+	// Available Commands (detailed) - skip in compact, Quick Reference has essentials
+	if !g.compact {
+		g.writeCommands(&buf, analysis.Commands)
+	}
 
-	// CLI Output & Verbosity
-	g.writeCLIOutput(&buf, analysis.CLIInfo)
+	// CLI Output & Verbosity (skip in compact mode)
+	if !g.compact {
+		g.writeCLIOutput(&buf, analysis.CLIInfo)
+	}
 
-	// API Endpoints
-	g.writeEndpoints(&buf, analysis.Endpoints)
+	// API Endpoints (limit in compact mode)
+	if g.compact {
+		g.writeEndpointsCompact(&buf, analysis.Endpoints)
+	} else {
+		g.writeEndpoints(&buf, analysis.Endpoints)
+	}
 
 	// Conventions (includes git conventions)
 	g.writeConventions(&buf, analysis.Conventions, analysis.GitConventions)
@@ -84,11 +104,17 @@ func (g *ClaudeGenerator) Generate(analysis *types.Analysis) ([]byte, error) {
 	// Guidelines based on tech stack
 	g.writeGuidelines(&buf, &analysis.TechStack)
 
-	// Detected patterns from deep analysis
-	g.writePatterns(&buf, analysis.CodePatterns)
+	// Detected patterns from deep analysis (limited in compact mode)
+	if g.compact {
+		g.writePatternsCompact(&buf, analysis.CodePatterns)
+	} else {
+		g.writePatterns(&buf, analysis.CodePatterns)
+	}
 
-	// Dependencies summary
-	g.writeDependencies(&buf, analysis.Dependencies)
+	// Dependencies summary (skip in compact mode)
+	if !g.compact {
+		g.writeDependencies(&buf, analysis.Dependencies)
+	}
 
 	return buf.Bytes(), nil
 }
@@ -1215,4 +1241,202 @@ func titleCase(s string) string {
 	r := []rune(s)
 	r[0] = unicode.ToUpper(r[0])
 	return string(r)
+}
+
+// =============================================================================
+// Compact Mode Methods
+// =============================================================================
+
+// writeArchitectureDiagramCompact writes a simplified architecture section
+func (g *ClaudeGenerator) writeArchitectureDiagramCompact(buf *bytes.Buffer, arch *types.ArchitectureInfo) {
+	if arch == nil || (arch.Style == "" && arch.EntryPoint == "") {
+		return
+	}
+
+	buf.WriteString("## Architecture\n\n")
+
+	if arch.Style != "" {
+		fmt.Fprintf(buf, "**Style:** %s", arch.Style)
+		if arch.EntryPoint != "" {
+			fmt.Fprintf(buf, " | **Entry:** `%s`", arch.EntryPoint)
+		}
+		buf.WriteString("\n\n")
+	} else if arch.EntryPoint != "" {
+		fmt.Fprintf(buf, "**Entry Point:** `%s`\n\n", arch.EntryPoint)
+	}
+
+	// Skip diagram in compact mode - too verbose
+}
+
+// writeKeyFilesCompact writes only the most important key files (max 5)
+func (g *ClaudeGenerator) writeKeyFilesCompact(buf *bytes.Buffer, keyFiles []types.KeyFile) {
+	if len(keyFiles) == 0 {
+		return
+	}
+
+	buf.WriteString("## Key Files\n\n")
+
+	// Prioritize entry points, configs, and main files
+	priority := []string{"main", "entry", "config", "readme", "contributing"}
+	selected := make([]types.KeyFile, 0, 5)
+
+	// First pass: get priority files
+	for _, kf := range keyFiles {
+		lower := strings.ToLower(kf.Path + kf.Purpose)
+		for _, p := range priority {
+			if strings.Contains(lower, p) {
+				selected = append(selected, kf)
+				break
+			}
+		}
+		if len(selected) >= 5 {
+			break
+		}
+	}
+
+	// If not enough, fill with remaining
+	if len(selected) < 5 {
+		for _, kf := range keyFiles {
+			found := false
+			for _, s := range selected {
+				if s.Path == kf.Path {
+					found = true
+					break
+				}
+			}
+			if !found {
+				selected = append(selected, kf)
+				if len(selected) >= 5 {
+					break
+				}
+			}
+		}
+	}
+
+	for _, kf := range selected {
+		if kf.Description != "" {
+			fmt.Fprintf(buf, "- `%s` - %s\n", kf.Path, kf.Description)
+		} else if kf.Purpose != "" {
+			fmt.Fprintf(buf, "- `%s` - %s\n", kf.Path, kf.Purpose)
+		} else {
+			fmt.Fprintf(buf, "- `%s`\n", kf.Path)
+		}
+	}
+
+	if len(keyFiles) > 5 {
+		fmt.Fprintf(buf, "\n*...and %d more files*\n", len(keyFiles)-5)
+	}
+	buf.WriteString("\n")
+}
+
+// writeEndpointsCompact writes only unique endpoint patterns (max 10)
+func (g *ClaudeGenerator) writeEndpointsCompact(buf *bytes.Buffer, endpoints []types.Endpoint) {
+	if len(endpoints) == 0 {
+		return
+	}
+
+	buf.WriteString("## API Endpoints\n\n")
+
+	// Group by method and show unique paths
+	methodPaths := make(map[string][]string)
+	for _, ep := range endpoints {
+		method := ep.Method
+		if method == "" {
+			method = "GET"
+		}
+		methodPaths[method] = append(methodPaths[method], ep.Path)
+	}
+
+	// Show summary
+	methods := []string{"GET", "POST", "PUT", "PATCH", "DELETE"}
+	count := 0
+	for _, method := range methods {
+		paths := methodPaths[method]
+		if len(paths) == 0 {
+			continue
+		}
+		// Show max 3 examples per method
+		limit := 3
+		if len(paths) < limit {
+			limit = len(paths)
+		}
+		fmt.Fprintf(buf, "**%s:** ", method)
+		examples := make([]string, limit)
+		for i := 0; i < limit; i++ {
+			examples[i] = "`" + paths[i] + "`"
+		}
+		buf.WriteString(strings.Join(examples, ", "))
+		if len(paths) > limit {
+			fmt.Fprintf(buf, " *+%d more*", len(paths)-limit)
+		}
+		buf.WriteString("\n")
+		count++
+		if count >= 5 {
+			break
+		}
+	}
+	buf.WriteString("\n")
+}
+
+// writePatternsCompact writes only the top 5 most relevant patterns per category
+func (g *ClaudeGenerator) writePatternsCompact(buf *bytes.Buffer, patterns *types.CodePatterns) {
+	if patterns == nil {
+		return
+	}
+
+	// Check if any patterns exist
+	hasPatterns := len(patterns.StateManagement) > 0 ||
+		len(patterns.DataFetching) > 0 ||
+		len(patterns.Routing) > 0 ||
+		len(patterns.Testing) > 0 ||
+		len(patterns.Authentication) > 0 ||
+		len(patterns.APIPatterns) > 0 ||
+		len(patterns.DatabaseORM) > 0
+
+	if !hasPatterns {
+		return
+	}
+
+	buf.WriteString("## Detected Patterns\n\n")
+	buf.WriteString("*Top patterns detected in the codebase:*\n\n")
+
+	// Helper to write limited patterns
+	writeTopPatterns := func(title string, patterns []types.PatternInfo, limit int) {
+		if len(patterns) == 0 {
+			return
+		}
+
+		// Sort by file count (most common first)
+		sorted := make([]types.PatternInfo, len(patterns))
+		copy(sorted, patterns)
+		sort.Slice(sorted, func(i, j int) bool {
+			return sorted[i].FileCount > sorted[j].FileCount
+		})
+
+		buf.WriteString("### " + title + "\n\n")
+		count := 0
+		for _, p := range sorted {
+			if count >= limit {
+				break
+			}
+			if p.FileCount > 1 {
+				fmt.Fprintf(buf, "- **%s** (%d files)\n", p.Name, p.FileCount)
+			} else if len(p.Examples) > 0 {
+				fmt.Fprintf(buf, "- **%s** - `%s`\n", p.Name, p.Examples[0])
+			} else {
+				fmt.Fprintf(buf, "- **%s**\n", p.Name)
+			}
+			count++
+		}
+		if len(patterns) > limit {
+			fmt.Fprintf(buf, "\n*...and %d more*\n", len(patterns)-limit)
+		}
+		buf.WriteString("\n")
+	}
+
+	// Write only the most relevant categories with limited patterns
+	writeTopPatterns("Data Fetching", patterns.DataFetching, 3)
+	writeTopPatterns("Testing", patterns.Testing, 3)
+	writeTopPatterns("API Patterns", patterns.APIPatterns, 3)
+	writeTopPatterns("Database & ORM", patterns.DatabaseORM, 3)
 }
