@@ -145,6 +145,197 @@ func main() {
 	}
 }
 
+func TestParallelAnalyzer_WithMakefile(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "parallel-makefile-test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	// Create go.mod
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test\n\ngo 1.21"), 0644); err != nil {
+		t.Fatalf("failed to create go.mod: %v", err)
+	}
+
+	// Create Makefile
+	makefile := `build:
+	go build ./...
+
+test:
+	go test ./...
+
+lint:
+	golangci-lint run
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "Makefile"), []byte(makefile), 0644); err != nil {
+		t.Fatalf("failed to create Makefile: %v", err)
+	}
+
+	pa := NewParallelAnalyzer(tmpDir, nil)
+	analysis, err := pa.Analyze()
+	if err != nil {
+		t.Fatalf("parallel analysis failed: %v", err)
+	}
+
+	// Should detect commands from Makefile
+	if len(analysis.Commands) == 0 {
+		t.Error("expected commands to be detected from Makefile")
+	}
+}
+
+func TestParallelAnalyzer_WithREADME(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "parallel-readme-test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	// Create go.mod
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test\n\ngo 1.21"), 0644); err != nil {
+		t.Fatalf("failed to create go.mod: %v", err)
+	}
+
+	// Create README
+	readme := `# Test Project
+
+This is a test project for parallel analysis.
+
+## Features
+
+- Feature 1
+- Feature 2
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "README.md"), []byte(readme), 0644); err != nil {
+		t.Fatalf("failed to create README.md: %v", err)
+	}
+
+	pa := NewParallelAnalyzer(tmpDir, nil)
+	analysis, err := pa.Analyze()
+	if err != nil {
+		t.Fatalf("parallel analysis failed: %v", err)
+	}
+
+	// Should detect README content
+	if analysis.ReadmeContent == nil {
+		t.Error("expected README content to be detected")
+	}
+}
+
+func TestParallelAnalyzer_WithSubdirectories(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "parallel-subdir-test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	// Create directory structure
+	dirs := []string{"cmd/app", "internal/handler", "internal/service", "pkg/types"}
+	for _, dir := range dirs {
+		if err := os.MkdirAll(filepath.Join(tmpDir, dir), 0755); err != nil {
+			t.Fatalf("failed to create dir %s: %v", dir, err)
+		}
+	}
+
+	// Create go.mod
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test\n\ngo 1.21"), 0644); err != nil {
+		t.Fatalf("failed to create go.mod: %v", err)
+	}
+
+	// Create main.go in cmd/app
+	mainGo := `package main
+
+func main() {}
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "cmd/app/main.go"), []byte(mainGo), 0644); err != nil {
+		t.Fatalf("failed to create main.go: %v", err)
+	}
+
+	pa := NewParallelAnalyzer(tmpDir, nil)
+	analysis, err := pa.Analyze()
+	if err != nil {
+		t.Fatalf("parallel analysis failed: %v", err)
+	}
+
+	// Should detect directory structure
+	if len(analysis.Structure.Directories) == 0 {
+		t.Error("expected directories to be detected")
+	}
+
+	// Should detect architecture info
+	if analysis.ArchitectureInfo == nil {
+		t.Error("expected architecture info to be detected")
+	}
+}
+
+func TestParallelAnalyzer_MultipleRuns(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "parallel-multi-test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	// Create minimal project
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test\n\ngo 1.21"), 0644); err != nil {
+		t.Fatalf("failed to create go.mod: %v", err)
+	}
+
+	pa := NewParallelAnalyzer(tmpDir, nil)
+
+	// Run analysis multiple times to ensure no race conditions
+	for i := 0; i < 5; i++ {
+		analysis, err := pa.Analyze()
+		if err != nil {
+			t.Fatalf("analysis run %d failed: %v", i, err)
+		}
+		if analysis == nil {
+			t.Fatalf("analysis run %d returned nil", i)
+		}
+	}
+}
+
+func TestGetProjectName(t *testing.T) {
+	tests := []struct {
+		path     string
+		expected string
+	}{
+		{"/path/to/project", "project"},
+		{"/single", "single"},
+		{"relative/path", "path"},
+		{"simple", "simple"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.path, func(t *testing.T) {
+			result := getProjectName(tc.path)
+			if result != tc.expected {
+				t.Errorf("getProjectName(%q) = %q, expected %q", tc.path, result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestBaseFileName(t *testing.T) {
+	tests := []struct {
+		path     string
+		expected string
+	}{
+		{"/path/to/file.go", "file.go"},
+		{"file.go", "file.go"},
+		{"/root", "root"},
+		{"a/b/c/d", "d"},
+		{"", ""},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.path, func(t *testing.T) {
+			result := baseFileName(tc.path)
+			if result != tc.expected {
+				t.Errorf("baseFileName(%q) = %q, expected %q", tc.path, result, tc.expected)
+			}
+		})
+	}
+}
+
 func BenchmarkSequentialAnalyzer(b *testing.B) {
 	// Use the current directory for a more realistic benchmark
 	tmpDir, err := os.MkdirTemp("", "bench-seq")
