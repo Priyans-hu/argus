@@ -36,6 +36,7 @@ var (
 	force          bool
 	mergeMode      bool
 	addCustomBlock bool
+	parallel       bool
 )
 
 var rootCmd = &cobra.Command{
@@ -113,17 +114,19 @@ func init() {
 
 	// Scan command flags
 	scanCmd.Flags().StringVarP(&outputDir, "output", "o", ".", "Output directory for generated files")
-	scanCmd.Flags().StringVarP(&outputFormat, "format", "f", "claude", "Output format: claude, claude-code, cursor, copilot, all")
+	scanCmd.Flags().StringVarP(&outputFormat, "format", "f", "claude", "Output format: claude, claude-code, cursor, copilot, continue, all")
 	scanCmd.Flags().BoolVarP(&dryRun, "dry-run", "n", false, "Show what would be generated without writing files")
 	scanCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed output")
 	scanCmd.Flags().BoolVarP(&mergeMode, "merge", "m", true, "Preserve custom sections when regenerating (default: true)")
 	scanCmd.Flags().BoolVar(&addCustomBlock, "add-custom", false, "Add a custom section placeholder to output")
+	scanCmd.Flags().BoolVarP(&parallel, "parallel", "p", true, "Run detectors in parallel for faster analysis (default: true)")
 
 	// Sync command flags
 	syncCmd.Flags().BoolVarP(&dryRun, "dry-run", "n", false, "Show what would be generated without writing files")
 	syncCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed output")
 	syncCmd.Flags().BoolVarP(&mergeMode, "merge", "m", true, "Preserve custom sections when regenerating (default: true)")
 	syncCmd.Flags().BoolVar(&addCustomBlock, "add-custom", false, "Add a custom section placeholder to output")
+	syncCmd.Flags().BoolVarP(&parallel, "parallel", "p", true, "Run detectors in parallel for faster analysis (default: true)")
 
 	// Watch command flags
 	watchCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed output")
@@ -212,17 +215,26 @@ func runScan(cmd *cobra.Command, args []string) error {
 	formats := cfg.Output
 	if cmd.Flags().Changed("format") {
 		if outputFormat == "all" {
-			formats = []string{"claude", "claude-code", "cursor", "copilot"}
+			formats = []string{"claude", "claude-code", "cursor", "copilot", "continue"}
 		} else {
 			formats = []string{outputFormat}
 		}
 	}
 
 	fmt.Printf("🔍 Scanning %s...\n", absPath)
+	if parallel && verbose {
+		fmt.Println("   Using parallel detector execution...")
+	}
 
-	// Run analysis
-	a := analyzer.NewAnalyzer(absPath, nil)
-	analysis, err := a.Analyze()
+	// Run analysis (parallel or sequential)
+	var analysis *types.Analysis
+	if parallel {
+		pa := analyzer.NewParallelAnalyzer(absPath, nil)
+		analysis, err = pa.Analyze()
+	} else {
+		a := analyzer.NewAnalyzer(absPath, nil)
+		analysis, err = a.Analyze()
+	}
 	if err != nil {
 		return fmt.Errorf("analysis failed: %w", err)
 	}
@@ -281,10 +293,19 @@ func runSync(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("🔄 Syncing %s...\n", absPath)
+	if parallel && verbose {
+		fmt.Println("   Using parallel detector execution...")
+	}
 
-	// Run analysis
-	a := analyzer.NewAnalyzer(absPath, nil)
-	analysis, err := a.Analyze()
+	// Run analysis (parallel or sequential)
+	var analysis *types.Analysis
+	if parallel {
+		pa := analyzer.NewParallelAnalyzer(absPath, nil)
+		analysis, err = pa.Analyze()
+	} else {
+		a := analyzer.NewAnalyzer(absPath, nil)
+		analysis, err = a.Analyze()
+	}
 	if err != nil {
 		return fmt.Errorf("analysis failed: %w", err)
 	}
@@ -341,6 +362,10 @@ func generateOutput(absPath, format string, analysis *types.Analysis, dryRun boo
 		outputFile = g.OutputFile()
 	case "copilot":
 		g := generator.NewCopilotGenerator()
+		gen = g
+		outputFile = g.OutputFile()
+	case "continue":
+		g := generator.NewContinueGenerator()
 		gen = g
 		outputFile = g.OutputFile()
 	default:
