@@ -532,19 +532,27 @@ func (d *StructureDetector) DetectKeyFiles() []types.KeyFile {
 func DetectCommands(rootPath string) []types.Command {
 	var commands []types.Command
 
-	// Try package.json
-	pkgPath := filepath.Join(rootPath, "package.json")
-	if data, err := readJSON(pkgPath); err == nil {
-		if pkg, ok := data.(map[string]interface{}); ok {
-			if scripts, ok := pkg["scripts"].(map[string]interface{}); ok {
-				for name, cmd := range scripts {
-					if cmdStr, ok := cmd.(string); ok {
-						commands = append(commands, types.Command{
-							Name:        "npm run " + name,
-							Command:     cmdStr,
-							Description: inferScriptDescription(name),
-						})
-					}
+	// Try root package.json
+	commands = append(commands, detectPackageJSONCommands(rootPath, "")...)
+
+	// Try monorepo subdirectories
+	monorepoSubdirs := []string{"frontend", "backend", "client", "server", "web", "api", "app"}
+	for _, subdir := range monorepoSubdirs {
+		subdirPath := filepath.Join(rootPath, subdir)
+		if _, err := os.Stat(subdirPath); err == nil {
+			commands = append(commands, detectPackageJSONCommands(subdirPath, subdir)...)
+		}
+	}
+
+	// Check for pnpm/yarn/npm workspace packages/* or apps/*
+	for _, workspaceDir := range []string{"packages", "apps"} {
+		workspacePath := filepath.Join(rootPath, workspaceDir)
+		if entries, err := os.ReadDir(workspacePath); err == nil {
+			for _, entry := range entries {
+				if entry.IsDir() {
+					pkgPath := filepath.Join(workspacePath, entry.Name())
+					prefix := workspaceDir + "/" + entry.Name()
+					commands = append(commands, detectPackageJSONCommands(pkgPath, prefix)...)
 				}
 			}
 		}
@@ -576,7 +584,96 @@ func DetectCommands(rootPath string) []types.Command {
 	cobraCommands := detectCobraCommands(rootPath)
 	commands = append(commands, cobraCommands...)
 
+	// Detect common npm/yarn/pnpm/bun commands if package.json exists
+	if _, err := os.Stat(filepath.Join(rootPath, "package.json")); err == nil {
+		commands = append(commands, detectNodePackageManagerCommands(rootPath)...)
+	}
+
 	return commands
+}
+
+// detectPackageJSONCommands extracts commands from a package.json file
+func detectPackageJSONCommands(pkgDir string, prefix string) []types.Command {
+	var commands []types.Command
+
+	pkgPath := filepath.Join(pkgDir, "package.json")
+	data, err := readJSON(pkgPath)
+	if err != nil {
+		return commands
+	}
+
+	pkg, ok := data.(map[string]interface{})
+	if !ok {
+		return commands
+	}
+
+	scripts, ok := pkg["scripts"].(map[string]interface{})
+	if !ok {
+		return commands
+	}
+
+	// Determine package manager (npm, yarn, pnpm, bun)
+	pkgManager := detectPackageManager(pkgDir)
+
+	for name, cmd := range scripts {
+		cmdStr, ok := cmd.(string)
+		if !ok {
+			continue
+		}
+
+		cmdName := pkgManager + " run " + name
+		if prefix != "" {
+			cmdName = cmdName + " (in " + prefix + ")"
+		}
+
+		// Common scripts can use shortcuts
+		if name == "start" || name == "test" {
+			cmdName = pkgManager + " " + name
+			if prefix != "" {
+				cmdName = cmdName + " (in " + prefix + ")"
+			}
+		}
+
+		commands = append(commands, types.Command{
+			Name:        cmdName,
+			Command:     cmdStr,
+			Description: inferScriptDescription(name),
+		})
+	}
+
+	return commands
+}
+
+// detectPackageManager determines which package manager is being used
+func detectPackageManager(pkgDir string) string {
+	// Check for lock files
+	if _, err := os.Stat(filepath.Join(pkgDir, "bun.lockb")); err == nil {
+		return "bun"
+	}
+	if _, err := os.Stat(filepath.Join(pkgDir, "pnpm-lock.yaml")); err == nil {
+		return "pnpm"
+	}
+	if _, err := os.Stat(filepath.Join(pkgDir, "yarn.lock")); err == nil {
+		return "yarn"
+	}
+	// Default to npm
+	return "npm"
+}
+
+// detectNodePackageManagerCommands adds common npm/yarn/pnpm/bun commands
+func detectNodePackageManagerCommands(rootPath string) []types.Command {
+	pkgManager := detectPackageManager(rootPath)
+
+	return []types.Command{
+		{
+			Name:        pkgManager + " install",
+			Description: "Install dependencies",
+		},
+		{
+			Name:        pkgManager + " ci",
+			Description: "Clean install dependencies",
+		},
+	}
 }
 
 // detectGoCommands returns standard Go commands
