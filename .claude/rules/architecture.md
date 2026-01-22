@@ -34,14 +34,13 @@ Public packages
 
 ## Key Directories
 
-- `scripts/` - Scripts
-- `cmd/` - Command entrypoints
-- `internal/analyzer/` - Analysis logic
 - `internal/config/` - Configuration
 - `internal/detector/` - Detection logic
 - `internal/generator/` - Code generation
 - `internal/merger/` - Merge utilities
 - `pkg/types/` - Type definitions
+- `cmd/` - Command entrypoints
+- `internal/analyzer/` - Analysis logic
 
 ## Diagram
 

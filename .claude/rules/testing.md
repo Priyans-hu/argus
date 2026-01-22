@@ -1,17 +1,22 @@
+---
+paths:
+  - "**/*_test.go"
+---
+
 # Testing Rules for argus
 
 Follow these testing conventions for this project.
 
 ## Detected Testing Patterns
 
-- **func Test**: Go test function (11 files)
-  - See: `internal/analyzer/incremental_test.go`
-- **t.Run**: Go subtest (6 files)
-  - See: `internal/analyzer/incremental_test.go`
-- **t.Error**: Go test assertions (11 files)
-  - See: `internal/analyzer/incremental_test.go`
-- **t.Fatal**: Go test fatal assertions (11 files)
-  - See: `internal/analyzer/incremental_test.go`
+- **func Test**: Go test function (9 files)
+  - See: `internal/detector/architecture_test.go`
+- **t.Run**: Go subtest (5 files)
+  - See: `internal/detector/architecture_test.go`
+- **t.Error**: Go test assertions (9 files)
+  - See: `internal/detector/architecture_test.go`
+- **t.Fatal**: Go test fatal assertions (9 files)
+  - See: `internal/detector/architecture_test.go`
 - **require**: Testify require assertions (1 files)
   - See: `internal/detector/codepatterns.go`
 - **assert**: Testify assert (1 files)
@@ -24,10 +29,9 @@ Follow these testing conventions for this project.
 ## Test File Examples
 
 Reference these files for test patterns:
-- `internal/analyzer/incremental_test.go`
-- `internal/analyzer/parallel_test.go`
 - `internal/detector/architecture_test.go`
 - `internal/detector/cli_test.go`
+- `internal/detector/codepatterns_test.go`
 - `internal/detector/codepatterns.go`
 
 ## Running Tests

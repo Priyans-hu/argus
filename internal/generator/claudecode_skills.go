@@ -34,6 +34,10 @@ func (g *ClaudeCodeGenerator) generateSkills(analysis *types.Analysis) []types.G
 	frameworkSkills := g.generateFrameworkSkills(analysis, ctx, generated)
 	files = append(files, frameworkSkills...)
 
+	// Add project-specific tool skills
+	projectToolSkills := g.generateProjectToolSkills(analysis)
+	files = append(files, projectToolSkills...)
+
 	return files
 }
 
@@ -589,4 +593,113 @@ func getCheckOnlyFlag(analysis *types.Analysis) string {
 		return "`--check`"
 	}
 	return "`--check`"
+}
+
+// generateProjectToolSkills creates skills for project-specific tools
+func (g *ClaudeCodeGenerator) generateProjectToolSkills(analysis *types.Analysis) []types.GeneratedFile {
+	var files []types.GeneratedFile
+
+	for _, tool := range analysis.ProjectTools {
+		skillFile := generateProjectToolSkillFile(tool, analysis)
+		if skillFile != nil {
+			files = append(files, *skillFile)
+		}
+	}
+
+	return files
+}
+
+// generateProjectToolSkillFile creates a skill file for a project-specific tool
+func generateProjectToolSkillFile(tool types.ProjectTool, analysis *types.Analysis) *types.GeneratedFile {
+	var content strings.Builder
+
+	// YAML frontmatter
+	content.WriteString("---\n")
+	content.WriteString(fmt.Sprintf("name: %s\n", tool.Name))
+	content.WriteString(fmt.Sprintf("description: %s\n", tool.Description))
+
+	// Add replacement warning if applicable
+	if tool.ReplacesTool != "" {
+		content.WriteString(fmt.Sprintf("# CRITICAL: This skill replaces the %s tool for this project\n", tool.ReplacesTool))
+	}
+
+	content.WriteString("---\n\n")
+
+	// Title - capitalize first letter
+	toolTitle := tool.Name
+	if len(toolTitle) > 0 {
+		toolTitle = strings.ToUpper(toolTitle[:1]) + toolTitle[1:]
+	}
+	content.WriteString(fmt.Sprintf("# %s - Project Tool\n\n", toolTitle))
+
+	// Description
+	content.WriteString(fmt.Sprintf("%s\n\n", tool.Description))
+
+	// When to use
+	if tool.WhenToUse != "" {
+		content.WriteString("## When to Invoke This Skill\n\n")
+		content.WriteString(fmt.Sprintf("%s\n\n", tool.WhenToUse))
+	}
+
+	// Setup instructions if needed
+	if tool.RequiresSetup && tool.SetupInstructions != "" {
+		content.WriteString("## Setup Required\n\n")
+		content.WriteString(fmt.Sprintf("%s\n\n", tool.SetupInstructions))
+	}
+
+	// Usage examples
+	if len(tool.UsageExamples) > 0 {
+		content.WriteString("## Usage Examples\n\n")
+		for _, example := range tool.UsageExamples {
+			content.WriteString("```bash\n")
+			content.WriteString(example + "\n")
+			content.WriteString("```\n\n")
+		}
+	}
+
+	// Binary path if available
+	if tool.BinaryPath != "" {
+		content.WriteString("## Binary Location\n\n")
+		content.WriteString(fmt.Sprintf("The tool binary is located at: `%s`\n\n", tool.BinaryPath))
+
+		// Check if needs building
+		needsBuild := strings.Contains(tool.BinaryPath, "bin/") || strings.Contains(tool.BinaryPath, "build/")
+		if needsBuild {
+			content.WriteString("You may need to build the tool first:\n\n")
+			content.WriteString("```bash\n")
+
+			// Suggest build command based on project type
+			if hasLanguage(analysis, "Go") {
+				content.WriteString("make build  # or: go build -o " + tool.BinaryPath + "\n")
+			} else if hasLanguage(analysis, "Rust") {
+				content.WriteString("cargo build --release\n")
+			} else {
+				content.WriteString("make build\n")
+			}
+			content.WriteString("```\n\n")
+		}
+	}
+
+	// Tool replacement guidance
+	if tool.ReplacesTool != "" {
+		content.WriteString(fmt.Sprintf("## IMPORTANT: Replaces %s\n\n", tool.ReplacesTool))
+		content.WriteString(fmt.Sprintf("**This tool replaces the built-in %s for this project.**\n\n", tool.ReplacesTool))
+		content.WriteString("When working on this codebase:\n")
+		content.WriteString(fmt.Sprintf("- ✅ Use `%s` for project-specific searches\n", tool.Name))
+		content.WriteString(fmt.Sprintf("- ❌ Avoid using built-in %s unless for exact text matching\n\n", tool.ReplacesTool))
+	}
+
+	// Best practices
+	content.WriteString("## Best Practices\n\n")
+	content.WriteString(fmt.Sprintf("- Use `%s` when working with this codebase\n", tool.Name))
+	content.WriteString("- Check that the tool is available before use\n")
+	if tool.ReplacesTool != "" {
+		content.WriteString(fmt.Sprintf("- Fall back to %s only if this tool fails\n", tool.ReplacesTool))
+	}
+	content.WriteString("\n")
+
+	return &types.GeneratedFile{
+		Path:    fmt.Sprintf(".claude/skills/%s/SKILL.md", tool.Name),
+		Content: []byte(content.String()),
+	}
 }

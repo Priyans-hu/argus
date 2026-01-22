@@ -1,3 +1,19 @@
+---
+paths:
+  - "**/auth/**/*"
+  - "**/authentication/**/*"
+  - "**/authorization/**/*"
+  - "**/api/**/*"
+  - "**/handlers/**/*"
+  - "**/controllers/**/*"
+  - "**/db/**/*"
+  - "**/database/**/*"
+  - "**/models/**/*"
+  - "**/*.env"
+  - "**/*.env.*"
+  - "**/config/**/*"
+---
+
 # Security Rules for argus
 
 Follow these security practices for all code changes.
@@ -8,7 +24,7 @@ Detected patterns:
 - **Authorization** - see `internal/detector/codepatterns.go`
 - **Bearer** - see `internal/detector/codepatterns.go`
 - **jwt.** - see `internal/detector/codepatterns.go`
-- **middleware** - see `internal/detector/codepatterns.go`
+- **middleware** - see `internal/detector/architecture.go`
 
 ## General Security
 

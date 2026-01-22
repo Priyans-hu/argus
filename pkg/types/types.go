@@ -19,6 +19,7 @@ type Analysis struct {
 	DevelopmentInfo  *DevelopmentInfo  `json:"development_info,omitempty"`
 	ConfigFiles      []ConfigFileInfo  `json:"config_files,omitempty"`
 	CLIInfo          *CLIInfo          `json:"cli_info,omitempty"`
+	ProjectTools     []ProjectTool     `json:"project_tools,omitempty"`
 }
 
 // ReadmeContent represents parsed README information
@@ -137,6 +138,18 @@ type Command struct {
 	Name        string `json:"name"`
 	Command     string `json:"command"`
 	Description string `json:"description,omitempty"`
+}
+
+// ProjectTool represents a project-specific CLI tool that deserves a skill
+type ProjectTool struct {
+	Name              string   `json:"name"`                         // Tool name (e.g., "grepai", "argus")
+	BinaryPath        string   `json:"binary_path,omitempty"`        // Path to binary if built by project
+	Description       string   `json:"description"`                  // What the tool does
+	UsageExamples     []string `json:"usage_examples,omitempty"`     // Example commands
+	WhenToUse         string   `json:"when_to_use,omitempty"`        // When Claude should use this tool
+	ReplacesTool      string   `json:"replaces_tool,omitempty"`      // Tool it replaces (e.g., "Grep", "Glob")
+	RequiresSetup     bool     `json:"requires_setup,omitempty"`     // Whether tool needs installation/setup
+	SetupInstructions string   `json:"setup_instructions,omitempty"` // How to set it up
 }
 
 // KeyFile represents an important file in the project

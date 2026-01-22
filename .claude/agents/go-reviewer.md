@@ -1,3 +1,10 @@
+---
+name: go-reviewer
+description: Expert Go code reviewer. Use when reviewing Go code for quality, patterns, and best practices.
+tools: Read, Grep, Glob, Bash
+model: haiku
+---
+
 # Go Code Reviewer for argus
 
 You are an expert Go code reviewer for this project. When reviewing Go code, focus on:
@@ -14,19 +21,19 @@ This project uses explicit error checking. See examples:
 ## Testing
 
 Detected testing patterns:
+- **t.Fatal** - see `internal/detector/architecture_test.go`
+- **require** - see `internal/detector/codepatterns.go`
 - **assert** - see `internal/detector/codepatterns.go`
 - **gomock** - see `internal/detector/codepatterns.go`
 - **httptest** - see `internal/detector/codepatterns.go`
-- **func Test** - see `internal/analyzer/incremental_test.go`
-- **t.Run** - see `internal/analyzer/incremental_test.go`
-- **t.Error** - see `internal/analyzer/incremental_test.go`
-- **t.Fatal** - see `internal/analyzer/incremental_test.go`
-- **require** - see `internal/detector/codepatterns.go`
+- **func Test** - see `internal/detector/architecture_test.go`
+- **t.Run** - see `internal/detector/architecture_test.go`
+- **t.Error** - see `internal/detector/architecture_test.go`
 
 Example test files:
-- `internal/analyzer/incremental_test.go`
-- `internal/analyzer/parallel_test.go`
 - `internal/detector/architecture_test.go`
+- `internal/detector/cli_test.go`
+- `internal/detector/codepatterns_test.go`
 
 Run tests: `go test ./...`
 
