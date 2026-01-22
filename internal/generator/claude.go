@@ -83,6 +83,9 @@ func (g *ClaudeGenerator) Generate(analysis *types.Analysis) ([]byte, error) {
 	// Dependencies summary
 	g.writeDependencies(&buf, analysis.Dependencies)
 
+	// Import references to .claude/ rules (if claude-code format is also being generated)
+	g.writeImports(&buf, analysis)
+
 	return buf.Bytes(), nil
 }
 
@@ -1208,4 +1211,39 @@ func titleCase(s string) string {
 	r := []rune(s)
 	r[0] = unicode.ToUpper(r[0])
 	return string(r)
+}
+
+// writeImports writes import references to .claude/ rules
+// This uses Claude Code's @import syntax to reference external files
+func (g *ClaudeGenerator) writeImports(buf *bytes.Buffer, analysis *types.Analysis) {
+	// Build list of available rule imports
+	var imports []string
+
+	// Add standard rules that are typically generated
+	if analysis.GitConventions != nil {
+		imports = append(imports, "@.claude/rules/git-workflow.md")
+	}
+	if analysis.CodePatterns != nil && len(analysis.CodePatterns.Testing) > 0 {
+		imports = append(imports, "@.claude/rules/testing.md")
+	}
+	if len(analysis.Conventions) > 0 {
+		imports = append(imports, "@.claude/rules/coding-style.md")
+	}
+	if analysis.ArchitectureInfo != nil && analysis.ArchitectureInfo.Style != "" {
+		imports = append(imports, "@.claude/rules/architecture.md")
+	}
+	// Security rules are always generated
+	imports = append(imports, "@.claude/rules/security.md")
+
+	if len(imports) == 0 {
+		return
+	}
+
+	buf.WriteString("## Additional Rules\n\n")
+	buf.WriteString("*The following rules are imported from `.claude/rules/` for context-specific guidance:*\n\n")
+
+	for _, imp := range imports {
+		fmt.Fprintf(buf, "- %s\n", imp)
+	}
+	buf.WriteString("\n")
 }
