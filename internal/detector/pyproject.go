@@ -45,6 +45,8 @@ type ToolSection struct {
 	Ruff       RuffSection       `toml:"ruff"`
 	Mypy       MypySection       `toml:"mypy"`
 	Setuptools SetuptoolsSection `toml:"setuptools"`
+	Coverage   CoverageSection   `toml:"coverage"`
+	PDM        PDMSection        `toml:"pdm"`
 }
 
 // PoetrySection represents [tool.poetry] section
@@ -90,17 +92,38 @@ type BlackSection struct {
 
 // RuffSection represents [tool.ruff] section
 type RuffSection struct {
-	LineLength int      `toml:"line-length"`
-	Select     []string `toml:"select"`
-	Ignore     []string `toml:"ignore"`
-	FixableAll bool     `toml:"fixable"`
+	LineLength int             `toml:"line-length"`
+	Select     []string        `toml:"select"`
+	Ignore     []string        `toml:"ignore"`
+	FixableAll bool            `toml:"fixable"`
+	Lint       RuffLintSection `toml:"lint"` // [tool.ruff.lint] subsection
+}
+
+// RuffLintSection represents [tool.ruff.lint] section
+type RuffLintSection struct {
+	Select []string `toml:"select"`
+	Ignore []string `toml:"ignore"`
 }
 
 // MypySection represents [tool.mypy] section
 type MypySection struct {
-	PythonVersion        string `toml:"python_version"`
-	StrictOptional       bool   `toml:"strict_optional"`
-	IgnoreMissingImports bool   `toml:"ignore_missing_imports"`
+	PythonVersion        string   `toml:"python_version"`
+	Strict               bool     `toml:"strict"`
+	StrictOptional       bool     `toml:"strict_optional"`
+	IgnoreMissingImports bool     `toml:"ignore_missing_imports"`
+	Plugins              []string `toml:"plugins"`
+}
+
+// CoverageSection represents [tool.coverage] section
+type CoverageSection struct {
+	Run    map[string]interface{} `toml:"run"`
+	Report map[string]interface{} `toml:"report"`
+}
+
+// PDMSection represents [tool.pdm] section
+type PDMSection struct {
+	Version      map[string]interface{} `toml:"version"`
+	Distribution bool                   `toml:"distribution"`
 }
 
 // SetuptoolsSection represents [tool.setuptools] section
@@ -211,15 +234,24 @@ func (d *PyProjectDetector) detectTools(pyproject PyProject) []string {
 	if pyproject.Tool.Black.LineLength > 0 || pyproject.Tool.Black.TargetVersion != nil {
 		tools = append(tools, "black")
 	}
-	if len(pyproject.Tool.Ruff.Select) > 0 || pyproject.Tool.Ruff.LineLength > 0 {
+	// Check both [tool.ruff] and [tool.ruff.lint] sections
+	if len(pyproject.Tool.Ruff.Select) > 0 || pyproject.Tool.Ruff.LineLength > 0 ||
+		len(pyproject.Tool.Ruff.Lint.Select) > 0 {
 		tools = append(tools, "ruff")
 	}
-	if pyproject.Tool.Mypy.PythonVersion != "" || pyproject.Tool.Mypy.StrictOptional {
+	// Check for mypy config (various fields indicate presence)
+	if pyproject.Tool.Mypy.PythonVersion != "" || pyproject.Tool.Mypy.StrictOptional ||
+		pyproject.Tool.Mypy.Strict || len(pyproject.Tool.Mypy.Plugins) > 0 {
 		tools = append(tools, "mypy")
+	}
+	// Check for coverage config
+	if pyproject.Tool.Coverage.Run != nil || pyproject.Tool.Coverage.Report != nil {
+		tools = append(tools, "coverage")
 	}
 
 	// Check build backend for additional tools
-	switch pyproject.BuildSystem.BuildBackend {
+	backend := pyproject.BuildSystem.BuildBackend
+	switch backend {
 	case "poetry.core.masonry.api":
 		if !contains(tools, "poetry") {
 			tools = append(tools, "poetry")
@@ -230,7 +262,7 @@ func (d *PyProjectDetector) detectTools(pyproject PyProject) []string {
 		tools = append(tools, "hatch")
 	case "flit_core.buildapi":
 		tools = append(tools, "flit")
-	case "pdm.pep517.api":
+	case "pdm.pep517.api", "pdm.backend", "pdm-backend":
 		tools = append(tools, "pdm")
 	}
 
