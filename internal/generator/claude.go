@@ -201,13 +201,20 @@ func (g *ClaudeGenerator) writeArchitecture(buf *bytes.Buffer, mono *types.Monor
 
 // writeArchitectureDiagram writes the architecture diagram section
 func (g *ClaudeGenerator) writeArchitectureDiagram(buf *bytes.Buffer, arch *types.ArchitectureInfo) {
-	if arch == nil || arch.Diagram == "" {
+	if arch == nil {
 		return
 	}
 
-	// Only write if we have meaningful architecture info
+	// Only write if we have meaningful architecture info (layers or style)
+	// Skip generic diagrams that don't add value
 	if arch.Style == "" && len(arch.Layers) == 0 {
 		return
+	}
+
+	// Skip if diagram is too basic (just entry point -> external services)
+	if arch.Diagram != "" && len(arch.Layers) <= 1 && !strings.Contains(arch.Diagram, "│") {
+		// Diagram has no internal structure, skip it
+		arch.Diagram = ""
 	}
 
 	buf.WriteString("## Architecture\n\n")
@@ -220,8 +227,8 @@ func (g *ClaudeGenerator) writeArchitectureDiagram(buf *bytes.Buffer, arch *type
 		fmt.Fprintf(buf, "**Entry Point:** `%s`\n\n", arch.EntryPoint)
 	}
 
-	// Write diagram
-	if arch.Diagram != "" {
+	// Write diagram only if it has meaningful structure
+	if arch.Diagram != "" && len(arch.Layers) > 1 {
 		buf.WriteString(arch.Diagram)
 		buf.WriteString("\n")
 	}
@@ -481,15 +488,16 @@ func (g *ClaudeGenerator) writeCommands(buf *bytes.Buffer, commands []types.Comm
 	buf.WriteString("## Available Commands\n\n")
 	buf.WriteString("```bash\n")
 
-	for _, cmd := range commands {
-		if cmd.Description != "" {
+	for i, cmd := range commands {
+		// Add blank line before commands with descriptions (groups)
+		hasDescription := cmd.Description != ""
+		if hasDescription && i > 0 {
+			buf.WriteString("\n")
+		}
+		if hasDescription {
 			fmt.Fprintf(buf, "# %s\n", cmd.Description)
 		}
 		fmt.Fprintf(buf, "%s\n", cmd.Name)
-		if cmd.Command != "" && cmd.Command != cmd.Name {
-			fmt.Fprintf(buf, "# → %s\n", cmd.Command)
-		}
-		buf.WriteString("\n")
 	}
 
 	buf.WriteString("```\n\n")
@@ -1003,55 +1011,64 @@ func (g *ClaudeGenerator) writePatterns(buf *bytes.Buffer, patterns *types.CodeP
 	}
 }
 
-// writeDependencies writes a summary of key dependencies
+// writeDependencies writes only notable dependencies with context
+// Skip this section in compact mode as it's less useful for token efficiency
 func (g *ClaudeGenerator) writeDependencies(buf *bytes.Buffer, deps []types.Dependency) {
-	if len(deps) == 0 {
+	// In compact mode, skip dependencies as they add tokens without much value
+	if g.compact || len(deps) == 0 {
 		return
 	}
 
-	// Group by type
-	runtime := []types.Dependency{}
-	dev := []types.Dependency{}
+	// Only include notable dependencies that help understand the project
+	// Skip generic/common packages that don't add context
+	notablePatterns := map[string]string{
+		// Databases
+		"gorm":     "ORM",
+		"sqlx":     "SQL",
+		"mongo":    "MongoDB",
+		"redis":    "Redis",
+		"postgres": "PostgreSQL",
+		"mysql":    "MySQL",
+		"sqlite":   "SQLite",
+		// Messaging
+		"kafka":    "Kafka",
+		"rabbitmq": "RabbitMQ",
+		"nats":     "NATS",
+		"pubsub":   "Pub/Sub",
+		// Cloud
+		"aws-sdk": "AWS",
+		"azure":   "Azure",
+		"gcloud":  "GCP",
+		// Observability
+		"prometheus":    "Metrics",
+		"sentry":        "Error tracking",
+		"opentelemetry": "Tracing",
+		"elastic":       "APM",
+		// Testing
+		"testify":  "Testing",
+		"gomock":   "Mocking",
+		"httptest": "HTTP testing",
+	}
+
+	var notable []string
+	seen := make(map[string]bool)
 
 	for _, d := range deps {
-		if d.Type == "dev" || d.Type == "devDependencies" {
-			dev = append(dev, d)
-		} else {
-			runtime = append(runtime, d)
+		nameLower := strings.ToLower(d.Name)
+		for pattern, category := range notablePatterns {
+			if strings.Contains(nameLower, pattern) && !seen[category] {
+				notable = append(notable, category)
+				seen[category] = true
+				break
+			}
 		}
 	}
 
-	buf.WriteString("## Dependencies\n\n")
-
-	if len(runtime) > 0 {
-		buf.WriteString("### Runtime\n\n")
-		// Limit to top 20 to avoid huge lists
-		limit := 20
-		if len(runtime) < limit {
-			limit = len(runtime)
-		}
-		for i := 0; i < limit; i++ {
-			fmt.Fprintf(buf, "- `%s` %s\n", runtime[i].Name, runtime[i].Version)
-		}
-		if len(runtime) > 20 {
-			fmt.Fprintf(buf, "\n*...and %d more*\n", len(runtime)-20)
-		}
-		buf.WriteString("\n")
-	}
-
-	if len(dev) > 0 {
-		buf.WriteString("### Development\n\n")
-		limit := 15
-		if len(dev) < limit {
-			limit = len(dev)
-		}
-		for i := 0; i < limit; i++ {
-			fmt.Fprintf(buf, "- `%s` %s\n", dev[i].Name, dev[i].Version)
-		}
-		if len(dev) > 15 {
-			fmt.Fprintf(buf, "\n*...and %d more*\n", len(dev)-15)
-		}
-		buf.WriteString("\n")
+	// Only write section if we have notable dependencies
+	if len(notable) > 0 {
+		buf.WriteString("## Key Dependencies\n\n")
+		sort.Strings(notable)
+		buf.WriteString(strings.Join(notable, ", ") + "\n\n")
 	}
 }
 
