@@ -6,7 +6,7 @@ import (
 )
 
 // ClaudeCodeGenerator generates Claude Code configuration files
-// including agents, commands, and rules in the .claude/ directory
+// including agents, skills, and rules in the .claude/ directory
 type ClaudeCodeGenerator struct {
 	config *config.ClaudeCodeConfig
 }
@@ -16,10 +16,11 @@ func NewClaudeCodeGenerator(cfg *config.ClaudeCodeConfig) *ClaudeCodeGenerator {
 	// Apply defaults if config is nil
 	if cfg == nil {
 		cfg = &config.ClaudeCodeConfig{
-			Agents:   true,
-			Commands: true,
-			Rules:    true,
-			MCP:      true,
+			Agents: true,
+			Skills: true,
+			Rules:  true,
+			MCP:    true,
+			Hooks:  true,
 		}
 	}
 	return &ClaudeCodeGenerator{config: cfg}
@@ -40,10 +41,10 @@ func (g *ClaudeCodeGenerator) Generate(analysis *types.Analysis) ([]types.Genera
 		files = append(files, agentFiles...)
 	}
 
-	// Generate commands
-	if g.config.Commands {
-		commandFiles := g.generateCommands(analysis)
-		files = append(files, commandFiles...)
+	// Generate skills (replaces commands in Claude Code)
+	if g.config.Skills {
+		skillFiles := g.generateSkills(analysis)
+		files = append(files, skillFiles...)
 	}
 
 	// Generate rules
@@ -56,6 +57,12 @@ func (g *ClaudeCodeGenerator) Generate(analysis *types.Analysis) ([]types.Genera
 	if g.config.MCP {
 		mcpFiles := g.generateMCP(analysis)
 		files = append(files, mcpFiles...)
+	}
+
+	// Generate hooks in settings.json
+	if g.config.Hooks {
+		hookFiles := g.generateHooks(analysis)
+		files = append(files, hookFiles...)
 	}
 
 	return files, nil

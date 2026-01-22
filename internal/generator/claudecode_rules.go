@@ -131,6 +131,18 @@ func (g *ClaudeCodeGenerator) generateTestingRule(analysis *types.Analysis, ctx 
 	}
 
 	var content strings.Builder
+
+	// Add path-specific frontmatter for test files
+	testPatterns := getTestFilePatterns(analysis)
+	if len(testPatterns) > 0 {
+		content.WriteString("---\n")
+		content.WriteString("paths:\n")
+		for _, pattern := range testPatterns {
+			content.WriteString(fmt.Sprintf("  - \"%s\"\n", pattern))
+		}
+		content.WriteString("---\n\n")
+	}
+
 	content.WriteString(fmt.Sprintf("# Testing Rules for %s\n\n", ctx.ProjectName))
 	content.WriteString("Follow these testing conventions for this project.\n\n")
 
@@ -396,6 +408,18 @@ func (g *ClaudeCodeGenerator) generateArchitectureRule(analysis *types.Analysis,
 // securityRuleContent generates security rules
 func (g *ClaudeCodeGenerator) securityRuleContent(analysis *types.Analysis, ctx *GeneratorContext) string {
 	var content strings.Builder
+
+	// Add path-specific frontmatter for security-sensitive files
+	securityPatterns := getSecuritySensitivePatterns(analysis)
+	if len(securityPatterns) > 0 {
+		content.WriteString("---\n")
+		content.WriteString("paths:\n")
+		for _, pattern := range securityPatterns {
+			content.WriteString(fmt.Sprintf("  - \"%s\"\n", pattern))
+		}
+		content.WriteString("---\n\n")
+	}
+
 	content.WriteString(fmt.Sprintf("# Security Rules for %s\n\n", ctx.ProjectName))
 	content.WriteString("Follow these security practices for all code changes.\n\n")
 
@@ -475,6 +499,54 @@ func (g *ClaudeCodeGenerator) securityRuleContent(analysis *types.Analysis, ctx 
 	content.WriteString("- Database connection strings with passwords\n")
 
 	return content.String()
+}
+
+// getTestFilePatterns returns glob patterns for test files based on detected languages
+func getTestFilePatterns(analysis *types.Analysis) []string {
+	var patterns []string
+
+	if hasLanguage(analysis, "Go") {
+		patterns = append(patterns, "**/*_test.go")
+	}
+	if hasLanguage(analysis, "TypeScript") {
+		patterns = append(patterns, "**/*.test.ts", "**/*.spec.ts", "**/*.test.tsx", "**/*.spec.tsx")
+	}
+	if hasLanguage(analysis, "JavaScript") {
+		patterns = append(patterns, "**/*.test.js", "**/*.spec.js", "**/*.test.jsx", "**/*.spec.jsx")
+	}
+	if hasLanguage(analysis, "Python") {
+		patterns = append(patterns, "**/test_*.py", "**/*_test.py")
+	}
+	if hasLanguage(analysis, "Java") {
+		patterns = append(patterns, "**/*Test.java", "**/*Tests.java")
+	}
+	if hasLanguage(analysis, "Rust") {
+		patterns = append(patterns, "**/tests/**/*.rs")
+	}
+	if hasLanguage(analysis, "Ruby") {
+		patterns = append(patterns, "**/*_spec.rb", "**/test_*.rb")
+	}
+
+	return patterns
+}
+
+// getSecuritySensitivePatterns returns glob patterns for security-sensitive files
+func getSecuritySensitivePatterns(analysis *types.Analysis) []string {
+	var patterns []string
+
+	// Auth-related files
+	patterns = append(patterns, "**/auth/**/*", "**/authentication/**/*", "**/authorization/**/*")
+
+	// API and handlers
+	patterns = append(patterns, "**/api/**/*", "**/handlers/**/*", "**/controllers/**/*")
+
+	// Database and models
+	patterns = append(patterns, "**/db/**/*", "**/database/**/*", "**/models/**/*")
+
+	// Config files
+	patterns = append(patterns, "**/*.env", "**/*.env.*", "**/config/**/*")
+
+	return patterns
 }
 
 // formatCategoryName formats a category name for display
