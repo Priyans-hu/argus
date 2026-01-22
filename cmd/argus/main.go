@@ -36,6 +36,7 @@ var (
 	force          bool
 	mergeMode      bool
 	addCustomBlock bool
+	compactMode    bool
 	parallel       bool
 )
 
@@ -119,6 +120,7 @@ func init() {
 	scanCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed output")
 	scanCmd.Flags().BoolVarP(&mergeMode, "merge", "m", true, "Preserve custom sections when regenerating (default: true)")
 	scanCmd.Flags().BoolVar(&addCustomBlock, "add-custom", false, "Add a custom section placeholder to output")
+	scanCmd.Flags().BoolVarP(&compactMode, "compact", "c", false, "Generate compact output (~45% smaller, optimized for token efficiency)")
 	scanCmd.Flags().BoolVarP(&parallel, "parallel", "p", true, "Run detectors in parallel for faster analysis (default: true)")
 
 	// Sync command flags
@@ -126,6 +128,7 @@ func init() {
 	syncCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed output")
 	syncCmd.Flags().BoolVarP(&mergeMode, "merge", "m", true, "Preserve custom sections when regenerating (default: true)")
 	syncCmd.Flags().BoolVar(&addCustomBlock, "add-custom", false, "Add a custom section placeholder to output")
+	syncCmd.Flags().BoolVarP(&compactMode, "compact", "c", false, "Generate compact output (~45% smaller, optimized for token efficiency)")
 	syncCmd.Flags().BoolVarP(&parallel, "parallel", "p", true, "Run detectors in parallel for faster analysis (default: true)")
 
 	// Watch command flags
@@ -260,7 +263,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 	// Generate output for each format
 	for _, format := range formats {
-		if err := generateOutput(absPath, format, analysis, dryRun); err != nil {
+		if err := generateOutput(absPath, format, analysis, dryRun, compactMode); err != nil {
 			return err
 		}
 	}
@@ -328,7 +331,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 
 	// Generate output for each format in config
 	for _, format := range cfg.Output {
-		if err := generateOutput(absPath, format, analysis, dryRun); err != nil {
+		if err := generateOutput(absPath, format, analysis, dryRun, compactMode); err != nil {
 			return err
 		}
 	}
@@ -342,7 +345,7 @@ type contextGenerator interface {
 	OutputFile() string
 }
 
-func generateOutput(absPath, format string, analysis *types.Analysis, dryRun bool) error {
+func generateOutput(absPath, format string, analysis *types.Analysis, dryRun, compact bool) error {
 	// Handle claude-code format separately (multi-file generator)
 	if format == "claude-code" {
 		return generateClaudeCodeOutput(absPath, analysis, dryRun)
@@ -354,6 +357,7 @@ func generateOutput(absPath, format string, analysis *types.Analysis, dryRun boo
 	switch format {
 	case "claude":
 		g := generator.NewClaudeGenerator()
+		g.SetCompact(compact)
 		gen = g
 		outputFile = g.OutputFile()
 	case "cursor":
@@ -626,7 +630,7 @@ func regenerateWithAnalyzer(absPath string, cfg *config.Config, incAnalyzer *ana
 
 	// Generate output for each format
 	for _, format := range cfg.Output {
-		if err := generateOutput(absPath, format, analysis, false); err != nil {
+		if err := generateOutput(absPath, format, analysis, false, compactMode); err != nil {
 			return err
 		}
 	}
