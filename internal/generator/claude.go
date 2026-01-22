@@ -128,7 +128,7 @@ func (g *ClaudeGenerator) writeProjectOverview(buf *bytes.Buffer, readme *types.
 		return
 	}
 
-	hasContent := readme.Description != "" || len(readme.Features) > 0
+	hasContent := readme.Description != "" || len(readme.Features) > 0 || len(readme.ModelSpecs) > 0
 
 	if !hasContent {
 		return
@@ -141,11 +141,48 @@ func (g *ClaudeGenerator) writeProjectOverview(buf *bytes.Buffer, readme *types.
 		fmt.Fprintf(buf, "%s\n\n", readme.Description)
 	}
 
+	// Model Specs (for ML projects)
+	if len(readme.ModelSpecs) > 0 {
+		buf.WriteString("### Model Specifications\n\n")
+		// Order specs for consistency
+		specOrder := []string{"parameters", "architecture", "layers", "heads", "embedding", "context_length"}
+		for _, key := range specOrder {
+			if value, ok := readme.ModelSpecs[key]; ok {
+				displayName := toTitleCase(strings.ReplaceAll(key, "_", " "))
+				fmt.Fprintf(buf, "- **%s:** %s\n", displayName, value)
+			}
+		}
+		// Any remaining specs not in our order
+		for key, value := range readme.ModelSpecs {
+			found := false
+			for _, ordered := range specOrder {
+				if key == ordered {
+					found = true
+					break
+				}
+			}
+			if !found {
+				displayName := toTitleCase(strings.ReplaceAll(key, "_", " "))
+				fmt.Fprintf(buf, "- **%s:** %s\n", displayName, value)
+			}
+		}
+		buf.WriteString("\n")
+	}
+
 	// Features
 	if len(readme.Features) > 0 {
 		buf.WriteString("### Key Features\n\n")
 		for _, feature := range readme.Features {
 			fmt.Fprintf(buf, "- %s\n", feature)
+		}
+		buf.WriteString("\n")
+	}
+
+	// Prerequisites
+	if len(readme.Prerequisites) > 0 {
+		buf.WriteString("### Prerequisites\n\n")
+		for _, prereq := range readme.Prerequisites {
+			fmt.Fprintf(buf, "- %s\n", prereq)
 		}
 		buf.WriteString("\n")
 	}
@@ -1266,6 +1303,23 @@ func titleCase(s string) string {
 	r := []rune(s)
 	r[0] = unicode.ToUpper(r[0])
 	return string(r)
+}
+
+// toTitleCase converts the first letter of each word to uppercase
+// This replaces the deprecated strings.Title function
+func toTitleCase(s string) string {
+	if s == "" {
+		return s
+	}
+	words := strings.Fields(s)
+	for i, word := range words {
+		if len(word) > 0 {
+			r := []rune(word)
+			r[0] = unicode.ToUpper(r[0])
+			words[i] = string(r)
+		}
+	}
+	return strings.Join(words, " ")
 }
 
 // =============================================================================
