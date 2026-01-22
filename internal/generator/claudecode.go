@@ -20,6 +20,7 @@ func NewClaudeCodeGenerator(cfg *config.ClaudeCodeConfig) *ClaudeCodeGenerator {
 			Skills: true,
 			Rules:  true,
 			MCP:    true,
+			Hooks:  true,
 		}
 	}
 	return &ClaudeCodeGenerator{config: cfg}
@@ -56,6 +57,12 @@ func (g *ClaudeCodeGenerator) Generate(analysis *types.Analysis) ([]types.Genera
 	if g.config.MCP {
 		mcpFiles := g.generateMCP(analysis)
 		files = append(files, mcpFiles...)
+	}
+
+	// Generate hooks in settings.json
+	if g.config.Hooks {
+		hookFiles := g.generateHooks(analysis)
+		files = append(files, hookFiles...)
 	}
 
 	return files, nil

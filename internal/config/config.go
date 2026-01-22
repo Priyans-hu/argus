@@ -18,6 +18,7 @@ type ClaudeCodeConfig struct {
 	Skills bool `yaml:"skills"` // Skills replace commands in Claude Code
 	Rules  bool `yaml:"rules"`
 	MCP    bool `yaml:"mcp"`
+	Hooks  bool `yaml:"hooks"` // Generate .claude/settings.json with hooks
 }
 
 // Config represents Argus configuration
@@ -152,5 +153,6 @@ custom_conventions:
 #   skills: true    # Generate .claude/skills/*/SKILL.md (replaces commands)
 #   rules: true     # Generate .claude/rules/*.md
 #   mcp: true       # Generate .claude/mcp.json (MCP server configs)
+#   hooks: true     # Generate .claude/settings.json with automation hooks
 `
 }
