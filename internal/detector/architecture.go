@@ -57,59 +57,291 @@ func (d *ArchitectureDetector) detectArchitectureStyle() string {
 		}
 	}
 
-	// Check for Django
-	if pyFiles["manage.py"] || pyFiles["wsgi.py"] || dirs["apps"] || hasPyFile(d.rootPath, "settings.py") {
-		return "Django"
+	// FIRST: Detect primary language to apply language-specific architecture patterns
+	primaryLang := d.detectPrimaryLanguage()
+
+	// Apply architecture detection based on primary language
+	switch primaryLang {
+	case "Go":
+		return d.detectGoArchitecture(dirs)
+	case "Rust":
+		return d.detectRustArchitecture(dirs)
+	case "TypeScript", "JavaScript":
+		return d.detectJSArchitecture(dirs)
+	case "Python":
+		return d.detectPythonArchitecture(dirs, pyFiles)
 	}
 
-	// Check for Flask
-	if (pyFiles["app.py"] || pyFiles["wsgi.py"] || pyFiles["asgi.py"]) && (dirs["blueprints"] || dirs["routes"] || dirs["views"]) {
-		return "Flask (Blueprints)"
-	}
-	if pyFiles["app.py"] || pyFiles["wsgi.py"] {
-		return "Flask"
+	// Fallback: Generic architecture patterns
+	return d.detectGenericArchitecture(dirs)
+}
+
+// detectPrimaryLanguage determines the main language of the project
+func (d *ArchitectureDetector) detectPrimaryLanguage() string {
+	// Check for language-specific markers
+	hasGoMod := fileExists(filepath.Join(d.rootPath, "go.mod"))
+	hasCargoToml := fileExists(filepath.Join(d.rootPath, "Cargo.toml"))
+	hasPkgJSON := fileExists(filepath.Join(d.rootPath, "package.json"))
+	hasTsConfig := fileExists(filepath.Join(d.rootPath, "tsconfig.json"))
+	hasPyProject := fileExists(filepath.Join(d.rootPath, "pyproject.toml"))
+	hasRequirements := fileExists(filepath.Join(d.rootPath, "requirements.txt"))
+	hasManagePy := fileExists(filepath.Join(d.rootPath, "manage.py"))
+
+	// Count file extensions
+	extCounts := make(map[string]int)
+	for _, f := range d.files {
+		if !f.IsDir {
+			extCounts[f.Extension]++
+		}
 	}
 
-	// Check for FastAPI
-	if (pyFiles["main.py"] || pyFiles["app.py"]) && (dirs["routers"] || dirs["schemas"] || dirs["api"]) {
-		return "FastAPI"
+	// Priority: Check definitive markers first
+	if hasGoMod {
+		return "Go"
+	}
+	if hasCargoToml {
+		return "Rust"
+	}
+	if hasTsConfig || extCounts[".ts"] > extCounts[".js"] || extCounts[".tsx"] > 0 {
+		if hasPkgJSON {
+			return "TypeScript"
+		}
+	}
+	if hasPkgJSON {
+		return "JavaScript"
+	}
+	if hasPyProject || hasRequirements || hasManagePy {
+		return "Python"
 	}
 
-	// Check for common Go project structure
+	// Fallback: use file extension counts
+	maxCount := 0
+	maxLang := ""
+	langMap := map[string]string{
+		".go":  "Go",
+		".rs":  "Rust",
+		".ts":  "TypeScript",
+		".tsx": "TypeScript",
+		".js":  "JavaScript",
+		".jsx": "JavaScript",
+		".py":  "Python",
+	}
+	for ext, lang := range langMap {
+		if extCounts[ext] > maxCount {
+			maxCount = extCounts[ext]
+			maxLang = lang
+		}
+	}
+	return maxLang
+}
+
+// detectGoArchitecture detects Go-specific architecture patterns
+func (d *ArchitectureDetector) detectGoArchitecture(dirs map[string]bool) string {
 	hasCmd := dirs["cmd"]
 	hasInternal := dirs["internal"]
 	hasPkg := dirs["pkg"]
 
+	// Standard Go Layout: cmd/ + internal/ or pkg/
 	if hasCmd && hasInternal {
 		return "Standard Go Layout"
 	}
+	if hasCmd && hasPkg {
+		return "Standard Go Layout"
+	}
 
-	// Check for Clean Architecture
-	if dirs["domain"] && (dirs["infrastructure"] || dirs["adapters"] || dirs["ports"]) {
+	// Clean Architecture markers
+	if dirs["domain"] && (dirs["infrastructure"] || dirs["adapters"] || dirs["usecase"] || dirs["delivery"]) {
 		return "Clean Architecture"
 	}
 
-	// Check for Hexagonal
+	// Hexagonal Architecture
 	if dirs["ports"] && dirs["adapters"] {
 		return "Hexagonal Architecture"
 	}
 
-	// Check for MVC
+	// Simple Go project with internal or pkg
+	if hasInternal || hasPkg {
+		return "Go Package Layout"
+	}
+
+	// Flat Go project
+	return "Go Flat Layout"
+}
+
+// detectRustArchitecture detects Rust-specific architecture patterns
+func (d *ArchitectureDetector) detectRustArchitecture(dirs map[string]bool) string {
+	// Check if this is a workspace
+	cargoPath := filepath.Join(d.rootPath, "Cargo.toml")
+	if data, err := os.ReadFile(cargoPath); err == nil {
+		content := string(data)
+		if strings.Contains(content, "[workspace]") {
+			return "Cargo Workspace"
+		}
+		// Check for binary vs library
+		if strings.Contains(content, "[[bin]]") || dirs["src"] {
+			if strings.Contains(content, "[lib]") {
+				return "Rust Binary + Library"
+			}
+			return "Rust Binary"
+		}
+		if strings.Contains(content, "[lib]") {
+			return "Rust Library"
+		}
+	}
+
+	// Default Rust structure
+	if dirs["src"] {
+		return "Standard Rust Layout"
+	}
+	return "Rust Project"
+}
+
+// detectJSArchitecture detects JavaScript/TypeScript architecture patterns
+func (d *ArchitectureDetector) detectJSArchitecture(dirs map[string]bool) string {
+	// Check for monorepo tools
+	hasTurbo := fileExists(filepath.Join(d.rootPath, "turbo.json"))
+	hasNx := fileExists(filepath.Join(d.rootPath, "nx.json"))
+	hasLerna := fileExists(filepath.Join(d.rootPath, "lerna.json"))
+	hasPnpmWorkspace := fileExists(filepath.Join(d.rootPath, "pnpm-workspace.yaml"))
+	hasYarnWorkspaces := d.hasYarnWorkspaces()
+
+	// Monorepo detection
+	if hasTurbo && (dirs["apps"] || dirs["packages"]) {
+		return "Turborepo Monorepo"
+	}
+	if hasNx {
+		return "Nx Monorepo"
+	}
+	if hasLerna || hasPnpmWorkspace || hasYarnWorkspaces {
+		if dirs["packages"] || dirs["apps"] {
+			return "JavaScript Monorepo"
+		}
+	}
+
+	// Next.js App Router
+	if dirs["app"] && fileExists(filepath.Join(d.rootPath, "next.config.js")) || fileExists(filepath.Join(d.rootPath, "next.config.mjs")) || fileExists(filepath.Join(d.rootPath, "next.config.ts")) {
+		return "Next.js App Router"
+	}
+
+	// Next.js Pages Router
+	if dirs["pages"] && (fileExists(filepath.Join(d.rootPath, "next.config.js")) || fileExists(filepath.Join(d.rootPath, "next.config.mjs"))) {
+		return "Next.js Pages Router"
+	}
+
+	// Feature-based
+	if dirs["features"] || dirs["modules"] {
+		return "Feature-based Architecture"
+	}
+
+	// MVC
 	if dirs["models"] && dirs["views"] && dirs["controllers"] {
 		return "MVC"
 	}
 
-	// Check for Feature-based
+	// Standard src-based
+	if dirs["src"] && (dirs["components"] || hasDirIn(d.files, "src/components")) {
+		return "Component-based Architecture"
+	}
+
+	return "JavaScript/TypeScript Project"
+}
+
+// detectPythonArchitecture detects Python-specific architecture patterns
+func (d *ArchitectureDetector) detectPythonArchitecture(dirs map[string]bool, pyFiles map[string]bool) string {
+	// Django detection - must have manage.py AND Django-specific structure
+	if pyFiles["manage.py"] && (hasPyFile(d.rootPath, "settings.py") || hasPyFile(d.rootPath, "urls.py")) {
+		return "Django"
+	}
+
+	// FastAPI with routers
+	if (pyFiles["main.py"] || pyFiles["app.py"]) && (dirs["routers"] || dirs["api"]) {
+		// Verify it's actually FastAPI by checking imports
+		if d.hasFastAPIImport() {
+			return "FastAPI"
+		}
+	}
+
+	// Flask with blueprints
+	if dirs["blueprints"] || (pyFiles["app.py"] && dirs["views"]) {
+		return "Flask (Blueprints)"
+	}
+
+	// Flask simple
+	if pyFiles["app.py"] || pyFiles["wsgi.py"] {
+		return "Flask"
+	}
+
+	// Python package structure
+	if dirs["src"] || hasPyFile(d.rootPath, "__init__.py") {
+		return "Python Package"
+	}
+
+	return "Python Project"
+}
+
+// detectGenericArchitecture fallback for unknown project types
+func (d *ArchitectureDetector) detectGenericArchitecture(dirs map[string]bool) string {
+	// Clean Architecture
+	if dirs["domain"] && (dirs["infrastructure"] || dirs["adapters"] || dirs["ports"]) {
+		return "Clean Architecture"
+	}
+
+	// Hexagonal
+	if dirs["ports"] && dirs["adapters"] {
+		return "Hexagonal Architecture"
+	}
+
+	// MVC
+	if dirs["models"] && dirs["views"] && dirs["controllers"] {
+		return "MVC"
+	}
+
+	// Feature-based
 	if dirs["features"] || dirs["modules"] {
 		return "Feature-based"
 	}
 
-	// Default for Go projects
-	if hasPkg || hasInternal {
-		return "Go Package Layout"
-	}
-
 	return ""
+}
+
+// hasYarnWorkspaces checks if package.json has workspaces defined
+func (d *ArchitectureDetector) hasYarnWorkspaces() bool {
+	pkgPath := filepath.Join(d.rootPath, "package.json")
+	data, err := os.ReadFile(pkgPath)
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(data), `"workspaces"`)
+}
+
+// hasFastAPIImport checks if main.py or app.py imports FastAPI
+func (d *ArchitectureDetector) hasFastAPIImport() bool {
+	for _, name := range []string{"main.py", "app.py"} {
+		path := filepath.Join(d.rootPath, name)
+		if data, err := os.ReadFile(path); err == nil {
+			content := string(data)
+			if strings.Contains(content, "from fastapi") || strings.Contains(content, "import fastapi") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// fileExists checks if a file exists
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// hasDirIn checks if a specific subdirectory exists in the file list
+func hasDirIn(files []types.FileInfo, path string) bool {
+	for _, f := range files {
+		if f.IsDir && strings.HasPrefix(f.Path, path) {
+			return true
+		}
+	}
+	return false
 }
 
 // hasPyFile checks if a Python file exists anywhere in the project
