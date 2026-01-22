@@ -11,11 +11,18 @@ import (
 )
 
 // ClaudeGenerator generates CLAUDE.md files
-type ClaudeGenerator struct{}
+type ClaudeGenerator struct {
+	compact bool // Generate compact output for token efficiency
+}
 
 // NewClaudeGenerator creates a new Claude generator
 func NewClaudeGenerator() *ClaudeGenerator {
 	return &ClaudeGenerator{}
+}
+
+// SetCompact enables compact mode for smaller output
+func (g *ClaudeGenerator) SetCompact(compact bool) {
+	g.compact = compact
 }
 
 // Name returns the generator name
