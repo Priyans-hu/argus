@@ -225,7 +225,7 @@ func (pa *ParallelAnalyzer) runPhase2(files []types.FileInfo, analysis *types.An
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		gitDetector := detector.NewGitDetector(pa.rootPath)
+		gitDetector := detector.NewGitDetectorGoGit(pa.rootPath)
 		conventions := gitDetector.Detect()
 		mu.Lock()
 		analysis.GitConventions = conventions

@@ -117,8 +117,8 @@ func (a *Analyzer) Analyze() (*types.Analysis, error) {
 	codePatternDetector := detector.NewCodePatternDetector(absPath, files)
 	analysis.CodePatterns = codePatternDetector.Detect()
 
-	// Detect git conventions (commit messages, branch naming)
-	gitDetector := detector.NewGitDetector(absPath)
+	// Detect git conventions (commit messages, branch naming) - using go-git library
+	gitDetector := detector.NewGitDetectorGoGit(absPath)
 	analysis.GitConventions = gitDetector.Detect()
 
 	// Detect architecture patterns

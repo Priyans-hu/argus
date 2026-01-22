@@ -299,7 +299,7 @@ func (ia *IncrementalAnalyzer) runDetector(impact string, files []types.FileInfo
 		analysis.ReadmeContent = readmeDetector.Detect()
 
 	case ImpactGit:
-		gitDetector := detector.NewGitDetector(ia.rootPath)
+		gitDetector := detector.NewGitDetectorGoGit(ia.rootPath)
 		analysis.GitConventions = gitDetector.Detect()
 	}
 
