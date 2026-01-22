@@ -504,11 +504,16 @@ func runWatch(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("👁️  Watching %s for changes...\n", absPath)
 	fmt.Printf("   Output formats: %s\n", strings.Join(cfg.Output, ", "))
+	fmt.Println("   Mode: incremental updates")
 	fmt.Println("   Press Ctrl+C to stop")
 	fmt.Println()
 
-	// Do initial generation
-	if err := regenerate(absPath, cfg); err != nil {
+	// Create incremental analyzer
+	incAnalyzer := analyzer.NewIncrementalAnalyzer(absPath)
+
+	// Do initial full generation
+	fmt.Println("🔍 Running initial full analysis...")
+	if err := regenerateWithAnalyzer(absPath, cfg, incAnalyzer, "", true); err != nil {
 		fmt.Printf("⚠️  Initial generation failed: %v\n", err)
 	}
 
@@ -516,8 +521,9 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	// Debounce timer
+	// Debounce timer and last changed file
 	var debounceTimer *time.Timer
+	var lastChangedFile string
 	debounceDelay := 500 * time.Millisecond
 
 	for {
@@ -537,13 +543,17 @@ func runWatch(cmd *cobra.Command, args []string) error {
 				continue
 			}
 
+			// Store the changed file
+			lastChangedFile = event.Name
+
 			// Debounce: reset timer on each event
 			if debounceTimer != nil {
 				debounceTimer.Stop()
 			}
+
+			changedFile := lastChangedFile // Capture for closure
 			debounceTimer = time.AfterFunc(debounceDelay, func() {
-				fmt.Printf("🔄 Change detected: %s\n", filepath.Base(event.Name))
-				if err := regenerate(absPath, cfg); err != nil {
+				if err := regenerateWithAnalyzer(absPath, cfg, incAnalyzer, changedFile, false); err != nil {
 					fmt.Printf("⚠️  Regeneration failed: %v\n", err)
 				}
 			})
@@ -561,10 +571,22 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	}
 }
 
-func regenerate(absPath string, cfg *config.Config) error {
-	// Run analysis
-	a := analyzer.NewAnalyzer(absPath, nil)
-	analysis, err := a.Analyze()
+func regenerateWithAnalyzer(absPath string, cfg *config.Config, incAnalyzer *analyzer.IncrementalAnalyzer, changedFile string, isInitial bool) error {
+	var analysis *types.Analysis
+	var impacts []string
+	var err error
+
+	startTime := time.Now()
+
+	if isInitial || changedFile == "" {
+		// Full analysis for initial run
+		analysis, err = incAnalyzer.AnalyzeFull()
+		impacts = []string{analyzer.ImpactAll}
+	} else {
+		// Incremental analysis for file changes
+		analysis, impacts, err = incAnalyzer.AnalyzeIncremental(changedFile)
+	}
+
 	if err != nil {
 		return fmt.Errorf("analysis failed: %w", err)
 	}
@@ -582,6 +604,16 @@ func regenerate(absPath string, cfg *config.Config) error {
 		if err := generateOutput(absPath, format, analysis, false); err != nil {
 			return err
 		}
+	}
+
+	elapsed := time.Since(startTime)
+
+	// Print status
+	if isInitial {
+		fmt.Printf("✅ Initial generation complete (%dms)\n\n", elapsed.Milliseconds())
+	} else {
+		impactDesc := analyzer.ImpactDescription(impacts)
+		fmt.Printf("🔄 %s → updated: %s (%dms)\n", filepath.Base(changedFile), impactDesc, elapsed.Milliseconds())
 	}
 
 	return nil
