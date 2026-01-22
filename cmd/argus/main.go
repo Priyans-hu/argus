@@ -37,6 +37,7 @@ var (
 	mergeMode      bool
 	addCustomBlock bool
 	compactMode    bool
+	parallel       bool
 )
 
 var rootCmd = &cobra.Command{
@@ -114,12 +115,13 @@ func init() {
 
 	// Scan command flags
 	scanCmd.Flags().StringVarP(&outputDir, "output", "o", ".", "Output directory for generated files")
-	scanCmd.Flags().StringVarP(&outputFormat, "format", "f", "claude", "Output format: claude, claude-code, cursor, copilot, all")
+	scanCmd.Flags().StringVarP(&outputFormat, "format", "f", "claude", "Output format: claude, claude-code, cursor, copilot, continue, all")
 	scanCmd.Flags().BoolVarP(&dryRun, "dry-run", "n", false, "Show what would be generated without writing files")
 	scanCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed output")
 	scanCmd.Flags().BoolVarP(&mergeMode, "merge", "m", true, "Preserve custom sections when regenerating (default: true)")
 	scanCmd.Flags().BoolVar(&addCustomBlock, "add-custom", false, "Add a custom section placeholder to output")
 	scanCmd.Flags().BoolVarP(&compactMode, "compact", "c", false, "Generate compact output (~45% smaller, optimized for token efficiency)")
+	scanCmd.Flags().BoolVarP(&parallel, "parallel", "p", true, "Run detectors in parallel for faster analysis (default: true)")
 
 	// Sync command flags
 	syncCmd.Flags().BoolVarP(&dryRun, "dry-run", "n", false, "Show what would be generated without writing files")
@@ -127,6 +129,7 @@ func init() {
 	syncCmd.Flags().BoolVarP(&mergeMode, "merge", "m", true, "Preserve custom sections when regenerating (default: true)")
 	syncCmd.Flags().BoolVar(&addCustomBlock, "add-custom", false, "Add a custom section placeholder to output")
 	syncCmd.Flags().BoolVarP(&compactMode, "compact", "c", false, "Generate compact output (~45% smaller, optimized for token efficiency)")
+	syncCmd.Flags().BoolVarP(&parallel, "parallel", "p", true, "Run detectors in parallel for faster analysis (default: true)")
 
 	// Watch command flags
 	watchCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed output")
@@ -215,17 +218,26 @@ func runScan(cmd *cobra.Command, args []string) error {
 	formats := cfg.Output
 	if cmd.Flags().Changed("format") {
 		if outputFormat == "all" {
-			formats = []string{"claude", "claude-code", "cursor", "copilot"}
+			formats = []string{"claude", "claude-code", "cursor", "copilot", "continue"}
 		} else {
 			formats = []string{outputFormat}
 		}
 	}
 
 	fmt.Printf("🔍 Scanning %s...\n", absPath)
+	if parallel && verbose {
+		fmt.Println("   Using parallel detector execution...")
+	}
 
-	// Run analysis
-	a := analyzer.NewAnalyzer(absPath, nil)
-	analysis, err := a.Analyze()
+	// Run analysis (parallel or sequential)
+	var analysis *types.Analysis
+	if parallel {
+		pa := analyzer.NewParallelAnalyzer(absPath, nil)
+		analysis, err = pa.Analyze()
+	} else {
+		a := analyzer.NewAnalyzer(absPath, nil)
+		analysis, err = a.Analyze()
+	}
 	if err != nil {
 		return fmt.Errorf("analysis failed: %w", err)
 	}
@@ -284,10 +296,19 @@ func runSync(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("🔄 Syncing %s...\n", absPath)
+	if parallel && verbose {
+		fmt.Println("   Using parallel detector execution...")
+	}
 
-	// Run analysis
-	a := analyzer.NewAnalyzer(absPath, nil)
-	analysis, err := a.Analyze()
+	// Run analysis (parallel or sequential)
+	var analysis *types.Analysis
+	if parallel {
+		pa := analyzer.NewParallelAnalyzer(absPath, nil)
+		analysis, err = pa.Analyze()
+	} else {
+		a := analyzer.NewAnalyzer(absPath, nil)
+		analysis, err = a.Analyze()
+	}
 	if err != nil {
 		return fmt.Errorf("analysis failed: %w", err)
 	}
@@ -345,6 +366,10 @@ func generateOutput(absPath, format string, analysis *types.Analysis, dryRun, co
 		outputFile = g.OutputFile()
 	case "copilot":
 		g := generator.NewCopilotGenerator()
+		gen = g
+		outputFile = g.OutputFile()
+	case "continue":
+		g := generator.NewContinueGenerator()
 		gen = g
 		outputFile = g.OutputFile()
 	default:
@@ -508,11 +533,16 @@ func runWatch(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("👁️  Watching %s for changes...\n", absPath)
 	fmt.Printf("   Output formats: %s\n", strings.Join(cfg.Output, ", "))
+	fmt.Println("   Mode: incremental updates")
 	fmt.Println("   Press Ctrl+C to stop")
 	fmt.Println()
 
-	// Do initial generation
-	if err := regenerate(absPath, cfg); err != nil {
+	// Create incremental analyzer
+	incAnalyzer := analyzer.NewIncrementalAnalyzer(absPath)
+
+	// Do initial full generation
+	fmt.Println("🔍 Running initial full analysis...")
+	if err := regenerateWithAnalyzer(absPath, cfg, incAnalyzer, "", true); err != nil {
 		fmt.Printf("⚠️  Initial generation failed: %v\n", err)
 	}
 
@@ -520,8 +550,9 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	// Debounce timer
+	// Debounce timer and last changed file
 	var debounceTimer *time.Timer
+	var lastChangedFile string
 	debounceDelay := 500 * time.Millisecond
 
 	for {
@@ -541,13 +572,17 @@ func runWatch(cmd *cobra.Command, args []string) error {
 				continue
 			}
 
+			// Store the changed file
+			lastChangedFile = event.Name
+
 			// Debounce: reset timer on each event
 			if debounceTimer != nil {
 				debounceTimer.Stop()
 			}
+
+			changedFile := lastChangedFile // Capture for closure
 			debounceTimer = time.AfterFunc(debounceDelay, func() {
-				fmt.Printf("🔄 Change detected: %s\n", filepath.Base(event.Name))
-				if err := regenerate(absPath, cfg); err != nil {
+				if err := regenerateWithAnalyzer(absPath, cfg, incAnalyzer, changedFile, false); err != nil {
 					fmt.Printf("⚠️  Regeneration failed: %v\n", err)
 				}
 			})
@@ -565,10 +600,22 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	}
 }
 
-func regenerate(absPath string, cfg *config.Config) error {
-	// Run analysis
-	a := analyzer.NewAnalyzer(absPath, nil)
-	analysis, err := a.Analyze()
+func regenerateWithAnalyzer(absPath string, cfg *config.Config, incAnalyzer *analyzer.IncrementalAnalyzer, changedFile string, isInitial bool) error {
+	var analysis *types.Analysis
+	var impacts []string
+	var err error
+
+	startTime := time.Now()
+
+	if isInitial || changedFile == "" {
+		// Full analysis for initial run
+		analysis, err = incAnalyzer.AnalyzeFull()
+		impacts = []string{analyzer.ImpactAll}
+	} else {
+		// Incremental analysis for file changes
+		analysis, impacts, err = incAnalyzer.AnalyzeIncremental(changedFile)
+	}
+
 	if err != nil {
 		return fmt.Errorf("analysis failed: %w", err)
 	}
@@ -586,6 +633,16 @@ func regenerate(absPath string, cfg *config.Config) error {
 		if err := generateOutput(absPath, format, analysis, false, compactMode); err != nil {
 			return err
 		}
+	}
+
+	elapsed := time.Since(startTime)
+
+	// Print status
+	if isInitial {
+		fmt.Printf("✅ Initial generation complete (%dms)\n\n", elapsed.Milliseconds())
+	} else {
+		impactDesc := analyzer.ImpactDescription(impacts)
+		fmt.Printf("🔄 %s → updated: %s (%dms)\n", filepath.Base(changedFile), impactDesc, elapsed.Milliseconds())
 	}
 
 	return nil
