@@ -87,6 +87,14 @@ func (g *ClaudeCodeGenerator) generateGenericAgents(analysis *types.Analysis, ct
 func goReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string {
 	var content strings.Builder
 
+	// YAML frontmatter with new Claude Code fields
+	content.WriteString("---\n")
+	content.WriteString("name: go-reviewer\n")
+	content.WriteString("description: Expert Go code reviewer. Use when reviewing Go code for quality, patterns, and best practices.\n")
+	content.WriteString("tools: Read, Grep, Glob, Bash\n")
+	content.WriteString("model: haiku\n")
+	content.WriteString("---\n\n")
+
 	content.WriteString(fmt.Sprintf("# Go Code Reviewer for %s\n\n", ctx.ProjectName))
 	content.WriteString("You are an expert Go code reviewer for this project. When reviewing Go code, focus on:\n\n")
 
@@ -177,6 +185,14 @@ func goReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string {
 
 func tsReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string {
 	var content strings.Builder
+
+	// YAML frontmatter with new Claude Code fields
+	content.WriteString("---\n")
+	content.WriteString("name: ts-reviewer\n")
+	content.WriteString("description: Expert TypeScript/JavaScript code reviewer. Use when reviewing TS/JS code for quality and patterns.\n")
+	content.WriteString("tools: Read, Grep, Glob, Bash\n")
+	content.WriteString("model: haiku\n")
+	content.WriteString("---\n\n")
 
 	content.WriteString(fmt.Sprintf("# TypeScript/JavaScript Code Reviewer for %s\n\n", ctx.ProjectName))
 	content.WriteString("You are an expert TypeScript/JavaScript code reviewer for this project. When reviewing code, focus on:\n\n")
@@ -291,6 +307,14 @@ func tsReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string {
 func pythonReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string {
 	var content strings.Builder
 
+	// YAML frontmatter with new Claude Code fields
+	content.WriteString("---\n")
+	content.WriteString("name: python-reviewer\n")
+	content.WriteString("description: Expert Python code reviewer. Use when reviewing Python code for quality and best practices.\n")
+	content.WriteString("tools: Read, Grep, Glob, Bash\n")
+	content.WriteString("model: haiku\n")
+	content.WriteString("---\n\n")
+
 	content.WriteString(fmt.Sprintf("# Python Code Reviewer for %s\n\n", ctx.ProjectName))
 	content.WriteString("You are an expert Python code reviewer for this project. When reviewing Python code, focus on:\n\n")
 
@@ -371,6 +395,14 @@ func pythonReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) stri
 func rustReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string {
 	var content strings.Builder
 
+	// YAML frontmatter with new Claude Code fields
+	content.WriteString("---\n")
+	content.WriteString("name: rust-reviewer\n")
+	content.WriteString("description: Expert Rust code reviewer. Use when reviewing Rust code for safety, ownership, and patterns.\n")
+	content.WriteString("tools: Read, Grep, Glob, Bash\n")
+	content.WriteString("model: haiku\n")
+	content.WriteString("---\n\n")
+
 	content.WriteString(fmt.Sprintf("# Rust Code Reviewer for %s\n\n", ctx.ProjectName))
 	content.WriteString("You are an expert Rust code reviewer for this project. When reviewing Rust code, focus on:\n\n")
 
@@ -422,6 +454,14 @@ func rustReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string
 
 func javaReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string {
 	var content strings.Builder
+
+	// YAML frontmatter with new Claude Code fields
+	content.WriteString("---\n")
+	content.WriteString("name: java-reviewer\n")
+	content.WriteString("description: Expert Java code reviewer. Use when reviewing Java code for quality and patterns.\n")
+	content.WriteString("tools: Read, Grep, Glob, Bash\n")
+	content.WriteString("model: haiku\n")
+	content.WriteString("---\n\n")
 
 	content.WriteString(fmt.Sprintf("# Java Code Reviewer for %s\n\n", ctx.ProjectName))
 	content.WriteString("You are an expert Java code reviewer for this project. When reviewing Java code, focus on:\n\n")
@@ -477,6 +517,15 @@ func javaReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string
 
 func plannerAgentContent(analysis *types.Analysis, ctx *GeneratorContext) string {
 	var content strings.Builder
+
+	// YAML frontmatter with new Claude Code fields
+	content.WriteString("---\n")
+	content.WriteString("name: planner\n")
+	content.WriteString("description: Planning agent for breaking down complex tasks. Use when designing features or planning implementations.\n")
+	content.WriteString("tools: Read, Grep, Glob\n")
+	content.WriteString("model: sonnet\n")
+	content.WriteString("permissionMode: plan\n")
+	content.WriteString("---\n\n")
 
 	content.WriteString(fmt.Sprintf("# Planner Agent for %s\n\n", ctx.ProjectName))
 	content.WriteString("You are a planning agent that helps break down complex tasks into manageable steps.\n\n")
@@ -558,6 +607,17 @@ func plannerAgentContent(analysis *types.Analysis, ctx *GeneratorContext) string
 
 func securityReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string {
 	var content strings.Builder
+
+	// YAML frontmatter with new Claude Code fields
+	content.WriteString("---\n")
+	content.WriteString("name: security-reviewer\n")
+	content.WriteString("description: Security-focused code reviewer. Use when auditing code for vulnerabilities and security issues.\n")
+	content.WriteString("tools: Read, Grep, Glob, Bash\n")
+	content.WriteString("model: sonnet\n")
+	content.WriteString("skills:\n")
+	content.WriteString("  - lint\n")
+	content.WriteString("  - test\n")
+	content.WriteString("---\n\n")
 
 	content.WriteString(fmt.Sprintf("# Security Reviewer for %s\n\n", ctx.ProjectName))
 	content.WriteString("You are a security-focused code reviewer for this project. When reviewing code, focus on:\n\n")
