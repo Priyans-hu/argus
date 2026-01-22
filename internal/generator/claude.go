@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/Priyans-hu/argus/internal/detector"
 	"github.com/Priyans-hu/argus/pkg/types"
 )
 
@@ -948,6 +949,9 @@ func (g *ClaudeGenerator) writePatterns(buf *bytes.Buffer, patterns *types.CodeP
 		{"Database & ORM", patterns.DatabaseORM},
 		{"Utilities", patterns.Utilities},
 		{"Go Patterns", patterns.GoPatterns},
+		{"Rust Patterns", patterns.RustPatterns},
+		{"Python Patterns", patterns.PythonPatterns},
+		{"ML & Data Science", patterns.MLPatterns},
 	}
 
 	// Check if any patterns were detected
@@ -1057,28 +1061,27 @@ func (g *ClaudeGenerator) writeQuickReference(buf *bytes.Buffer, commands []type
 		return
 	}
 
-	// Classify commands
-	classified := g.classifyAllCommands(commands)
-
-	// Check if we have any meaningful categories
-	categories := []string{"Development", "Build", "Test", "Lint", "Format", "Setup"}
-	hasContent := false
-	for _, cat := range categories {
-		if cmds, ok := classified[cat]; ok && len(cmds) > 0 {
-			hasContent = true
-			break
-		}
+	// Get prioritized commands (top 15 most important)
+	maxCommands := 15
+	if g.compact {
+		maxCommands = 10
 	}
+	quickRef := detector.GetQuickReferenceCommands(commands, maxCommands)
 
-	if !hasContent {
+	if len(quickRef) == 0 {
 		return
 	}
+
+	// Group by category for organized output
+	grouped := detector.GroupCommandsByCategory(quickRef)
 
 	buf.WriteString("## Quick Reference\n\n")
 	buf.WriteString("```bash\n")
 
-	for _, cat := range categories {
-		cmds, ok := classified[cat]
+	// Output in priority order
+	categoryOrder := []string{"Build", "Test", "Lint", "Format", "Run", "Setup", "Clean", "Generate", "Deploy", "Docker", "Database", "Other"}
+	for _, cat := range categoryOrder {
+		cmds, ok := grouped[cat]
 		if !ok || len(cmds) == 0 {
 			continue
 		}
@@ -1098,43 +1101,7 @@ func (g *ClaudeGenerator) writeQuickReference(buf *bytes.Buffer, commands []type
 	buf.WriteString("```\n\n")
 }
 
-// classifyAllCommands groups commands by category
-func (g *ClaudeGenerator) classifyAllCommands(commands []types.Command) map[string][]types.Command {
-	result := make(map[string][]types.Command)
-
-	for _, cmd := range commands {
-		category := g.categorizeCommand(cmd)
-		result[category] = append(result[category], cmd)
-	}
-
-	return result
-}
-
-// categorizeCommand determines the category of a command
-func (g *ClaudeGenerator) categorizeCommand(cmd types.Command) string {
-	nameLower := strings.ToLower(cmd.Name)
-	cmdLower := strings.ToLower(cmd.Command)
-
-	switch {
-	case strings.Contains(nameLower, "test") || strings.Contains(cmdLower, "test"):
-		return "Test"
-	case strings.Contains(nameLower, "lint") || strings.Contains(cmdLower, "lint"):
-		return "Lint"
-	case strings.Contains(nameLower, "build") || strings.Contains(cmdLower, "build"):
-		return "Build"
-	case strings.Contains(nameLower, "fmt") || strings.Contains(nameLower, "format") ||
-		strings.Contains(cmdLower, "fmt") || strings.Contains(cmdLower, "format"):
-		return "Format"
-	case nameLower == "dev" || nameLower == "start" || strings.Contains(nameLower, "serve") ||
-		strings.Contains(nameLower, "watch"):
-		return "Development"
-	case strings.Contains(nameLower, "setup") || strings.Contains(nameLower, "install") ||
-		strings.Contains(nameLower, "deps"):
-		return "Setup"
-	default:
-		return "Other"
-	}
-}
+// Note: Command classification is now handled by detector.GroupCommandsByCategory
 
 // writeDevelopmentSetup writes the development setup section
 func (g *ClaudeGenerator) writeDevelopmentSetup(buf *bytes.Buffer, devInfo *types.DevelopmentInfo) {
