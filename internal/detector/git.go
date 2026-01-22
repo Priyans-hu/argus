@@ -1,6 +1,7 @@
 package detector
 
 import (
+	"fmt"
 	"os/exec"
 	"regexp"
 	"sort"
@@ -33,6 +34,12 @@ func (d *GitDetector) Detect() *types.GitConventions {
 
 	// Detect branch naming conventions
 	conventions.BranchConvention = d.detectBranchConvention()
+
+	// Extract repository information
+	conventions.Repository = d.detectRepository()
+
+	// Get recent commits
+	conventions.RecentCommits = d.getRecentCommits(10)
 
 	return conventions
 }
@@ -213,6 +220,101 @@ func (d *GitDetector) detectBranchConvention() *types.BranchConvention {
 	}
 
 	return convention
+}
+
+// detectRepository extracts git repository information
+func (d *GitDetector) detectRepository() *types.GitRepository {
+	// Get remote URL
+	cmd := exec.Command("git", "remote", "get-url", "origin")
+	cmd.Dir = d.rootPath
+	output, err := cmd.Output()
+	if err != nil {
+		return nil
+	}
+
+	remoteURL := strings.TrimSpace(string(output))
+	if remoteURL == "" {
+		return nil
+	}
+
+	repo := &types.GitRepository{
+		RemoteURL: remoteURL,
+	}
+
+	// Parse URL to extract owner, name, and platform
+	// Support formats:
+	// - https://github.com/owner/repo.git
+	// - git@github.com:owner/repo.git
+	// - https://gitlab.com/owner/repo.git
+
+	var owner, name, platform string
+
+	// Remove .git suffix
+	remoteURL = strings.TrimSuffix(remoteURL, ".git")
+
+	// Detect platform
+	if strings.Contains(remoteURL, "github") {
+		platform = "github"
+	} else if strings.Contains(remoteURL, "gitlab") {
+		platform = "gitlab"
+	} else if strings.Contains(remoteURL, "bitbucket") {
+		platform = "bitbucket"
+	}
+
+	// Parse HTTPS URL
+	if strings.HasPrefix(remoteURL, "http") {
+		parts := strings.Split(remoteURL, "/")
+		if len(parts) >= 2 {
+			name = parts[len(parts)-1]
+			owner = parts[len(parts)-2]
+		}
+	} else if strings.Contains(remoteURL, "@") {
+		// Parse SSH URL (git@host:owner/repo)
+		parts := strings.Split(remoteURL, ":")
+		if len(parts) >= 2 {
+			pathParts := strings.Split(parts[1], "/")
+			if len(pathParts) >= 2 {
+				owner = pathParts[0]
+				name = pathParts[1]
+			}
+		}
+	}
+
+	repo.Owner = owner
+	repo.Name = name
+	repo.Platform = platform
+
+	return repo
+}
+
+// getRecentCommits retrieves recent commit history
+func (d *GitDetector) getRecentCommits(limit int) []types.GitCommit {
+	// Format: hash|message|author|date
+	cmd := exec.Command("git", "log", fmt.Sprintf("-%d", limit), "--format=%H|%s|%an|%ai")
+	cmd.Dir = d.rootPath
+	output, err := cmd.Output()
+	if err != nil {
+		return nil
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	var commits []types.GitCommit
+
+	for _, line := range lines {
+		parts := strings.SplitN(line, "|", 4)
+		if len(parts) < 4 {
+			continue
+		}
+
+		commits = append(commits, types.GitCommit{
+			Hash:    parts[0],
+			Message: parts[1],
+			Author:  parts[2],
+			Date:    parts[3],
+		})
+	}
+
+	return commits
 }
 
 // getTopKeys returns the top N keys from a map sorted by count

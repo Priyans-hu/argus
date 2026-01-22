@@ -696,10 +696,29 @@ func (g *ClaudeGenerator) writeGitConventions(buf *bytes.Buffer, git *types.GitC
 		return
 	}
 
+	hasContent := false
+
+	// Repository information
+	if git.Repository != nil && git.Repository.RemoteURL != "" {
+		buf.WriteString("### Git\n\n")
+		hasContent = true
+
+		repo := git.Repository
+		if repo.Platform != "" && repo.Owner != "" && repo.Name != "" {
+			fmt.Fprintf(buf, "- Repository: [%s/%s](%s)\n", repo.Owner, repo.Name, repo.RemoteURL)
+		} else {
+			fmt.Fprintf(buf, "- Repository: %s\n", repo.RemoteURL)
+		}
+	}
+
 	// Commit conventions
 	if git.CommitConvention != nil {
 		cc := git.CommitConvention
-		buf.WriteString("### Git\n\n")
+
+		if !hasContent {
+			buf.WriteString("### Git\n\n")
+			hasContent = true
+		}
 
 		// Commit message format
 		if cc.Style != "" {
@@ -738,8 +757,8 @@ func (g *ClaudeGenerator) writeGitConventions(buf *bytes.Buffer, git *types.GitC
 	if git.BranchConvention != nil {
 		bc := git.BranchConvention
 
-		// If no commit convention was written, add Git header
-		if git.CommitConvention == nil {
+		// If no content was written yet, add Git header
+		if !hasContent {
 			buf.WriteString("### Git\n\n")
 		}
 
@@ -751,7 +770,9 @@ func (g *ClaudeGenerator) writeGitConventions(buf *bytes.Buffer, git *types.GitC
 		}
 	}
 
-	buf.WriteString("\n")
+	if hasContent {
+		buf.WriteString("\n")
+	}
 }
 
 // writeGuidelines writes actionable coding guidelines based on tech stack
@@ -926,6 +947,7 @@ func (g *ClaudeGenerator) writePatterns(buf *bytes.Buffer, patterns *types.CodeP
 		{"API Patterns", patterns.APIPatterns},
 		{"Database & ORM", patterns.DatabaseORM},
 		{"Utilities", patterns.Utilities},
+		{"Go Patterns", patterns.GoPatterns},
 	}
 
 	// Check if any patterns were detected
@@ -1394,7 +1416,8 @@ func (g *ClaudeGenerator) writePatternsCompact(buf *bytes.Buffer, patterns *type
 		len(patterns.Testing) > 0 ||
 		len(patterns.Authentication) > 0 ||
 		len(patterns.APIPatterns) > 0 ||
-		len(patterns.DatabaseORM) > 0
+		len(patterns.DatabaseORM) > 0 ||
+		len(patterns.GoPatterns) > 0
 
 	if !hasPatterns {
 		return
@@ -1438,6 +1461,7 @@ func (g *ClaudeGenerator) writePatternsCompact(buf *bytes.Buffer, patterns *type
 	}
 
 	// Write only the most relevant categories with limited patterns
+	writeTopPatterns("Go Patterns", patterns.GoPatterns, 3)
 	writeTopPatterns("Data Fetching", patterns.DataFetching, 3)
 	writeTopPatterns("Testing", patterns.Testing, 3)
 	writeTopPatterns("API Patterns", patterns.APIPatterns, 3)
