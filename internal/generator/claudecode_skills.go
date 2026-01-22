@@ -7,36 +7,41 @@ import (
 	"github.com/Priyans-hu/argus/pkg/types"
 )
 
-// generateCommands creates command files based on detected commands
-func (g *ClaudeCodeGenerator) generateCommands(analysis *types.Analysis) []types.GeneratedFile {
+// generateSkills creates skill files based on detected commands
+// Skills are the new format replacing commands in Claude Code
+func (g *ClaudeCodeGenerator) generateSkills(analysis *types.Analysis) []types.GeneratedFile {
 	var files []types.GeneratedFile
 
 	// Build context for context-aware generation
 	ctx := BuildContext(analysis)
 
-	// Track which commands we've generated to avoid duplicates
+	// Track which skills we've generated to avoid duplicates
 	generated := make(map[string]bool)
 
-	// Generate commands from detected commands
+	// Generate skills from detected commands
 	for _, cmd := range analysis.Commands {
-		cmdType := classifyCommand(cmd.Name, cmd.Command)
-		if cmdType != "" && !generated[cmdType] {
-			generated[cmdType] = true
-			file := generateCommandFile(cmdType, cmd, analysis, ctx)
+		skillType := classifyCommand(cmd.Name, cmd.Command)
+		if skillType != "" && !generated[skillType] {
+			generated[skillType] = true
+			file := generateSkillFile(skillType, cmd, analysis, ctx)
 			if file != nil {
 				files = append(files, *file)
 			}
 		}
 	}
 
-	// Add framework-specific commands
-	frameworkCmds := g.generateFrameworkCommands(analysis, ctx, generated)
-	files = append(files, frameworkCmds...)
+	// Add framework-specific skills
+	frameworkSkills := g.generateFrameworkSkills(analysis, ctx, generated)
+	files = append(files, frameworkSkills...)
+
+	// Add project-specific tool skills
+	projectToolSkills := g.generateProjectToolSkills(analysis)
+	files = append(files, projectToolSkills...)
 
 	return files
 }
 
-// classifyCommand determines the command type from its name or content
+// classifyCommand determines the skill type from its name or content
 func classifyCommand(name, command string) string {
 	nameLower := strings.ToLower(name)
 	cmdLower := strings.ToLower(command)
@@ -84,8 +89,8 @@ func classifyCommand(name, command string) string {
 	return ""
 }
 
-// generateCommandFile creates a command file for a specific command type
-func generateCommandFile(cmdType string, cmd types.Command, analysis *types.Analysis, ctx *GeneratorContext) *types.GeneratedFile {
+// generateSkillFile creates a skill file for a specific skill type
+func generateSkillFile(skillType string, cmd types.Command, analysis *types.Analysis, ctx *GeneratorContext) *types.GeneratedFile {
 	// Normalize the command - use Name if Command is empty
 	normalizedCmd := cmd
 	if normalizedCmd.Command == "" {
@@ -94,56 +99,66 @@ func generateCommandFile(cmdType string, cmd types.Command, analysis *types.Anal
 
 	var content string
 
-	switch cmdType {
+	switch skillType {
 	case "build":
-		content = buildCommandContent(normalizedCmd, analysis, ctx)
+		content = buildSkillContent(normalizedCmd, analysis, ctx)
 	case "test":
-		content = testCommandContent(normalizedCmd, analysis, ctx)
+		content = testSkillContent(normalizedCmd, analysis, ctx)
 	case "lint":
-		content = lintCommandContent(normalizedCmd, analysis, ctx)
+		content = lintSkillContent(normalizedCmd, analysis, ctx)
 	case "dev":
-		content = devCommandContent(normalizedCmd, analysis, ctx)
+		content = devSkillContent(normalizedCmd, analysis, ctx)
 	case "format":
-		content = formatCommandContent(normalizedCmd, analysis, ctx)
+		content = formatSkillContent(normalizedCmd, analysis, ctx)
 	case "db-migrate":
-		content = dbMigrateCommandContent(normalizedCmd, analysis, ctx)
+		content = dbMigrateSkillContent(normalizedCmd, analysis, ctx)
 	case "docker-build":
-		content = dockerBuildCommandContent(normalizedCmd, analysis, ctx)
+		content = dockerBuildSkillContent(normalizedCmd, analysis, ctx)
 	default:
 		return nil
 	}
 
+	// Skills use directory structure: .claude/skills/skill-name/SKILL.md
 	return &types.GeneratedFile{
-		Path:    fmt.Sprintf(".claude/commands/%s.md", cmdType),
+		Path:    fmt.Sprintf(".claude/skills/%s/SKILL.md", skillType),
 		Content: []byte(content),
 	}
 }
 
-// generateFrameworkCommands adds framework-specific commands
-func (g *ClaudeCodeGenerator) generateFrameworkCommands(analysis *types.Analysis, ctx *GeneratorContext, generated map[string]bool) []types.GeneratedFile {
+// generateFrameworkSkills adds framework-specific skills
+func (g *ClaudeCodeGenerator) generateFrameworkSkills(analysis *types.Analysis, ctx *GeneratorContext, generated map[string]bool) []types.GeneratedFile {
 	var files []types.GeneratedFile
 
-	// Prisma commands
+	// Prisma skills
 	if hasFramework(analysis, "Prisma") && !generated["db-migrate"] {
 		files = append(files, types.GeneratedFile{
-			Path:    ".claude/commands/db-migrate.md",
-			Content: []byte(prismaCommandContent()),
+			Path:    ".claude/skills/db-migrate/SKILL.md",
+			Content: []byte(prismaSkillContent()),
 		})
 	}
 
-	// Django commands
+	// Django skills
 	if hasFramework(analysis, "Django") && !generated["db-migrate"] {
 		files = append(files, types.GeneratedFile{
-			Path:    ".claude/commands/db-migrate.md",
-			Content: []byte(djangoMigrateCommandContent()),
+			Path:    ".claude/skills/db-migrate/SKILL.md",
+			Content: []byte(djangoMigrateSkillContent()),
 		})
 	}
 
 	return files
 }
 
-func buildCommandContent(cmd types.Command, analysis *types.Analysis, ctx *GeneratorContext) string {
+// Skill content generators with YAML frontmatter
+
+func buildSkillContent(cmd types.Command, analysis *types.Analysis, ctx *GeneratorContext) string {
 	var content strings.Builder
+
+	// YAML frontmatter
+	content.WriteString("---\n")
+	content.WriteString("name: build\n")
+	content.WriteString("description: Build the project. Use when compiling code, creating artifacts, or preparing for deployment.\n")
+	content.WriteString("allowed-tools: Bash, Read, Glob\n")
+	content.WriteString("---\n\n")
 
 	content.WriteString(fmt.Sprintf("# Build - %s\n\n", ctx.ProjectName))
 	content.WriteString("Build the project.\n\n")
@@ -176,8 +191,15 @@ func buildCommandContent(cmd types.Command, analysis *types.Analysis, ctx *Gener
 	return content.String()
 }
 
-func testCommandContent(cmd types.Command, analysis *types.Analysis, ctx *GeneratorContext) string {
+func testSkillContent(cmd types.Command, analysis *types.Analysis, ctx *GeneratorContext) string {
 	var content strings.Builder
+
+	// YAML frontmatter
+	content.WriteString("---\n")
+	content.WriteString("name: test\n")
+	content.WriteString("description: Run the test suite. Use when running tests, checking test coverage, or validating code changes.\n")
+	content.WriteString("allowed-tools: Bash, Read, Glob, Grep\n")
+	content.WriteString("---\n\n")
 
 	content.WriteString(fmt.Sprintf("# Test - %s\n\n", ctx.ProjectName))
 	content.WriteString("Run the project test suite.\n\n")
@@ -228,8 +250,15 @@ func testCommandContent(cmd types.Command, analysis *types.Analysis, ctx *Genera
 	return content.String()
 }
 
-func lintCommandContent(cmd types.Command, analysis *types.Analysis, ctx *GeneratorContext) string {
+func lintSkillContent(cmd types.Command, analysis *types.Analysis, ctx *GeneratorContext) string {
 	var content strings.Builder
+
+	// YAML frontmatter
+	content.WriteString("---\n")
+	content.WriteString("name: lint\n")
+	content.WriteString("description: Run code linting and static analysis. Use to check code quality, find issues, or auto-fix style problems.\n")
+	content.WriteString("allowed-tools: Bash, Read, Edit, Glob\n")
+	content.WriteString("---\n\n")
 
 	content.WriteString(fmt.Sprintf("# Lint - %s\n\n", ctx.ProjectName))
 	content.WriteString("Run code linting and static analysis.\n\n")
@@ -262,8 +291,16 @@ func lintCommandContent(cmd types.Command, analysis *types.Analysis, ctx *Genera
 	return content.String()
 }
 
-func devCommandContent(cmd types.Command, analysis *types.Analysis, ctx *GeneratorContext) string {
+func devSkillContent(cmd types.Command, analysis *types.Analysis, ctx *GeneratorContext) string {
 	var content strings.Builder
+
+	// YAML frontmatter
+	content.WriteString("---\n")
+	content.WriteString("name: dev\n")
+	content.WriteString("description: Start the development server. Use when running the app locally for testing or development.\n")
+	content.WriteString("allowed-tools: Bash, Read\n")
+	content.WriteString("disable-model-invocation: true\n")
+	content.WriteString("---\n\n")
 
 	content.WriteString(fmt.Sprintf("# Dev - %s\n\n", ctx.ProjectName))
 	content.WriteString("Start the development server.\n\n")
@@ -296,8 +333,15 @@ func devCommandContent(cmd types.Command, analysis *types.Analysis, ctx *Generat
 	return content.String()
 }
 
-func formatCommandContent(cmd types.Command, analysis *types.Analysis, ctx *GeneratorContext) string {
+func formatSkillContent(cmd types.Command, analysis *types.Analysis, ctx *GeneratorContext) string {
 	var content strings.Builder
+
+	// YAML frontmatter
+	content.WriteString("---\n")
+	content.WriteString("name: format\n")
+	content.WriteString("description: Format code according to project standards. Use after making changes or before committing.\n")
+	content.WriteString("allowed-tools: Bash, Read, Edit, Glob\n")
+	content.WriteString("---\n\n")
 
 	content.WriteString(fmt.Sprintf("# Format - %s\n\n", ctx.ProjectName))
 	content.WriteString("Format code according to project standards.\n\n")
@@ -329,8 +373,16 @@ func formatCommandContent(cmd types.Command, analysis *types.Analysis, ctx *Gene
 	return content.String()
 }
 
-func dbMigrateCommandContent(cmd types.Command, analysis *types.Analysis, ctx *GeneratorContext) string {
+func dbMigrateSkillContent(cmd types.Command, analysis *types.Analysis, ctx *GeneratorContext) string {
 	var content strings.Builder
+
+	// YAML frontmatter
+	content.WriteString("---\n")
+	content.WriteString("name: db-migrate\n")
+	content.WriteString("description: Run database migrations. Use when applying schema changes or setting up the database.\n")
+	content.WriteString("allowed-tools: Bash, Read\n")
+	content.WriteString("disable-model-invocation: true\n")
+	content.WriteString("---\n\n")
 
 	content.WriteString(fmt.Sprintf("# Database Migration - %s\n\n", ctx.ProjectName))
 	content.WriteString("Run database migrations.\n\n")
@@ -363,8 +415,16 @@ func dbMigrateCommandContent(cmd types.Command, analysis *types.Analysis, ctx *G
 	return content.String()
 }
 
-func dockerBuildCommandContent(cmd types.Command, analysis *types.Analysis, ctx *GeneratorContext) string {
+func dockerBuildSkillContent(cmd types.Command, analysis *types.Analysis, ctx *GeneratorContext) string {
 	var content strings.Builder
+
+	// YAML frontmatter
+	content.WriteString("---\n")
+	content.WriteString("name: docker-build\n")
+	content.WriteString("description: Build Docker image for the project. Use for containerizing the application.\n")
+	content.WriteString("allowed-tools: Bash, Read, Glob\n")
+	content.WriteString("disable-model-invocation: true\n")
+	content.WriteString("---\n\n")
 
 	content.WriteString(fmt.Sprintf("# Docker Build - %s\n\n", ctx.ProjectName))
 	content.WriteString("Build Docker image for the project.\n\n")
@@ -391,8 +451,15 @@ func dockerBuildCommandContent(cmd types.Command, analysis *types.Analysis, ctx 
 	return content.String()
 }
 
-func prismaCommandContent() string {
-	return `# Database Migration (Prisma)
+func prismaSkillContent() string {
+	return `---
+name: db-migrate
+description: Manage database schema with Prisma. Use for migrations, schema changes, and database operations.
+allowed-tools: Bash, Read
+disable-model-invocation: true
+---
+
+# Database Migration (Prisma)
 
 Manage database schema with Prisma.
 
@@ -433,8 +500,15 @@ npx prisma studio
 `
 }
 
-func djangoMigrateCommandContent() string {
-	return `# Database Migration (Django)
+func djangoMigrateSkillContent() string {
+	return `---
+name: db-migrate
+description: Manage database schema with Django migrations. Use for database setup and schema changes.
+allowed-tools: Bash, Read
+disable-model-invocation: true
+---
+
+# Database Migration (Django)
 
 Manage database schema with Django migrations.
 
@@ -519,4 +593,113 @@ func getCheckOnlyFlag(analysis *types.Analysis) string {
 		return "`--check`"
 	}
 	return "`--check`"
+}
+
+// generateProjectToolSkills creates skills for project-specific tools
+func (g *ClaudeCodeGenerator) generateProjectToolSkills(analysis *types.Analysis) []types.GeneratedFile {
+	var files []types.GeneratedFile
+
+	for _, tool := range analysis.ProjectTools {
+		skillFile := generateProjectToolSkillFile(tool, analysis)
+		if skillFile != nil {
+			files = append(files, *skillFile)
+		}
+	}
+
+	return files
+}
+
+// generateProjectToolSkillFile creates a skill file for a project-specific tool
+func generateProjectToolSkillFile(tool types.ProjectTool, analysis *types.Analysis) *types.GeneratedFile {
+	var content strings.Builder
+
+	// YAML frontmatter
+	content.WriteString("---\n")
+	content.WriteString(fmt.Sprintf("name: %s\n", tool.Name))
+	content.WriteString(fmt.Sprintf("description: %s\n", tool.Description))
+
+	// Add replacement warning if applicable
+	if tool.ReplacesTool != "" {
+		content.WriteString(fmt.Sprintf("# CRITICAL: This skill replaces the %s tool for this project\n", tool.ReplacesTool))
+	}
+
+	content.WriteString("---\n\n")
+
+	// Title - capitalize first letter
+	toolTitle := tool.Name
+	if len(toolTitle) > 0 {
+		toolTitle = strings.ToUpper(toolTitle[:1]) + toolTitle[1:]
+	}
+	content.WriteString(fmt.Sprintf("# %s - Project Tool\n\n", toolTitle))
+
+	// Description
+	content.WriteString(fmt.Sprintf("%s\n\n", tool.Description))
+
+	// When to use
+	if tool.WhenToUse != "" {
+		content.WriteString("## When to Invoke This Skill\n\n")
+		content.WriteString(fmt.Sprintf("%s\n\n", tool.WhenToUse))
+	}
+
+	// Setup instructions if needed
+	if tool.RequiresSetup && tool.SetupInstructions != "" {
+		content.WriteString("## Setup Required\n\n")
+		content.WriteString(fmt.Sprintf("%s\n\n", tool.SetupInstructions))
+	}
+
+	// Usage examples
+	if len(tool.UsageExamples) > 0 {
+		content.WriteString("## Usage Examples\n\n")
+		for _, example := range tool.UsageExamples {
+			content.WriteString("```bash\n")
+			content.WriteString(example + "\n")
+			content.WriteString("```\n\n")
+		}
+	}
+
+	// Binary path if available
+	if tool.BinaryPath != "" {
+		content.WriteString("## Binary Location\n\n")
+		content.WriteString(fmt.Sprintf("The tool binary is located at: `%s`\n\n", tool.BinaryPath))
+
+		// Check if needs building
+		needsBuild := strings.Contains(tool.BinaryPath, "bin/") || strings.Contains(tool.BinaryPath, "build/")
+		if needsBuild {
+			content.WriteString("You may need to build the tool first:\n\n")
+			content.WriteString("```bash\n")
+
+			// Suggest build command based on project type
+			if hasLanguage(analysis, "Go") {
+				content.WriteString("make build  # or: go build -o " + tool.BinaryPath + "\n")
+			} else if hasLanguage(analysis, "Rust") {
+				content.WriteString("cargo build --release\n")
+			} else {
+				content.WriteString("make build\n")
+			}
+			content.WriteString("```\n\n")
+		}
+	}
+
+	// Tool replacement guidance
+	if tool.ReplacesTool != "" {
+		content.WriteString(fmt.Sprintf("## IMPORTANT: Replaces %s\n\n", tool.ReplacesTool))
+		content.WriteString(fmt.Sprintf("**This tool replaces the built-in %s for this project.**\n\n", tool.ReplacesTool))
+		content.WriteString("When working on this codebase:\n")
+		content.WriteString(fmt.Sprintf("- ✅ Use `%s` for project-specific searches\n", tool.Name))
+		content.WriteString(fmt.Sprintf("- ❌ Avoid using built-in %s unless for exact text matching\n\n", tool.ReplacesTool))
+	}
+
+	// Best practices
+	content.WriteString("## Best Practices\n\n")
+	content.WriteString(fmt.Sprintf("- Use `%s` when working with this codebase\n", tool.Name))
+	content.WriteString("- Check that the tool is available before use\n")
+	if tool.ReplacesTool != "" {
+		content.WriteString(fmt.Sprintf("- Fall back to %s only if this tool fails\n", tool.ReplacesTool))
+	}
+	content.WriteString("\n")
+
+	return &types.GeneratedFile{
+		Path:    fmt.Sprintf(".claude/skills/%s/SKILL.md", tool.Name),
+		Content: []byte(content.String()),
+	}
 }

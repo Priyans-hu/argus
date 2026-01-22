@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "gofmt -w $FILE_PATH",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"\nimport json\nimport sys\nimport re\n\nDANGEROUS_PATTERNS = [\n    r'rm\\s+-rf\\s+/',\n    r'chmod\\s+777',\n    r'curl.*\\|.*sh',\n    r'wget.*\\|.*sh',\n    r'eval\\s+',\n]\n\ntry:\n    data = json.load(sys.stdin)\n    cmd = data.get('tool_input', {}).get('command', '')\n    for pattern in DANGEROUS_PATTERNS:\n        if re.search(pattern, cmd, re.IGNORECASE):\n            print(f'Potentially dangerous command detected: {pattern}', file=sys.stderr)\n            sys.exit(2)\n    sys.exit(0)\nexcept Exception as e:\n    sys.exit(0)\n\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

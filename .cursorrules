@@ -1,0 +1,58 @@
+# Project: argus
+
+You are an expert developer working on this codebase. Follow these rules and conventions.
+
+## Technology Stack
+
+- Primary Language: Go 1.24
+- Frameworks: Cobra
+- Tools: GitHub Actions
+
+## Project Structure
+
+- `cmd/` - Command entrypoints
+- `internal/analyzer/` - Analysis logic
+- `internal/config/` - Configuration
+- `internal/detector/` - Detection logic
+- `internal/generator/` - Code generation
+- `internal/merger/` - Merge utilities
+- `pkg/types/` - Type definitions
+- `scripts/` - Scripts
+
+## Rules
+
+### Testing
+
+- Test files use _test suffix (Go style)
+- Tests are colocated with source files
+
+### Code-style
+
+- Go project - use 'go fmt' or 'gofmt' for formatting
+
+### Documentation
+
+- Go doc comments (start with function name)
+
+### Error-handling
+
+- Go-style explicit error checking (if err != nil)
+
+## Code Style Guidelines
+
+When writing Go code:
+
+- Follow effective Go guidelines
+- Use gofmt/goimports for formatting
+- Handle all errors explicitly (if err != nil)
+- Use meaningful variable names, short names for short scopes
+- Document exported functions with comments starting with function name
+- Prefer composition over inheritance
+
+## Key Files Reference
+
+- `CONTRIBUTING.md` - Contribution guidelines
+- `README.md` - Project documentation
+- `cmd/argus/main.go` - Go application entry
+- `go.mod` - Go dependencies
+

@@ -137,6 +137,17 @@ func (a *Analyzer) Analyze() (*types.Analysis, error) {
 	cliDetector := detector.NewCLIDetector(absPath, files, &analysis.TechStack)
 	analysis.CLIInfo = cliDetector.Detect()
 
+	// Detect project-specific tools
+	toolsDetector := detector.NewProjectToolsDetector(
+		absPath,
+		files,
+		analysis.ProjectName,
+		&analysis.TechStack,
+		analysis.ReadmeContent,
+		analysis.CLIInfo,
+	)
+	analysis.ProjectTools = toolsDetector.Detect()
+
 	return analysis, nil
 }
 
