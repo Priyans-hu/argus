@@ -403,27 +403,6 @@ func TestDetectKeyFiles_NoDuplicates(t *testing.T) {
 	}
 }
 
-func TestContainsString(t *testing.T) {
-	tests := []struct {
-		s        string
-		substr   string
-		expected bool
-	}{
-		{"hello world", "world", true},
-		{"hello world", "foo", false},
-		{"pytest", "pytest", true},
-		{"", "test", false},
-		{"test", "", true},
-	}
-
-	for _, tt := range tests {
-		result := containsString(tt.s, tt.substr)
-		if result != tt.expected {
-			t.Errorf("containsString(%q, %q) = %v, expected %v", tt.s, tt.substr, result, tt.expected)
-		}
-	}
-}
-
 func TestHasGoSuffix(t *testing.T) {
 	tests := []struct {
 		name     string

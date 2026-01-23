@@ -3,6 +3,7 @@ package detector
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -253,7 +254,7 @@ func (d *PyProjectDetector) detectTools(pyproject PyProject) []string {
 	backend := pyproject.BuildSystem.BuildBackend
 	switch backend {
 	case "poetry.core.masonry.api":
-		if !contains(tools, "poetry") {
+		if !slices.Contains(tools, "poetry") {
 			tools = append(tools, "poetry")
 		}
 	case "setuptools.build_meta":
@@ -278,16 +279,6 @@ func extractPoetryDeps(deps map[string]interface{}) []string {
 		}
 	}
 	return result
-}
-
-// contains checks if a slice contains a string
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
 }
 
 // DetectPythonPatterns detects Python patterns from pyproject.toml
