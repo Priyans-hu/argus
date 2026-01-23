@@ -1,10 +1,13 @@
 package analyzer
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/Priyans-hu/argus/internal/detector"
 	"github.com/Priyans-hu/argus/pkg/types"
@@ -25,7 +28,16 @@ func NewAnalyzer(rootPath string, config *types.Config) *Analyzer {
 }
 
 // Analyze performs the full codebase analysis
-func (a *Analyzer) Analyze() (*types.Analysis, error) {
+func (a *Analyzer) Analyze(ctx context.Context) (*types.Analysis, error) {
+	// Check for cancellation
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
+	slog.Debug("starting analysis", "rootPath", a.rootPath)
+
 	// Get absolute path
 	absPath, err := filepath.Abs(a.rootPath)
 	if err != nil {
@@ -37,10 +49,12 @@ func (a *Analyzer) Analyze() (*types.Analysis, error) {
 
 	// Walk the file tree
 	walker := NewWalker(absPath)
-	files, err := walker.Walk()
+	files, err := walker.Walk(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to walk directory: %w", err)
 	}
+
+	slog.Debug("file walk complete", "fileCount", len(files))
 
 	// Initialize analysis
 	analysis := &types.Analysis{
@@ -197,10 +211,10 @@ func (a *Analyzer) detectDependencies(rootPath string) []types.Dependency {
 	// Try go.mod (simplified)
 	modPath := filepath.Join(rootPath, "go.mod")
 	if data, err := os.ReadFile(modPath); err == nil {
-		lines := splitLines(string(data))
+		lines := strings.Split(string(data), "\n")
 		inRequire := false
 		for _, line := range lines {
-			line = trimSpace(line)
+			line = strings.TrimSpace(line)
 			if line == "require (" {
 				inRequire = true
 				continue
@@ -211,11 +225,11 @@ func (a *Analyzer) detectDependencies(rootPath string) []types.Dependency {
 			}
 			if inRequire && line != "" {
 				// Skip indirect dependencies
-				if contains(line, "// indirect") {
+				if strings.Contains(line, "// indirect") {
 					continue
 				}
 
-				parts := splitFields(line)
+				parts := strings.Fields(line)
 				if len(parts) >= 2 {
 					pkgName := parts[0]
 
@@ -240,81 +254,18 @@ func (a *Analyzer) detectDependencies(rootPath string) []types.Dependency {
 // isInternalPackage checks if a package path is internal/vendor
 func isInternalPackage(pkg string) bool {
 	// Skip internal subpackages
-	if contains(pkg, "/internal/") {
+	if strings.Contains(pkg, "/internal/") {
 		return true
 	}
 	// Skip service-specific subpackages (AWS SDK pattern)
-	if contains(pkg, "/service/internal/") {
+	if strings.Contains(pkg, "/service/internal/") {
 		return true
 	}
 	// Skip feature subpackages
-	if contains(pkg, "/feature/") {
+	if strings.Contains(pkg, "/feature/") {
 		return true
 	}
 	return false
-}
-
-// contains checks if s contains substr (simple implementation)
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && findSubstring(s, substr) >= 0
-}
-
-func findSubstring(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
-}
-
-// Helper functions to avoid importing strings package multiple times
-func splitLines(s string) []string {
-	var lines []string
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\n' {
-			lines = append(lines, s[start:i])
-			start = i + 1
-		}
-	}
-	if start < len(s) {
-		lines = append(lines, s[start:])
-	}
-	return lines
-}
-
-func trimSpace(s string) string {
-	start := 0
-	end := len(s)
-	for start < end && (s[start] == ' ' || s[start] == '\t' || s[start] == '\r') {
-		start++
-	}
-	for end > start && (s[end-1] == ' ' || s[end-1] == '\t' || s[end-1] == '\r') {
-		end--
-	}
-	return s[start:end]
-}
-
-func splitFields(s string) []string {
-	var fields []string
-	start := -1
-	for i, c := range s {
-		if c == ' ' || c == '\t' {
-			if start >= 0 {
-				fields = append(fields, s[start:i])
-				start = -1
-			}
-		} else {
-			if start < 0 {
-				start = i
-			}
-		}
-	}
-	if start >= 0 {
-		fields = append(fields, s[start:])
-	}
-	return fields
 }
 
 // detectPyProjectCommands extracts commands from pyproject.toml
