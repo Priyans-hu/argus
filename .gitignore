@@ -37,3 +37,8 @@ bin/
 # Debug
 debug
 *.log
+
+# Docs (Docusaurus)
+docs/node_modules/
+docs/build/
+docs/.docusaurus/
