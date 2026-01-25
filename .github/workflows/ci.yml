@@ -33,3 +33,27 @@ jobs:
           files: ./coverage.out
           fail_ci_if_error: false
           verbose: true
+
+  # Cross-compilation check to catch CGO and platform-specific issues
+  # before they break the release workflow
+  cross-compile:
+    name: Cross-Compile Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Run GoReleaser (dry-run)
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --snapshot --skip=publish --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
