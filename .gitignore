@@ -42,3 +42,4 @@ debug
 docs/node_modules/
 docs/build/
 docs/.docusaurus/
+docs/package-lock.json
