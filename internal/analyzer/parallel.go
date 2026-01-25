@@ -286,6 +286,19 @@ func (pa *ParallelAnalyzer) runPhase2(ctx context.Context, files []types.FileInf
 			patterns.MLPatterns = mlPatterns
 		}
 
+		// Add AST-based JavaScript/TypeScript patterns
+		jsASTDetector := detector.NewJSASTDetector(pa.rootPath, files)
+		if jsPatterns := jsASTDetector.Detect(); len(jsPatterns) > 0 {
+			patterns.DataFetching = mergePatterns(patterns.DataFetching, filterByCategory(jsPatterns, "JavaScript Frameworks"))
+			patterns.StateManagement = mergePatterns(patterns.StateManagement, filterByCategory(jsPatterns, "React Hooks"))
+		}
+
+		// Add AST-based Python patterns
+		pyASTDetector := detector.NewPythonASTDetector(pa.rootPath, files)
+		if pyPatterns := pyASTDetector.Detect(); len(pyPatterns) > 0 {
+			patterns.PythonPatterns = mergePatterns(patterns.PythonPatterns, pyPatterns)
+		}
+
 		mu.Lock()
 		analysis.CodePatterns = patterns
 		mu.Unlock()
@@ -368,4 +381,41 @@ func baseFileName(path string) string {
 		}
 	}
 	return path
+}
+
+// mergePatterns merges two PatternInfo slices, avoiding duplicates by name
+func mergePatterns(existing, new []types.PatternInfo) []types.PatternInfo {
+	if len(new) == 0 {
+		return existing
+	}
+	if len(existing) == 0 {
+		return new
+	}
+
+	// Build set of existing pattern names
+	seen := make(map[string]bool)
+	for _, p := range existing {
+		seen[p.Name] = true
+	}
+
+	// Add new patterns that don't exist
+	result := existing
+	for _, p := range new {
+		if !seen[p.Name] {
+			result = append(result, p)
+			seen[p.Name] = true
+		}
+	}
+	return result
+}
+
+// filterByCategory filters PatternInfo slice by category name
+func filterByCategory(patterns []types.PatternInfo, category string) []types.PatternInfo {
+	var result []types.PatternInfo
+	for _, p := range patterns {
+		if p.Category == category {
+			result = append(result, p)
+		}
+	}
+	return result
 }
