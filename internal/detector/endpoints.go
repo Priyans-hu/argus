@@ -92,6 +92,28 @@ func shouldSkipForEndpoints(path string) bool {
 	return false
 }
 
+// isValidEndpointPath validates that a detected path looks like an actual API endpoint
+// and not a false positive like HTTP header names
+func isValidEndpointPath(path string) bool {
+	// Skip empty paths
+	if path == "" {
+		return false
+	}
+
+	// API endpoint paths must start with / (this is the most reliable heuristic)
+	// This filters out header names, config keys, and other false positives
+	if !strings.HasPrefix(path, "/") {
+		return false
+	}
+
+	// Double slash is invalid
+	if path == "//" {
+		return false
+	}
+
+	return true
+}
+
 // detectExpressEndpoints detects Express.js endpoints
 func (d *EndpointDetector) detectExpressEndpoints() []types.Endpoint {
 	var endpoints []types.Endpoint
@@ -532,7 +554,8 @@ func (d *EndpointDetector) detectGinEndpoints() []types.Endpoint {
 	}
 
 	// r.GET("/path", handler) or group.GET("/path", handler)
-	routeRegex := regexp.MustCompile(`\.(GET|POST|PUT|PATCH|DELETE)\s*\(\s*["']([^"']+)["']`)
+	// Requires path to start with / to avoid false positives
+	routeRegex := regexp.MustCompile(`\w\.(GET|POST|PUT|PATCH|DELETE)\s*\(\s*["'](/[^"']+)["']`)
 
 	for _, f := range d.files {
 		if f.IsDir || f.Extension != ".go" || shouldSkipForEndpoints(f.Path) {
@@ -556,9 +579,13 @@ func (d *EndpointDetector) detectGinEndpoints() []types.Endpoint {
 			matches := routeRegex.FindAllStringSubmatch(line, -1)
 			for _, match := range matches {
 				if len(match) >= 3 {
+					path := match[2]
+					if !isValidEndpointPath(path) {
+						continue
+					}
 					endpoints = append(endpoints, types.Endpoint{
 						Method: match[1],
-						Path:   match[2],
+						Path:   path,
 						File:   f.Path,
 						Line:   lineNum + 1,
 					})
@@ -578,7 +605,8 @@ func (d *EndpointDetector) detectEchoEndpoints() []types.Endpoint {
 		return endpoints
 	}
 
-	routeRegex := regexp.MustCompile(`e\.(GET|POST|PUT|PATCH|DELETE)\s*\(\s*["']([^"']+)["']`)
+	// Require path to start with / to avoid false positives
+	routeRegex := regexp.MustCompile(`e\.(GET|POST|PUT|PATCH|DELETE)\s*\(\s*["'](/[^"']+)["']`)
 
 	for _, f := range d.files {
 		if f.IsDir || f.Extension != ".go" || shouldSkipForEndpoints(f.Path) {
@@ -598,9 +626,13 @@ func (d *EndpointDetector) detectEchoEndpoints() []types.Endpoint {
 			matches := routeRegex.FindAllStringSubmatch(line, -1)
 			for _, match := range matches {
 				if len(match) >= 3 {
+					path := match[2]
+					if !isValidEndpointPath(path) {
+						continue
+					}
 					endpoints = append(endpoints, types.Endpoint{
 						Method: match[1],
-						Path:   match[2],
+						Path:   path,
 						File:   f.Path,
 						Line:   lineNum + 1,
 					})
@@ -617,10 +649,15 @@ func (d *EndpointDetector) detectFiberEndpoints() []types.Endpoint {
 	var endpoints []types.Endpoint
 
 	if !d.hasGoPackage("github.com/gofiber/fiber") {
+		// DEBUG: fmt.Println("DEBUG: Fiber not found, skipping")
 		return endpoints
 	}
 
-	routeRegex := regexp.MustCompile(`\.(Get|Post|Put|Patch|Delete)\s*\(\s*["']([^"']+)["']`)
+	// DEBUG: fmt.Println("DEBUG: Fiber FOUND, running detector")
+
+	// app.Get("/path", handler) - requires identifier before dot
+	// Also require path to start with / to avoid false positives
+	routeRegex := regexp.MustCompile(`\w\.(Get|Post|Put|Patch|Delete)\s*\(\s*["'](/[^"']+)["']`)
 
 	for _, f := range d.files {
 		if f.IsDir || f.Extension != ".go" || shouldSkipForEndpoints(f.Path) {
@@ -640,9 +677,13 @@ func (d *EndpointDetector) detectFiberEndpoints() []types.Endpoint {
 			matches := routeRegex.FindAllStringSubmatch(line, -1)
 			for _, match := range matches {
 				if len(match) >= 3 {
+					path := match[2]
+					if !isValidEndpointPath(path) {
+						continue
+					}
 					endpoints = append(endpoints, types.Endpoint{
 						Method: strings.ToUpper(match[1]),
-						Path:   match[2],
+						Path:   path,
 						File:   f.Path,
 						Line:   lineNum + 1,
 					})
@@ -662,7 +703,8 @@ func (d *EndpointDetector) detectChiEndpoints() []types.Endpoint {
 		return endpoints
 	}
 
-	routeRegex := regexp.MustCompile(`r\.(Get|Post|Put|Patch|Delete)\s*\(\s*["']([^"']+)["']`)
+	// Require path to start with / to avoid false positives like Header.Get("Content-Type")
+	routeRegex := regexp.MustCompile(`r\.(Get|Post|Put|Patch|Delete)\s*\(\s*["'](/[^"']+)["']`)
 
 	for _, f := range d.files {
 		if f.IsDir || f.Extension != ".go" || shouldSkipForEndpoints(f.Path) {
@@ -682,9 +724,13 @@ func (d *EndpointDetector) detectChiEndpoints() []types.Endpoint {
 			matches := routeRegex.FindAllStringSubmatch(line, -1)
 			for _, match := range matches {
 				if len(match) >= 3 {
+					path := match[2]
+					if !isValidEndpointPath(path) {
+						continue
+					}
 					endpoints = append(endpoints, types.Endpoint{
 						Method: strings.ToUpper(match[1]),
-						Path:   match[2],
+						Path:   path,
 						File:   f.Path,
 						Line:   lineNum + 1,
 					})
@@ -970,6 +1016,9 @@ func (d *EndpointDetector) detectMuxEndpoints() []types.Endpoint {
 			handleMatch := handleFuncRegex.FindStringSubmatch(line)
 			if len(handleMatch) >= 2 {
 				path := handleMatch[1]
+				if !isValidEndpointPath(path) {
+					continue
+				}
 				method := "ALL"
 
 				// Check if .Methods() is on the same line
@@ -1034,9 +1083,13 @@ func (d *EndpointDetector) detectGoHTTPEndpoints() []types.Endpoint {
 		for lineNum, line := range lines {
 			// Check http.HandleFunc
 			if match := handleFuncRegex.FindStringSubmatch(line); len(match) >= 2 {
+				path := match[1]
+				if !isValidEndpointPath(path) {
+					continue
+				}
 				endpoints = append(endpoints, types.Endpoint{
 					Method: "ALL",
-					Path:   match[1],
+					Path:   path,
 					File:   f.Path,
 					Line:   lineNum + 1,
 				})
@@ -1044,9 +1097,13 @@ func (d *EndpointDetector) detectGoHTTPEndpoints() []types.Endpoint {
 
 			// Check http.Handle
 			if match := handleRegex.FindStringSubmatch(line); len(match) >= 2 {
+				path := match[1]
+				if !isValidEndpointPath(path) {
+					continue
+				}
 				endpoints = append(endpoints, types.Endpoint{
 					Method: "ALL",
-					Path:   match[1],
+					Path:   path,
 					File:   f.Path,
 					Line:   lineNum + 1,
 				})

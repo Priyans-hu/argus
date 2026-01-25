@@ -145,6 +145,12 @@ func (a *Analyzer) Analyze(ctx context.Context) (*types.Analysis, error) {
 	codePatternDetector := detector.NewCodePatternDetector(absPath, files)
 	analysis.CodePatterns = codePatternDetector.Detect()
 
+	// ML-specific pattern detection
+	mlDetector := detector.NewMLDetector(absPath, files)
+	if mlPatterns := mlDetector.GetMLPatterns(); len(mlPatterns) > 0 {
+		analysis.CodePatterns.MLPatterns = mlPatterns
+	}
+
 	// Detect git conventions (commit messages, branch naming) - using go-git library
 	gitDetector := detector.NewGitDetectorGoGit(absPath)
 	analysis.GitConventions = gitDetector.Detect()

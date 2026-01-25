@@ -279,6 +279,13 @@ func (pa *ParallelAnalyzer) runPhase2(ctx context.Context, files []types.FileInf
 		defer wg.Done()
 		codePatternDetector := detector.NewCodePatternDetector(pa.rootPath, files)
 		patterns := codePatternDetector.Detect()
+
+		// Add ML-specific patterns
+		mlDetector := detector.NewMLDetector(pa.rootPath, files)
+		if mlPatterns := mlDetector.GetMLPatterns(); len(mlPatterns) > 0 {
+			patterns.MLPatterns = mlPatterns
+		}
+
 		mu.Lock()
 		analysis.CodePatterns = patterns
 		mu.Unlock()
