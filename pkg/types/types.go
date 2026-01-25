@@ -68,6 +68,7 @@ type CodePatterns struct {
 	GoPatterns      []PatternInfo `json:"go_patterns,omitempty"`
 	RustPatterns    []PatternInfo `json:"rust_patterns,omitempty"`
 	PythonPatterns  []PatternInfo `json:"python_patterns,omitempty"`
+	MLPatterns      []PatternInfo `json:"ml_patterns,omitempty"`
 }
 
 // PatternInfo represents a detected pattern

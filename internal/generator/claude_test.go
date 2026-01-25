@@ -313,6 +313,8 @@ func TestClaudeGenerator_NormalModeHasAllSections(t *testing.T) {
 		},
 		Dependencies: []types.Dependency{
 			{Name: "github.com/spf13/cobra", Version: "v1.8.0", Type: "runtime"},
+			{Name: "gorm.io/gorm", Version: "v1.25.0", Type: "runtime"},
+			{Name: "github.com/go-redis/redis/v8", Version: "v8.11.0", Type: "runtime"},
 		},
 	}
 
@@ -328,7 +330,7 @@ func TestClaudeGenerator_NormalModeHasAllSections(t *testing.T) {
 		"## Tech Stack",
 		"## Available Commands",
 		"## Configuration",
-		"## Dependencies",
+		"## Key Dependencies",
 	}
 
 	for _, section := range sections {
