@@ -1,6 +1,7 @@
 package analyzer
 
 import (
+	"context"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -43,9 +44,9 @@ func NewIncrementalAnalyzer(rootPath string) *IncrementalAnalyzer {
 }
 
 // AnalyzeFull performs a full analysis and caches the result
-func (ia *IncrementalAnalyzer) AnalyzeFull() (*types.Analysis, error) {
+func (ia *IncrementalAnalyzer) AnalyzeFull(ctx context.Context) (*types.Analysis, error) {
 	a := NewAnalyzer(ia.rootPath, nil)
-	analysis, err := a.Analyze()
+	analysis, err := a.Analyze(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -59,12 +60,12 @@ func (ia *IncrementalAnalyzer) AnalyzeFull() (*types.Analysis, error) {
 }
 
 // AnalyzeIncremental performs incremental analysis based on changed file
-func (ia *IncrementalAnalyzer) AnalyzeIncremental(changedFile string) (*types.Analysis, []string, error) {
+func (ia *IncrementalAnalyzer) AnalyzeIncremental(ctx context.Context, changedFile string) (*types.Analysis, []string, error) {
 	// If no cache, do full analysis
 	ia.cacheMu.RLock()
 	if ia.cache == nil {
 		ia.cacheMu.RUnlock()
-		analysis, err := ia.AnalyzeFull()
+		analysis, err := ia.AnalyzeFull(ctx)
 		return analysis, []string{ImpactAll}, err
 	}
 	ia.cacheMu.RUnlock()
@@ -75,13 +76,13 @@ func (ia *IncrementalAnalyzer) AnalyzeIncremental(changedFile string) (*types.An
 	// If all impacts, do full analysis
 	for _, impact := range impacts {
 		if impact == ImpactAll {
-			analysis, err := ia.AnalyzeFull()
+			analysis, err := ia.AnalyzeFull(ctx)
 			return analysis, impacts, err
 		}
 	}
 
 	// Get fresh file list
-	files, err := ia.walker.Walk()
+	files, err := ia.walker.Walk(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -95,7 +96,7 @@ func (ia *IncrementalAnalyzer) AnalyzeIncremental(changedFile string) (*types.An
 	for _, impact := range impacts {
 		if err := ia.runDetector(impact, files, analysis); err != nil {
 			// On error, fall back to full analysis
-			fullAnalysis, fullErr := ia.AnalyzeFull()
+			fullAnalysis, fullErr := ia.AnalyzeFull(ctx)
 			return fullAnalysis, []string{ImpactAll}, fullErr
 		}
 	}

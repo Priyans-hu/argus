@@ -2,6 +2,7 @@ package analyzer
 
 import (
 	"bufio"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,7 +12,7 @@ import (
 
 // Walker walks the directory tree and collects file information
 type Walker struct {
-	rootPath     string
+	rootPath       string
 	ignorePatterns []string
 	defaultIgnore  []string
 }
@@ -51,13 +52,27 @@ func NewWalker(rootPath string) *Walker {
 }
 
 // Walk walks the directory tree and returns file information
-func (w *Walker) Walk() ([]types.FileInfo, error) {
+func (w *Walker) Walk(ctx context.Context) ([]types.FileInfo, error) {
+	// Check for cancellation
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
 	// Load .gitignore patterns
 	w.loadGitignore()
 
 	var files []types.FileInfo
 
 	err := filepath.Walk(w.rootPath, func(path string, info os.FileInfo, err error) error {
+		// Check for cancellation during walk
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		if err != nil {
 			return nil // Skip files we can't access
 		}

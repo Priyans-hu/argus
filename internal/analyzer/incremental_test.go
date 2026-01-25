@@ -1,6 +1,7 @@
 package analyzer
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -216,7 +217,7 @@ func main() {
 
 	// Test full analysis
 	ia := NewIncrementalAnalyzer(tmpDir)
-	analysis, err := ia.AnalyzeFull()
+	analysis, err := ia.AnalyzeFull(context.Background())
 
 	if err != nil {
 		t.Fatalf("full analysis failed: %v", err)
@@ -266,13 +267,13 @@ func main() {
 
 	// Do initial full analysis
 	ia := NewIncrementalAnalyzer(tmpDir)
-	_, err = ia.AnalyzeFull()
+	_, err = ia.AnalyzeFull(context.Background())
 	if err != nil {
 		t.Fatalf("initial analysis failed: %v", err)
 	}
 
 	// Now do incremental analysis for a source file change
-	analysis, impacts, err := ia.AnalyzeIncremental(filepath.Join(tmpDir, "main.go"))
+	analysis, impacts, err := ia.AnalyzeIncremental(context.Background(), filepath.Join(tmpDir, "main.go"))
 	if err != nil {
 		t.Fatalf("incremental analysis failed: %v", err)
 	}
@@ -310,7 +311,7 @@ func TestIncrementalAnalyzer_NoCacheFallsBackToFull(t *testing.T) {
 	ia := NewIncrementalAnalyzer(tmpDir)
 
 	// Incremental analysis should fall back to full when no cache
-	analysis, impacts, err := ia.AnalyzeIncremental(filepath.Join(tmpDir, "main.go"))
+	analysis, impacts, err := ia.AnalyzeIncremental(context.Background(), filepath.Join(tmpDir, "main.go"))
 	if err != nil {
 		t.Fatalf("analysis failed: %v", err)
 	}

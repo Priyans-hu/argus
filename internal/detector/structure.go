@@ -798,7 +798,7 @@ func detectPythonCommands(rootPath string) []types.Command {
 	pyprojectPath := filepath.Join(rootPath, "pyproject.toml")
 	hasPoetry := false
 	if data, err := os.ReadFile(pyprojectPath); err == nil {
-		if containsString(string(data), "[tool.poetry]") {
+		if strings.Contains(string(data), "[tool.poetry]") {
 			hasPoetry = true
 			commands = append(commands, types.Command{
 				Name:        "poetry install",
@@ -864,7 +864,7 @@ func detectPythonCommands(rootPath string) []types.Command {
 
 	if _, err := os.Stat(wsgiPath); err == nil {
 		hasFlask = true
-	} else if data, err := os.ReadFile(appPath); err == nil && containsString(string(data), "Flask") {
+	} else if data, err := os.ReadFile(appPath); err == nil && strings.Contains(string(data), "Flask") {
 		hasFlask = true
 	}
 
@@ -905,9 +905,9 @@ func detectPythonCommands(rootPath string) []types.Command {
 	mainPath := filepath.Join(rootPath, "main.py")
 	hasFastAPI := false
 
-	if data, err := os.ReadFile(mainPath); err == nil && containsString(string(data), "FastAPI") {
+	if data, err := os.ReadFile(mainPath); err == nil && strings.Contains(string(data), "FastAPI") {
 		hasFastAPI = true
-	} else if data, err := os.ReadFile(appPath); err == nil && containsString(string(data), "FastAPI") {
+	} else if data, err := os.ReadFile(appPath); err == nil && strings.Contains(string(data), "FastAPI") {
 		hasFastAPI = true
 	}
 
@@ -939,7 +939,7 @@ func detectPythonCommands(rootPath string) []types.Command {
 			reqData, err = os.ReadFile(pyprojectPath)
 		}
 
-		if err == nil && containsString(string(reqData), "pytest") {
+		if err == nil && strings.Contains(string(reqData), "pytest") {
 			pytestCmd := "pytest"
 			if hasPoetry {
 				pytestCmd = "poetry run pytest"
@@ -976,14 +976,14 @@ func detectPythonCommands(rootPath string) []types.Command {
 				prefix = "poetry run "
 			}
 
-			if containsString(string(reqData), "black") {
+			if strings.Contains(string(reqData), "black") {
 				commands = append(commands, types.Command{
 					Name:        prefix + "black .",
 					Description: "Format code with Black",
 				})
 			}
 
-			if containsString(string(reqData), "ruff") {
+			if strings.Contains(string(reqData), "ruff") {
 				commands = append(commands, types.Command{
 					Name:        prefix + "ruff format",
 					Description: "Format code with Ruff",
@@ -994,14 +994,14 @@ func detectPythonCommands(rootPath string) []types.Command {
 				})
 			}
 
-			if containsString(string(reqData), "flake8") {
+			if strings.Contains(string(reqData), "flake8") {
 				commands = append(commands, types.Command{
 					Name:        prefix + "flake8",
 					Description: "Lint code with Flake8",
 				})
 			}
 
-			if containsString(string(reqData), "mypy") {
+			if strings.Contains(string(reqData), "mypy") {
 				commands = append(commands, types.Command{
 					Name:        prefix + "mypy .",
 					Description: "Type check with mypy",
@@ -1040,7 +1040,7 @@ func detectCobraCommands(rootPath string) []types.Command {
 	if err != nil {
 		return commands
 	}
-	if !containsString(string(modData), "spf13/cobra") {
+	if !strings.Contains(string(modData), "spf13/cobra") {
 		return commands
 	}
 
@@ -1125,19 +1125,6 @@ func parseCobraCommand(filePath string) (string, string) {
 	}
 
 	return cmdName, cmdDesc
-}
-
-func containsString(s, substr string) bool {
-	return len(s) >= len(substr) && findStr(s, substr) >= 0
-}
-
-func findStr(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
 }
 
 func hasGoSuffix(name string) bool {

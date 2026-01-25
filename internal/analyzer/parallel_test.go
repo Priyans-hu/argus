@@ -1,6 +1,7 @@
 package analyzer
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -45,7 +46,7 @@ This is a test project.
 
 	// Test parallel analysis
 	pa := NewParallelAnalyzer(tmpDir, nil)
-	analysis, err := pa.Analyze()
+	analysis, err := pa.Analyze(context.Background())
 
 	if err != nil {
 		t.Fatalf("parallel analysis failed: %v", err)
@@ -102,14 +103,14 @@ func main() {
 
 	// Run sequential analysis
 	seqAnalyzer := NewAnalyzer(tmpDir, nil)
-	seqAnalysis, err := seqAnalyzer.Analyze()
+	seqAnalysis, err := seqAnalyzer.Analyze(context.Background())
 	if err != nil {
 		t.Fatalf("sequential analysis failed: %v", err)
 	}
 
 	// Run parallel analysis
 	parAnalyzer := NewParallelAnalyzer(tmpDir, nil)
-	parAnalysis, err := parAnalyzer.Analyze()
+	parAnalysis, err := parAnalyzer.Analyze(context.Background())
 	if err != nil {
 		t.Fatalf("parallel analysis failed: %v", err)
 	}
@@ -172,7 +173,7 @@ lint:
 	}
 
 	pa := NewParallelAnalyzer(tmpDir, nil)
-	analysis, err := pa.Analyze()
+	analysis, err := pa.Analyze(context.Background())
 	if err != nil {
 		t.Fatalf("parallel analysis failed: %v", err)
 	}
@@ -210,7 +211,7 @@ This is a test project for parallel analysis.
 	}
 
 	pa := NewParallelAnalyzer(tmpDir, nil)
-	analysis, err := pa.Analyze()
+	analysis, err := pa.Analyze(context.Background())
 	if err != nil {
 		t.Fatalf("parallel analysis failed: %v", err)
 	}
@@ -251,7 +252,7 @@ func main() {}
 	}
 
 	pa := NewParallelAnalyzer(tmpDir, nil)
-	analysis, err := pa.Analyze()
+	analysis, err := pa.Analyze(context.Background())
 	if err != nil {
 		t.Fatalf("parallel analysis failed: %v", err)
 	}
@@ -283,7 +284,7 @@ func TestParallelAnalyzer_MultipleRuns(t *testing.T) {
 
 	// Run analysis multiple times to ensure no race conditions
 	for i := 0; i < 5; i++ {
-		analysis, err := pa.Analyze()
+		analysis, err := pa.Analyze(context.Background())
 		if err != nil {
 			t.Fatalf("analysis run %d failed: %v", i, err)
 		}
@@ -350,7 +351,7 @@ func BenchmarkSequentialAnalyzer(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		a := NewAnalyzer(tmpDir, nil)
-		_, err := a.Analyze()
+		_, err := a.Analyze(context.Background())
 		if err != nil {
 			b.Fatalf("analysis failed: %v", err)
 		}
@@ -370,7 +371,7 @@ func BenchmarkParallelAnalyzer(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		pa := NewParallelAnalyzer(tmpDir, nil)
-		_, err := pa.Analyze()
+		_, err := pa.Analyze(context.Background())
 		if err != nil {
 			b.Fatalf("analysis failed: %v", err)
 		}

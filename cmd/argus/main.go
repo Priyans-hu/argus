@@ -4,9 +4,11 @@ import (
 	"archive/tar"
 	"archive/zip"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -49,6 +51,21 @@ Argus scans your codebase and generates optimized context files
 for AI coding assistants (Claude Code, Cursor, Copilot, etc.).
 
 No more manually writing CLAUDE.md or .cursorrules - Argus sees everything.`,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		setupLogging()
+	},
+}
+
+// setupLogging configures slog based on verbose flag
+func setupLogging() {
+	level := slog.LevelInfo
+	if verbose {
+		level = slog.LevelDebug
+	}
+	handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: level,
+	})
+	slog.SetDefault(slog.New(handler))
 }
 
 var initCmd = &cobra.Command{
@@ -229,14 +246,26 @@ func runScan(cmd *cobra.Command, args []string) error {
 		fmt.Println("   Using parallel detector execution...")
 	}
 
+	// Create context with cancellation support
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Handle interrupt signals for graceful cancellation
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		cancel()
+	}()
+
 	// Run analysis (parallel or sequential)
 	var analysis *types.Analysis
 	if parallel {
 		pa := analyzer.NewParallelAnalyzer(absPath, nil)
-		analysis, err = pa.Analyze()
+		analysis, err = pa.Analyze(ctx)
 	} else {
 		a := analyzer.NewAnalyzer(absPath, nil)
-		analysis, err = a.Analyze()
+		analysis, err = a.Analyze(ctx)
 	}
 	if err != nil {
 		return fmt.Errorf("analysis failed: %w", err)
@@ -300,14 +329,26 @@ func runSync(cmd *cobra.Command, args []string) error {
 		fmt.Println("   Using parallel detector execution...")
 	}
 
+	// Create context with cancellation support
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Handle interrupt signals for graceful cancellation
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		cancel()
+	}()
+
 	// Run analysis (parallel or sequential)
 	var analysis *types.Analysis
 	if parallel {
 		pa := analyzer.NewParallelAnalyzer(absPath, nil)
-		analysis, err = pa.Analyze()
+		analysis, err = pa.Analyze(ctx)
 	} else {
 		a := analyzer.NewAnalyzer(absPath, nil)
-		analysis, err = a.Analyze()
+		analysis, err = a.Analyze(ctx)
 	}
 	if err != nil {
 		return fmt.Errorf("analysis failed: %w", err)
@@ -537,12 +578,16 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	fmt.Println("   Press Ctrl+C to stop")
 	fmt.Println()
 
+	// Create context with cancellation for watch mode
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Create incremental analyzer
 	incAnalyzer := analyzer.NewIncrementalAnalyzer(absPath)
 
 	// Do initial full generation
 	fmt.Println("🔍 Running initial full analysis...")
-	if err := regenerateWithAnalyzer(absPath, cfg, incAnalyzer, "", true); err != nil {
+	if err := regenerateWithAnalyzer(ctx, absPath, cfg, incAnalyzer, "", true); err != nil {
 		fmt.Printf("⚠️  Initial generation failed: %v\n", err)
 	}
 
@@ -582,7 +627,7 @@ func runWatch(cmd *cobra.Command, args []string) error {
 
 			changedFile := lastChangedFile // Capture for closure
 			debounceTimer = time.AfterFunc(debounceDelay, func() {
-				if err := regenerateWithAnalyzer(absPath, cfg, incAnalyzer, changedFile, false); err != nil {
+				if err := regenerateWithAnalyzer(ctx, absPath, cfg, incAnalyzer, changedFile, false); err != nil {
 					fmt.Printf("⚠️  Regeneration failed: %v\n", err)
 				}
 			})
@@ -600,7 +645,7 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	}
 }
 
-func regenerateWithAnalyzer(absPath string, cfg *config.Config, incAnalyzer *analyzer.IncrementalAnalyzer, changedFile string, isInitial bool) error {
+func regenerateWithAnalyzer(ctx context.Context, absPath string, cfg *config.Config, incAnalyzer *analyzer.IncrementalAnalyzer, changedFile string, isInitial bool) error {
 	var analysis *types.Analysis
 	var impacts []string
 	var err error
@@ -609,11 +654,11 @@ func regenerateWithAnalyzer(absPath string, cfg *config.Config, incAnalyzer *ana
 
 	if isInitial || changedFile == "" {
 		// Full analysis for initial run
-		analysis, err = incAnalyzer.AnalyzeFull()
+		analysis, err = incAnalyzer.AnalyzeFull(ctx)
 		impacts = []string{analyzer.ImpactAll}
 	} else {
 		// Incremental analysis for file changes
-		analysis, impacts, err = incAnalyzer.AnalyzeIncremental(changedFile)
+		analysis, impacts, err = incAnalyzer.AnalyzeIncremental(ctx, changedFile)
 	}
 
 	if err != nil {

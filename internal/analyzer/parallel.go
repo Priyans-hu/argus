@@ -1,8 +1,11 @@
 package analyzer
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/Priyans-hu/argus/internal/detector"
 	"github.com/Priyans-hu/argus/pkg/types"
@@ -29,13 +32,25 @@ type detectorResult struct {
 }
 
 // Analyze performs parallel codebase analysis
-func (pa *ParallelAnalyzer) Analyze() (*types.Analysis, error) {
+func (pa *ParallelAnalyzer) Analyze(ctx context.Context) (*types.Analysis, error) {
+	// Check for cancellation
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
+	startTime := time.Now()
+	slog.Debug("starting parallel analysis", "rootPath", pa.rootPath)
+
 	// Get absolute path and walk file tree first (required by all detectors)
 	walker := NewWalker(pa.rootPath)
-	files, err := walker.Walk()
+	files, err := walker.Walk(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to walk directory: %w", err)
 	}
+
+	slog.Debug("file walk complete", "fileCount", len(files), "duration", time.Since(startTime))
 
 	// Initialize analysis
 	analysis := &types.Analysis{
@@ -45,20 +60,32 @@ func (pa *ParallelAnalyzer) Analyze() (*types.Analysis, error) {
 
 	// Phase 1: Run essential detectors that others depend on
 	// These must complete before parallel phase
-	if err := pa.runPhase1(files, analysis); err != nil {
+	phase1Start := time.Now()
+	if err := pa.runPhase1(ctx, files, analysis); err != nil {
 		return nil, err
 	}
+	slog.Debug("phase1 complete", "duration", time.Since(phase1Start))
 
 	// Phase 2: Run remaining detectors in parallel
-	if err := pa.runPhase2(files, analysis); err != nil {
+	phase2Start := time.Now()
+	if err := pa.runPhase2(ctx, files, analysis); err != nil {
 		return nil, err
 	}
+	slog.Debug("phase2 complete", "duration", time.Since(phase2Start))
 
+	slog.Debug("parallel analysis complete", "totalDuration", time.Since(startTime))
 	return analysis, nil
 }
 
 // runPhase1 runs detectors that must complete before others can start
-func (pa *ParallelAnalyzer) runPhase1(files []types.FileInfo, analysis *types.Analysis) error {
+func (pa *ParallelAnalyzer) runPhase1(ctx context.Context, files []types.FileInfo, analysis *types.Analysis) error {
+	// Check for cancellation
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
 	var wg sync.WaitGroup
 	errChan := make(chan detectorResult, 2)
 
@@ -68,6 +95,12 @@ func (pa *ParallelAnalyzer) runPhase1(files []types.FileInfo, analysis *types.An
 	// Tech stack detector
 	go func() {
 		defer wg.Done()
+		select {
+		case <-ctx.Done():
+			errChan <- detectorResult{"techstack", ctx.Err()}
+			return
+		default:
+		}
 		techDetector := detector.NewTechStackDetector(pa.rootPath, files)
 		techStack, err := techDetector.Detect()
 		if err != nil {
@@ -80,6 +113,12 @@ func (pa *ParallelAnalyzer) runPhase1(files []types.FileInfo, analysis *types.An
 	// Structure detector
 	go func() {
 		defer wg.Done()
+		select {
+		case <-ctx.Done():
+			errChan <- detectorResult{"structure", ctx.Err()}
+			return
+		default:
+		}
 		structureDetector := detector.NewStructureDetector(pa.rootPath, files)
 		structure, err := structureDetector.Detect()
 		if err != nil {
@@ -105,7 +144,14 @@ func (pa *ParallelAnalyzer) runPhase1(files []types.FileInfo, analysis *types.An
 }
 
 // runPhase2 runs all remaining detectors in parallel
-func (pa *ParallelAnalyzer) runPhase2(files []types.FileInfo, analysis *types.Analysis) error {
+func (pa *ParallelAnalyzer) runPhase2(ctx context.Context, files []types.FileInfo, analysis *types.Analysis) error {
+	// Check for cancellation
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	errChan := make(chan detectorResult, 12)
