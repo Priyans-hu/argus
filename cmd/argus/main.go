@@ -22,6 +22,7 @@ import (
 	"github.com/Priyans-hu/argus/internal/config"
 	"github.com/Priyans-hu/argus/internal/generator"
 	"github.com/Priyans-hu/argus/internal/merger"
+	"github.com/Priyans-hu/argus/internal/usage"
 	"github.com/Priyans-hu/argus/pkg/types"
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
@@ -31,15 +32,19 @@ var version = "dev"
 
 // Flags
 var (
-	outputDir      string
-	outputFormat   string
-	dryRun         bool
-	verbose        bool
-	force          bool
-	mergeMode      bool
-	addCustomBlock bool
-	compactMode    bool
-	parallel       bool
+	outputDir         string
+	outputFormat      string
+	dryRun            bool
+	verbose           bool
+	force             bool
+	mergeMode         bool
+	addCustomBlock    bool
+	compactMode       bool
+	parallel          bool
+	usageMode         bool
+	insightsSince     string
+	insightsFormat    string
+	insightsSubagents bool
 )
 
 var rootCmd = &cobra.Command{
@@ -106,6 +111,17 @@ Press Ctrl+C to stop watching.`,
 	RunE: runWatch,
 }
 
+var insightsCmd = &cobra.Command{
+	Use:   "insights [path]",
+	Short: "Analyze Claude Code usage for a project",
+	Long: `Analyze Claude Code JSONL session logs to show tool usage, file interaction
+patterns, token consumption, cost estimates, and AI pain points.
+
+Data is read locally from ~/.claude/projects/ and never sent anywhere.`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runInsights,
+}
+
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print version information",
@@ -139,6 +155,7 @@ func init() {
 	scanCmd.Flags().BoolVar(&addCustomBlock, "add-custom", false, "Add a custom section placeholder to output")
 	scanCmd.Flags().BoolVarP(&compactMode, "compact", "c", false, "Generate compact output (~45% smaller, optimized for token efficiency)")
 	scanCmd.Flags().BoolVarP(&parallel, "parallel", "p", true, "Run detectors in parallel for faster analysis (default: true)")
+	scanCmd.Flags().BoolVar(&usageMode, "usage", false, "Include AI usage insights from Claude Code session logs")
 
 	// Sync command flags
 	syncCmd.Flags().BoolVarP(&dryRun, "dry-run", "n", false, "Show what would be generated without writing files")
@@ -147,6 +164,12 @@ func init() {
 	syncCmd.Flags().BoolVar(&addCustomBlock, "add-custom", false, "Add a custom section placeholder to output")
 	syncCmd.Flags().BoolVarP(&compactMode, "compact", "c", false, "Generate compact output (~45% smaller, optimized for token efficiency)")
 	syncCmd.Flags().BoolVarP(&parallel, "parallel", "p", true, "Run detectors in parallel for faster analysis (default: true)")
+	syncCmd.Flags().BoolVar(&usageMode, "usage", false, "Include AI usage insights from Claude Code session logs")
+
+	// Insights command flags
+	insightsCmd.Flags().StringVarP(&insightsSince, "since", "s", "", "Date filter (e.g., 7d, 30d, 2025-01-01)")
+	insightsCmd.Flags().StringVarP(&insightsFormat, "format", "f", "text", "Output format: text, json")
+	insightsCmd.Flags().BoolVar(&insightsSubagents, "subagents", true, "Include subagent data")
 
 	// Watch command flags
 	watchCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed output")
@@ -156,6 +179,7 @@ func init() {
 	rootCmd.AddCommand(scanCmd)
 	rootCmd.AddCommand(syncCmd)
 	rootCmd.AddCommand(watchCmd)
+	rootCmd.AddCommand(insightsCmd)
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(upgradeCmd)
 }
@@ -290,6 +314,13 @@ func runScan(cmd *cobra.Command, args []string) error {
 		fmt.Printf("   Conventions: %d\n", len(analysis.Conventions))
 	}
 
+	// Include usage insights if requested
+	if usageMode {
+		if err := attachUsageInsights(ctx, absPath, analysis); err != nil {
+			fmt.Printf("⚠️  Usage analysis: %v\n", err)
+		}
+	}
+
 	// Generate output for each format
 	for _, format := range formats {
 		if err := generateOutput(absPath, format, analysis, dryRun, compactMode); err != nil {
@@ -368,6 +399,13 @@ func runSync(cmd *cobra.Command, args []string) error {
 		fmt.Printf("   Languages: %d\n", len(analysis.TechStack.Languages))
 		fmt.Printf("   Frameworks: %d\n", len(analysis.TechStack.Frameworks))
 		fmt.Printf("   Conventions: %d\n", len(analysis.Conventions))
+	}
+
+	// Include usage insights if requested
+	if usageMode {
+		if err := attachUsageInsights(ctx, absPath, analysis); err != nil {
+			fmt.Printf("⚠️  Usage analysis: %v\n", err)
+		}
 	}
 
 	// Generate output for each format in config
@@ -755,6 +793,212 @@ func isGeneratedFile(path string) bool {
 		"copilot-instructions.md": true,
 	}
 	return generated[name]
+}
+
+func runInsights(cmd *cobra.Command, args []string) error {
+	targetPath := "."
+	if len(args) > 0 {
+		targetPath = args[0]
+	}
+
+	absPath, err := filepath.Abs(targetPath)
+	if err != nil {
+		return fmt.Errorf("failed to resolve path: %w", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		cancel()
+	}()
+
+	opts := usage.Options{
+		IncludeSubagents: insightsSubagents,
+	}
+
+	if insightsSince != "" {
+		since, err := parseSinceFlag(insightsSince)
+		if err != nil {
+			return fmt.Errorf("invalid --since value: %w", err)
+		}
+		opts.Since = since
+	}
+
+	fmt.Printf("🔍 Analyzing Claude Code usage for %s...\n", filepath.Base(absPath))
+
+	insights, err := usage.AnalyzeUsage(ctx, absPath, opts)
+	if err != nil {
+		return fmt.Errorf("usage analysis failed: %w", err)
+	}
+
+	if insights == nil {
+		fmt.Println("No Claude Code session data found for this project.")
+		fmt.Printf("Expected logs at: ~/.claude/projects/%s/\n", usage.EncodeProjectPath(absPath))
+		return nil
+	}
+
+	if insightsFormat == "json" {
+		return printInsightsJSON(insights)
+	}
+
+	printInsightsText(insights, filepath.Base(absPath))
+	return nil
+}
+
+func attachUsageInsights(ctx context.Context, absPath string, analysis *types.Analysis) error {
+	opts := usage.Options{
+		Since:            time.Now().AddDate(0, -1, 0), // Last 30 days
+		IncludeSubagents: true,
+	}
+
+	insights, err := usage.AnalyzeUsage(ctx, absPath, opts)
+	if err != nil {
+		return err
+	}
+
+	if insights != nil {
+		analysis.UsageInsights = insights
+		if verbose {
+			fmt.Printf("   📊 Usage: %d sessions, %d turns, $%.2f estimated cost\n",
+				insights.SessionCount, insights.TotalTurns, insights.CostEstimate.TotalCost)
+		}
+	}
+
+	return nil
+}
+
+func printInsightsJSON(insights *types.UsageInsights) error {
+	data, err := json.MarshalIndent(insights, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(data))
+	return nil
+}
+
+func printInsightsText(insights *types.UsageInsights, projectName string) {
+	dateRange := fmt.Sprintf("%s - %s",
+		insights.DateRange.Start.Format("Jan 2, 2006"),
+		insights.DateRange.End.Format("Jan 2, 2006"))
+
+	fmt.Printf("\nClaude Code Usage Insights for: %s\n", projectName)
+	fmt.Printf("Period: %s (%d sessions, %d turns)\n", dateRange, insights.SessionCount, insights.TotalTurns)
+	fmt.Println(strings.Repeat("─", 60))
+
+	// Tool Usage
+	if len(insights.ToolUsage) > 0 {
+		fmt.Println("\nTOOL USAGE")
+		maxCount := insights.ToolUsage[0].Count
+		for _, ts := range insights.ToolUsage {
+			barLen := 0
+			if maxCount > 0 {
+				barLen = ts.Count * 25 / maxCount
+			}
+			bar := strings.Repeat("█", barLen)
+			fmt.Printf("  %-14s %5d (%4.1f%%)  %s\n", ts.Name, ts.Count, ts.Percentage, bar)
+		}
+	}
+
+	// Hot Files
+	if len(insights.HotFiles) > 0 {
+		fmt.Println("\nHOT FILES (most AI interaction)")
+		fmt.Printf("  %-4s %-45s %5s %5s %5s %5s\n", "Rank", "File", "Reads", "Edits", "Writes", "Total")
+		limit := len(insights.HotFiles)
+		if limit > 10 {
+			limit = 10
+		}
+		for i, hf := range insights.HotFiles[:limit] {
+			path := hf.Path
+			if len(path) > 45 {
+				path = "..." + path[len(path)-42:]
+			}
+			fmt.Printf("  %-4d %-45s %5d %5d %5d %5d\n",
+				i+1, path, hf.ReadCount, hf.EditCount, hf.WriteCount, hf.TotalOps)
+		}
+	}
+
+	// Pain Points
+	if len(insights.PainPoints) > 0 {
+		fmt.Println("\nAI PAIN POINTS")
+		for _, pp := range insights.PainPoints {
+			path := pp.File
+			if len(path) > 40 {
+				path = "..." + path[len(path)-37:]
+			}
+			fmt.Printf("  ! %-40s %s\n", path, pp.Description)
+		}
+	}
+
+	// Token Usage
+	if len(insights.ModelBreakdown) > 0 {
+		fmt.Println("\nTOKEN USAGE")
+		fmt.Printf("  %-25s %10s %10s %10s\n", "Model", "Input", "Output", "Total")
+		for _, mu := range insights.ModelBreakdown {
+			fmt.Printf("  %-25s %10s %10s %10s\n",
+				mu.Model,
+				formatTokens(mu.TokenUsage.InputTokens),
+				formatTokens(mu.TokenUsage.OutputTokens),
+				formatTokens(mu.TokenUsage.TotalTokens))
+		}
+		fmt.Printf("  %-25s %10s %10s %10s\n",
+			"Total",
+			formatTokens(insights.TokenUsage.InputTokens),
+			formatTokens(insights.TokenUsage.OutputTokens),
+			formatTokens(insights.TokenUsage.TotalTokens))
+	}
+
+	// Cost Estimate
+	fmt.Printf("\nCOST ESTIMATE: $%.2f\n", insights.CostEstimate.TotalCost)
+	fmt.Printf("  Input: $%.2f  Output: $%.2f  Cache: $%.2f\n",
+		insights.CostEstimate.InputCost, insights.CostEstimate.OutputCost, insights.CostEstimate.CacheCost)
+	fmt.Println()
+}
+
+func formatTokens(n int64) string {
+	switch {
+	case n >= 1_000_000_000:
+		return fmt.Sprintf("%.1fB", float64(n)/1_000_000_000)
+	case n >= 1_000_000:
+		return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
+	case n >= 1_000:
+		return fmt.Sprintf("%.1fK", float64(n)/1_000)
+	default:
+		return fmt.Sprintf("%d", n)
+	}
+}
+
+func parseSinceFlag(s string) (time.Time, error) {
+	// Handle relative durations like "7d", "30d"
+	if len(s) > 1 && s[len(s)-1] == 'd' {
+		days := 0
+		for _, c := range s[:len(s)-1] {
+			if c < '0' || c > '9' {
+				break
+			}
+			days = days*10 + int(c-'0')
+		}
+		if days > 0 {
+			return time.Now().AddDate(0, 0, -days), nil
+		}
+	}
+
+	// Try ISO date format
+	t, err := time.Parse("2006-01-02", s)
+	if err == nil {
+		return t, nil
+	}
+
+	// Try YYYYMMDD format
+	t, err = time.Parse("20060102", s)
+	if err == nil {
+		return t, nil
+	}
+
+	return time.Time{}, fmt.Errorf("unsupported format %q (use 7d, 30d, or 2025-01-01)", s)
 }
 
 func main() {

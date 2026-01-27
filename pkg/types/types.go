@@ -20,6 +20,7 @@ type Analysis struct {
 	ConfigFiles      []ConfigFileInfo  `json:"config_files,omitempty"`
 	CLIInfo          *CLIInfo          `json:"cli_info,omitempty"`
 	ProjectTools     []ProjectTool     `json:"project_tools,omitempty"`
+	UsageInsights    *UsageInsights    `json:"usage_insights,omitempty"`
 }
 
 // ReadmeContent represents parsed README information
