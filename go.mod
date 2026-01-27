@@ -11,7 +11,7 @@ require (
 	github.com/go-python/gpython v0.2.0
 	github.com/karrick/godirwalk v1.17.0
 	github.com/spf13/cobra v1.10.2
-	golang.org/x/mod v0.30.0
+	golang.org/x/mod v0.32.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
