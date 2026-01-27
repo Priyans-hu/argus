@@ -117,6 +117,9 @@ func (g *ClaudeGenerator) Generate(analysis *types.Analysis) ([]byte, error) {
 		g.writeDependencies(&buf, analysis.Dependencies)
 	}
 
+	// AI Usage Insights (from Claude Code session logs)
+	g.writeUsageInsights(&buf, analysis.UsageInsights)
+
 	// Import references to .claude/ rules (if claude-code format is also being generated)
 	g.writeImports(&buf, analysis)
 
@@ -1539,4 +1542,62 @@ func (g *ClaudeGenerator) writeImports(buf *bytes.Buffer, analysis *types.Analys
 		fmt.Fprintf(buf, "- %s\n", imp)
 	}
 	buf.WriteString("\n")
+}
+
+// writeUsageInsights writes the AI usage insights section
+func (g *ClaudeGenerator) writeUsageInsights(buf *bytes.Buffer, insights *types.UsageInsights) {
+	if insights == nil {
+		return
+	}
+
+	buf.WriteString("## AI Usage Insights\n\n")
+
+	dateRange := fmt.Sprintf("%s - %s",
+		insights.DateRange.Start.Format("Jan 2, 2006"),
+		insights.DateRange.End.Format("Jan 2, 2006"))
+	fmt.Fprintf(buf, "*Based on %d Claude Code sessions (%s)*\n\n", insights.SessionCount, dateRange)
+
+	// Hot Files
+	if len(insights.HotFiles) > 0 {
+		buf.WriteString("### Hot Files\n\n")
+		if g.compact {
+			buf.WriteString("Files most accessed by AI — prioritize keeping them well-documented:\n")
+		} else {
+			buf.WriteString("These files are most frequently accessed by AI. Prioritize keeping them well-documented:\n")
+		}
+
+		limit := len(insights.HotFiles)
+		if g.compact && limit > 5 {
+			limit = 5
+		} else if limit > 10 {
+			limit = 10
+		}
+
+		for _, hf := range insights.HotFiles[:limit] {
+			parts := []string{}
+			if hf.ReadCount > 0 {
+				parts = append(parts, fmt.Sprintf("%d reads", hf.ReadCount))
+			}
+			if hf.EditCount > 0 {
+				parts = append(parts, fmt.Sprintf("%d edits", hf.EditCount))
+			}
+			if hf.WriteCount > 0 {
+				parts = append(parts, fmt.Sprintf("%d writes", hf.WriteCount))
+			}
+			detail := strings.Join(parts, ", ")
+			fmt.Fprintf(buf, "- `%s` — %d ops (%s)\n", hf.Path, hf.TotalOps, detail)
+		}
+		buf.WriteString("\n")
+	}
+
+	// Pain Points
+	if len(insights.PainPoints) > 0 {
+		buf.WriteString("### AI Pain Points\n\n")
+		buf.WriteString("Files that cause AI difficulty — consider adding explicit conventions:\n")
+
+		for _, pp := range insights.PainPoints {
+			fmt.Fprintf(buf, "- `%s` — %s\n", pp.File, pp.Description)
+		}
+		buf.WriteString("\n")
+	}
 }

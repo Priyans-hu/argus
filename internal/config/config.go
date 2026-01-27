@@ -37,6 +37,16 @@ type Config struct {
 
 	// Claude Code specific configuration
 	ClaudeCode *ClaudeCodeConfig `yaml:"claude_code,omitempty"`
+
+	// AI usage analysis configuration
+	Usage *UsageConfig `yaml:"usage,omitempty"`
+}
+
+// UsageConfig controls AI usage analysis behavior
+type UsageConfig struct {
+	Enabled          bool   `yaml:"enabled"`                     // Auto-include in scan/sync
+	Since            string `yaml:"since,omitempty"`             // Default date filter: "30d"
+	IncludeSubagents bool   `yaml:"include_subagents,omitempty"` // Include subagent data
 }
 
 // DefaultConfig returns a config with sensible defaults
@@ -154,5 +164,12 @@ custom_conventions:
 #   rules: true     # Generate .claude/rules/*.md
 #   mcp: true       # Generate .claude/mcp.json (MCP server configs)
 #   hooks: true     # Generate .claude/settings.json with automation hooks
+
+# AI usage analysis (parses Claude Code session logs)
+# Enriches CLAUDE.md with hot files, pain points, and cost data
+# usage:
+#   enabled: true          # Auto-include usage insights in scan/sync
+#   since: "30d"           # Default date filter (7d, 30d, 90d, or YYYY-MM-DD)
+#   include_subagents: true # Include subagent session data
 `
 }
