@@ -1,0 +1,127 @@
+{
+  "name": "argus-vscode",
+  "displayName": "Argus - AI Context Generator",
+  "description": "Scan your codebase and generate AI context files (CLAUDE.md, .cursorrules, etc.) directly from VS Code",
+  "version": "0.1.0",
+  "publisher": "priyans-hu",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Priyans-hu/argus"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Programming Languages"
+  ],
+  "keywords": [
+    "ai",
+    "claude",
+    "cursor",
+    "copilot",
+    "context",
+    "codebase",
+    "analyzer"
+  ],
+  "activationEvents": [
+    "workspaceContains:.argus.yaml"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "argus.scan",
+        "title": "Argus: Scan Codebase"
+      },
+      {
+        "command": "argus.watch",
+        "title": "Argus: Watch for Changes"
+      },
+      {
+        "command": "argus.stopWatch",
+        "title": "Argus: Stop Watching"
+      },
+      {
+        "command": "argus.init",
+        "title": "Argus: Initialize Config"
+      },
+      {
+        "command": "argus.insights",
+        "title": "Argus: Show Usage Insights"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "argus.scan",
+          "when": "explorerResourceIsFolder",
+          "group": "argus@1"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Argus",
+      "properties": {
+        "argus.binaryPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the argus binary. Leave empty for automatic detection."
+        },
+        "argus.defaultFormat": {
+          "type": "string",
+          "default": "claude",
+          "enum": [
+            "claude",
+            "claude-code",
+            "cursor",
+            "copilot",
+            "continue",
+            "all"
+          ],
+          "description": "Default output format for scan."
+        },
+        "argus.autoScanOnOpen": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically scan the workspace when it is opened."
+        },
+        "argus.parallelMode": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run detectors in parallel for faster analysis."
+        },
+        "argus.compactMode": {
+          "type": "boolean",
+          "default": false,
+          "description": "Generate compact output for token efficiency."
+        },
+        "argus.mergeMode": {
+          "type": "boolean",
+          "default": true,
+          "description": "Preserve custom sections when regenerating."
+        },
+        "argus.enableAI": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable AI enrichment via local Ollama."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.15.0",
+    "@typescript-eslint/parser": "^6.15.0",
+    "eslint": "^8.56.0",
+    "typescript": "^5.3.3"
+  }
+}
