@@ -1,5 +1,11 @@
 # Argus
 
+[![CI](https://github.com/Priyans-hu/argus/actions/workflows/ci.yml/badge.svg)](https://github.com/Priyans-hu/argus/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/Priyans-hu/argus)](https://goreportcard.com/report/github.com/Priyans-hu/argus)
+[![Release](https://img.shields.io/github/v/release/Priyans-hu/argus)](https://github.com/Priyans-hu/argus/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/Priyans-hu/argus)](https://go.dev/)
+
 **The all-seeing code analyzer. Help AI grok your codebase.**
 
 Argus scans your codebase and generates optimized context files for AI coding assistants — no more manually writing `CLAUDE.md` or `.cursorrules`.
