@@ -21,6 +21,14 @@ type ClaudeCodeConfig struct {
 	Hooks  bool `yaml:"hooks"` // Generate .claude/settings.json with hooks
 }
 
+// AIConfig controls AI enrichment via local models (Ollama)
+type AIConfig struct {
+	Enabled  bool   `yaml:"enabled"`
+	Endpoint string `yaml:"endpoint,omitempty"` // Ollama endpoint (default: http://localhost:11434)
+	Model    string `yaml:"model,omitempty"`    // Model name (default: llama3.2)
+	Timeout  int    `yaml:"timeout,omitempty"`  // Timeout in seconds (default: 120)
+}
+
 // MonorepoConfig controls monorepo per-workspace generation
 type MonorepoConfig struct {
 	PerWorkspace       bool                          `yaml:"per_workspace"`            // Generate output files in each workspace
@@ -55,6 +63,9 @@ type Config struct {
 
 	// AI usage analysis configuration
 	Usage *UsageConfig `yaml:"usage,omitempty"`
+
+	// AI enrichment via local models (Ollama)
+	AI *AIConfig `yaml:"ai,omitempty"`
 
 	// Monorepo per-workspace generation
 	Monorepo *MonorepoConfig `yaml:"monorepo,omitempty"`
@@ -189,6 +200,15 @@ custom_conventions:
 #   enabled: true          # Auto-include usage insights in scan/sync
 #   since: "30d"           # Default date filter (7d, 30d, 90d, or YYYY-MM-DD)
 #   include_subagents: true # Include subagent session data
+
+# AI enrichment via local Ollama models
+# Adds semantic insights: better project summary, enriched conventions,
+# architecture insights, and best practices recommendations
+# ai:
+#   enabled: true              # Enable AI enrichment (also available via --ai flag)
+#   endpoint: "http://localhost:11434"  # Ollama API endpoint
+#   model: "llama3.2"          # Ollama model to use
+#   timeout: 120               # Request timeout in seconds
 
 # Monorepo configuration
 # When detected, generates output files per workspace/package

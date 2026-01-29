@@ -52,6 +52,9 @@ func (g *CopilotGenerator) Generate(analysis *types.Analysis) ([]byte, error) {
 	// Don'ts - common mistakes to avoid
 	g.writeDonts(&buf, &analysis.TechStack)
 
+	// AI enrichment
+	g.writeAIInsights(&buf, analysis.AIEnrichment)
+
 	return buf.Bytes(), nil
 }
 
@@ -285,4 +288,25 @@ func (g *CopilotGenerator) writeDonts(buf *bytes.Buffer, stack *types.TechStack)
 	}
 
 	buf.WriteString("\n")
+}
+
+// writeAIInsights writes AI-enriched insights if available
+func (g *CopilotGenerator) writeAIInsights(buf *bytes.Buffer, enrichment *types.AIEnrichment) {
+	if enrichment == nil {
+		return
+	}
+
+	buf.WriteString("## AI Insights\n\n")
+
+	if enrichment.ProjectSummary != "" {
+		fmt.Fprintf(buf, "%s\n\n", enrichment.ProjectSummary)
+	}
+
+	if len(enrichment.BestPractices) > 0 {
+		buf.WriteString("**Best Practices:**\n")
+		for _, bp := range enrichment.BestPractices {
+			fmt.Fprintf(buf, "- %s: %s\n", bp.Title, bp.Description)
+		}
+		buf.WriteString("\n")
+	}
 }

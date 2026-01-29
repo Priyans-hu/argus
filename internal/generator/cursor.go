@@ -49,6 +49,9 @@ func (g *CursorGenerator) Generate(analysis *types.Analysis) ([]byte, error) {
 	// Key files reference
 	g.writeKeyFilesReference(&buf, analysis.KeyFiles)
 
+	// AI enrichment
+	g.writeAIInsights(&buf, analysis.AIEnrichment)
+
 	return buf.Bytes(), nil
 }
 
@@ -318,4 +321,33 @@ func (g *CursorGenerator) writeKeyFilesReference(buf *bytes.Buffer, keyFiles []t
 		}
 	}
 	buf.WriteString("\n")
+}
+
+// writeAIInsights writes AI-enriched insights if available
+func (g *CursorGenerator) writeAIInsights(buf *bytes.Buffer, enrichment *types.AIEnrichment) {
+	if enrichment == nil {
+		return
+	}
+
+	buf.WriteString("## AI Insights\n\n")
+
+	if enrichment.ProjectSummary != "" {
+		fmt.Fprintf(buf, "%s\n\n", enrichment.ProjectSummary)
+	}
+
+	if len(enrichment.BestPractices) > 0 {
+		buf.WriteString("### Best Practices\n\n")
+		for _, bp := range enrichment.BestPractices {
+			fmt.Fprintf(buf, "- %s: %s\n", bp.Title, bp.Description)
+		}
+		buf.WriteString("\n")
+	}
+
+	if len(enrichment.Conventions) > 0 {
+		buf.WriteString("### Suggested Conventions\n\n")
+		for _, c := range enrichment.Conventions {
+			fmt.Fprintf(buf, "- %s: %s\n", c.Title, c.Description)
+		}
+		buf.WriteString("\n")
+	}
 }
