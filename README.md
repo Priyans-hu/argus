@@ -5,6 +5,8 @@
 [![Release](https://img.shields.io/github/v/release/Priyans-hu/argus)](https://github.com/Priyans-hu/argus/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/Priyans-hu/argus)](https://go.dev/)
+[![GitHub stars](https://img.shields.io/github/stars/Priyans-hu/argus?style=social)](https://github.com/Priyans-hu/argus)
+[![Homebrew](https://img.shields.io/badge/homebrew-tap-orange)](https://github.com/Priyans-hu/homebrew-tap)
 
 **The all-seeing code analyzer. Help AI grok your codebase.**
 
@@ -40,10 +42,10 @@ argus scan
 go install github.com/Priyans-hu/argus/cmd/argus@latest
 ```
 
-### Homebrew (coming soon)
+### Homebrew
 
 ```bash
-brew install argus
+brew install Priyans-hu/tap/argus
 ```
 
 ### Binary

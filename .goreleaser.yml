@@ -37,6 +37,18 @@ checksum:
 snapshot:
   version_template: "{{ .Tag }}-next"
 
+brews:
+  - repository:
+      owner: Priyans-hu
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/Priyans-hu/argus"
+    description: "Auto-generate AI context files from your codebase"
+    license: "MIT"
+    test: |
+      assert_match version.to_s, shell_output("#{bin}/argus --version")
+
 changelog:
   sort: asc
   use: github
