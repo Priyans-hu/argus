@@ -42,6 +42,7 @@ var (
 	compactMode       bool
 	parallel          bool
 	usageMode         bool
+	monorepoMode      bool
 	insightsSince     string
 	insightsFormat    string
 	insightsSubagents bool
@@ -156,6 +157,7 @@ func init() {
 	scanCmd.Flags().BoolVarP(&compactMode, "compact", "c", false, "Generate compact output (~45% smaller, optimized for token efficiency)")
 	scanCmd.Flags().BoolVarP(&parallel, "parallel", "p", true, "Run detectors in parallel for faster analysis (default: true)")
 	scanCmd.Flags().BoolVar(&usageMode, "usage", false, "Include AI usage insights from Claude Code session logs")
+	scanCmd.Flags().BoolVar(&monorepoMode, "monorepo", false, "Generate output per workspace in monorepo projects")
 
 	// Sync command flags
 	syncCmd.Flags().BoolVarP(&dryRun, "dry-run", "n", false, "Show what would be generated without writing files")
@@ -321,11 +323,124 @@ func runScan(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Check for monorepo mode
+	isMonorepo := monorepoMode
+	if !isMonorepo && cfg.Monorepo != nil && cfg.Monorepo.PerWorkspace {
+		isMonorepo = true
+	}
+
+	if isMonorepo && analysis.MonorepoInfo != nil && analysis.MonorepoInfo.IsMonorepo {
+		return runMonorepoScan(ctx, absPath, cfg, formats, analysis)
+	}
+
 	// Generate output for each format
 	for _, format := range formats {
 		if err := generateOutput(absPath, format, analysis, dryRun, compactMode); err != nil {
 			return err
 		}
+	}
+
+	return nil
+}
+
+func runMonorepoScan(ctx context.Context, absPath string, cfg *config.Config, formats []string, rootAnalysis *types.Analysis) error {
+	maxConcurrent := 4
+	if cfg.Monorepo != nil && cfg.Monorepo.MaxConcurrent > 0 {
+		maxConcurrent = cfg.Monorepo.MaxConcurrent
+	}
+
+	ma := analyzer.NewMonorepoAnalyzer(absPath, parallel, maxConcurrent)
+	wsResults := ma.AnalyzeWorkspaces(ctx, rootAnalysis.MonorepoInfo)
+
+	if len(wsResults) == 0 {
+		fmt.Println("No workspaces found to analyze, falling back to single-project mode")
+		for _, format := range formats {
+			if err := generateOutput(absPath, format, rootAnalysis, dryRun, compactMode); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	fmt.Printf("   Found %d workspaces\n", len(wsResults))
+
+	// Generate per-workspace output
+	successCount := 0
+	for _, ws := range wsResults {
+		if ws.Error != nil {
+			fmt.Printf("   [skip] %s: %v\n", ws.Path, ws.Error)
+			continue
+		}
+
+		// Determine formats for this workspace
+		wsFormats := formats
+		if cfg.Monorepo != nil && cfg.Monorepo.WorkspaceOverrides != nil {
+			if override, ok := cfg.Monorepo.WorkspaceOverrides[ws.Path]; ok {
+				if len(override.Output) > 0 {
+					wsFormats = override.Output
+				}
+				for _, conv := range override.CustomConventions {
+					ws.Analysis.Conventions = append(ws.Analysis.Conventions, types.Convention{
+						Category:    "custom",
+						Description: conv,
+					})
+				}
+			}
+		}
+
+		wsAbsPath := filepath.Join(absPath, ws.Path)
+		for _, format := range wsFormats {
+			if err := generateOutput(wsAbsPath, format, ws.Analysis, dryRun, compactMode); err != nil {
+				fmt.Printf("   [warn] %s (%s): %v\n", ws.Path, format, err)
+			}
+		}
+		successCount++
+	}
+
+	// Generate root overview
+	rootOverview := true
+	if cfg.Monorepo != nil {
+		rootOverview = cfg.Monorepo.RootOverview
+	}
+
+	if rootOverview {
+		var wsInfos []generator.WorkspaceInfo
+		for _, ws := range wsResults {
+			if ws.Error != nil {
+				continue
+			}
+			var langs []string
+			for _, l := range ws.Analysis.TechStack.Languages {
+				langs = append(langs, l.Name)
+			}
+			wsInfos = append(wsInfos, generator.WorkspaceInfo{
+				Path:      ws.Path,
+				Name:      ws.Name,
+				Languages: langs,
+				Commands:  len(ws.Analysis.Commands),
+				Endpoints: len(ws.Analysis.Endpoints),
+			})
+		}
+
+		overviewGen := generator.NewMonorepoOverviewGenerator("claude")
+		overview, err := overviewGen.Generate(rootAnalysis, wsInfos)
+		if err != nil {
+			return fmt.Errorf("overview generation failed: %w", err)
+		}
+
+		outPath := filepath.Join(absPath, "CLAUDE.md")
+		if dryRun {
+			fmt.Printf("\n   Would write overview to %s\n", outPath)
+		} else {
+			if err := os.WriteFile(outPath, overview, 0644); err != nil {
+				return fmt.Errorf("failed to write overview: %w", err)
+			}
+			fmt.Printf("✅ Generated monorepo overview: %s\n", outPath)
+		}
+	}
+
+	if !dryRun {
+		fmt.Printf("✅ Generated context files for %d/%d workspaces\n", successCount, len(wsResults))
 	}
 
 	return nil

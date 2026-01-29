@@ -21,6 +21,21 @@ type ClaudeCodeConfig struct {
 	Hooks  bool `yaml:"hooks"` // Generate .claude/settings.json with hooks
 }
 
+// MonorepoConfig controls monorepo per-workspace generation
+type MonorepoConfig struct {
+	PerWorkspace       bool                          `yaml:"per_workspace"`            // Generate output files in each workspace
+	RootOverview       bool                          `yaml:"root_overview"`            // Generate root-level overview file
+	MaxConcurrent      int                           `yaml:"max_concurrent,omitempty"` // Max workspaces to analyze concurrently (default 4)
+	WorkspaceOverrides map[string]*WorkspaceOverride `yaml:"workspaces,omitempty"`     // Per-workspace overrides
+}
+
+// WorkspaceOverride allows customizing output for a specific workspace
+type WorkspaceOverride struct {
+	Output            []string `yaml:"output,omitempty"`
+	CustomConventions []string `yaml:"custom_conventions,omitempty"`
+	Ignore            []string `yaml:"ignore,omitempty"`
+}
+
 // Config represents Argus configuration
 type Config struct {
 	// Output formats to generate
@@ -40,6 +55,9 @@ type Config struct {
 
 	// AI usage analysis configuration
 	Usage *UsageConfig `yaml:"usage,omitempty"`
+
+	// Monorepo per-workspace generation
+	Monorepo *MonorepoConfig `yaml:"monorepo,omitempty"`
 }
 
 // UsageConfig controls AI usage analysis behavior
@@ -171,5 +189,19 @@ custom_conventions:
 #   enabled: true          # Auto-include usage insights in scan/sync
 #   since: "30d"           # Default date filter (7d, 30d, 90d, or YYYY-MM-DD)
 #   include_subagents: true # Include subagent session data
+
+# Monorepo configuration
+# When detected, generates output files per workspace/package
+# monorepo:
+#   per_workspace: true      # Generate output files in each workspace
+#   root_overview: true      # Generate root-level overview file
+#   max_concurrent: 4        # Max workspaces to analyze concurrently
+#   workspaces:              # Per-workspace overrides
+#     apps/web:
+#       output: [claude, cursor]
+#       custom_conventions:
+#         - "Frontend app - use React patterns"
+#     packages/shared:
+#       output: [claude]
 `
 }
