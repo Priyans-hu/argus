@@ -12,6 +12,8 @@
 
 Argus scans your codebase and generates optimized context files for AI coding assistants — no more manually writing `CLAUDE.md` or `.cursorrules`.
 
+> If you find this useful, consider giving it a [⭐ star on GitHub](https://github.com/Priyans-hu/argus) — it helps others discover the project!
+
 ## The Problem
 
 ```
@@ -35,6 +37,12 @@ argus scan
 ```
 
 ## Installation
+
+### Quick Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Priyans-hu/argus/main/install.sh | bash
+```
 
 ### Go
 
