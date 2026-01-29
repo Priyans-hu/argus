@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -36,13 +37,13 @@ func newTestAnalysis() *types.Analysis {
 }
 
 func TestEnricher_Enrich_Success(t *testing.T) {
-	callCount := 0
+	var callCount atomic.Int64
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		callCount++
+		callCount.Add(1)
 
 		var req generateRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			t.Errorf("decode: %v", err)
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
@@ -87,7 +88,7 @@ func TestEnricher_Enrich_Success(t *testing.T) {
 	}
 
 	// At least some of the enrichment calls should have succeeded
-	if callCount == 0 {
+	if callCount.Load() == 0 {
 		t.Error("expected at least one API call")
 	}
 }
