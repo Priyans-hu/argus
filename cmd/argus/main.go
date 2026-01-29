@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Priyans-hu/argus/internal/ai"
 	"github.com/Priyans-hu/argus/internal/analyzer"
 	"github.com/Priyans-hu/argus/internal/config"
 	"github.com/Priyans-hu/argus/internal/generator"
@@ -45,6 +46,7 @@ var (
 	insightsSince     string
 	insightsFormat    string
 	insightsSubagents bool
+	aiMode            bool
 )
 
 var rootCmd = &cobra.Command{
@@ -156,6 +158,7 @@ func init() {
 	scanCmd.Flags().BoolVarP(&compactMode, "compact", "c", false, "Generate compact output (~45% smaller, optimized for token efficiency)")
 	scanCmd.Flags().BoolVarP(&parallel, "parallel", "p", true, "Run detectors in parallel for faster analysis (default: true)")
 	scanCmd.Flags().BoolVar(&usageMode, "usage", false, "Include AI usage insights from Claude Code session logs")
+	scanCmd.Flags().BoolVar(&aiMode, "ai", false, "Enrich output with AI-generated insights via local Ollama")
 
 	// Sync command flags
 	syncCmd.Flags().BoolVarP(&dryRun, "dry-run", "n", false, "Show what would be generated without writing files")
@@ -165,6 +168,7 @@ func init() {
 	syncCmd.Flags().BoolVarP(&compactMode, "compact", "c", false, "Generate compact output (~45% smaller, optimized for token efficiency)")
 	syncCmd.Flags().BoolVarP(&parallel, "parallel", "p", true, "Run detectors in parallel for faster analysis (default: true)")
 	syncCmd.Flags().BoolVar(&usageMode, "usage", false, "Include AI usage insights from Claude Code session logs")
+	syncCmd.Flags().BoolVar(&aiMode, "ai", false, "Enrich output with AI-generated insights via local Ollama")
 
 	// Insights command flags
 	insightsCmd.Flags().StringVarP(&insightsSince, "since", "s", "", "Date filter (e.g., 7d, 30d, 2025-01-01)")
@@ -321,6 +325,13 @@ func runScan(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// AI enrichment if requested
+	if aiMode || (cfg.AI != nil && cfg.AI.Enabled) {
+		if err := runAIEnrichment(ctx, cfg, analysis); err != nil {
+			fmt.Printf("⚠️  AI enrichment: %v\n", err)
+		}
+	}
+
 	// Generate output for each format
 	for _, format := range formats {
 		if err := generateOutput(absPath, format, analysis, dryRun, compactMode); err != nil {
@@ -405,6 +416,13 @@ func runSync(cmd *cobra.Command, args []string) error {
 	if usageMode {
 		if err := attachUsageInsights(ctx, absPath, analysis); err != nil {
 			fmt.Printf("⚠️  Usage analysis: %v\n", err)
+		}
+	}
+
+	// AI enrichment if requested
+	if aiMode || (cfg.AI != nil && cfg.AI.Enabled) {
+		if err := runAIEnrichment(ctx, cfg, analysis); err != nil {
+			fmt.Printf("⚠️  AI enrichment: %v\n", err)
 		}
 	}
 
@@ -866,6 +884,48 @@ func attachUsageInsights(ctx context.Context, absPath string, analysis *types.An
 			fmt.Printf("   📊 Usage: %d sessions, %d turns, $%.2f estimated cost\n",
 				insights.SessionCount, insights.TotalTurns, insights.CostEstimate.TotalCost)
 		}
+	}
+
+	return nil
+}
+
+func runAIEnrichment(ctx context.Context, cfg *config.Config, analysis *types.Analysis) error {
+	aiCfg := &ai.Config{
+		Enabled: true,
+	}
+
+	// Apply config values if present
+	if cfg.AI != nil {
+		if cfg.AI.Endpoint != "" {
+			aiCfg.Endpoint = cfg.AI.Endpoint
+		}
+		if cfg.AI.Model != "" {
+			aiCfg.Model = cfg.AI.Model
+		}
+		if cfg.AI.Timeout > 0 {
+			aiCfg.Timeout = time.Duration(cfg.AI.Timeout) * time.Second
+		}
+	}
+
+	enricher := ai.NewEnricher(aiCfg)
+
+	if !enricher.IsAvailable(ctx) {
+		return fmt.Errorf("ollama is not running at %s (start with 'ollama serve')", aiCfg.Endpoint)
+	}
+
+	fmt.Println("🧠 Running AI enrichment...")
+	if err := enricher.Enrich(ctx, analysis); err != nil {
+		return err
+	}
+
+	if verbose && analysis.AIEnrichment != nil {
+		fmt.Printf("   🧠 AI: model=%s, summary=%d chars, conventions=%d, architecture=%d, practices=%d, patterns=%d\n",
+			analysis.AIEnrichment.Model,
+			len(analysis.AIEnrichment.ProjectSummary),
+			len(analysis.AIEnrichment.Conventions),
+			len(analysis.AIEnrichment.Architecture),
+			len(analysis.AIEnrichment.BestPractices),
+			len(analysis.AIEnrichment.Patterns))
 	}
 
 	return nil

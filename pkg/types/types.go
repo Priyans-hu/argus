@@ -21,6 +21,7 @@ type Analysis struct {
 	CLIInfo          *CLIInfo          `json:"cli_info,omitempty"`
 	ProjectTools     []ProjectTool     `json:"project_tools,omitempty"`
 	UsageInsights    *UsageInsights    `json:"usage_insights,omitempty"`
+	AIEnrichment     *AIEnrichment     `json:"ai_enrichment,omitempty"`
 }
 
 // ReadmeContent represents parsed README information
@@ -317,6 +318,22 @@ type CLIInfo struct {
 type Indicator struct {
 	Symbol  string `json:"symbol"`
 	Meaning string `json:"meaning"`
+}
+
+// AIEnrichment holds AI-generated insights about the project
+type AIEnrichment struct {
+	ProjectSummary string            `json:"project_summary,omitempty"`
+	Conventions    []EnrichedInsight `json:"conventions,omitempty"`
+	Architecture   []EnrichedInsight `json:"architecture,omitempty"`
+	BestPractices  []EnrichedInsight `json:"best_practices,omitempty"`
+	Patterns       []EnrichedInsight `json:"patterns,omitempty"`
+	Model          string            `json:"model,omitempty"`
+}
+
+// EnrichedInsight represents a single AI-generated insight
+type EnrichedInsight struct {
+	Title       string `json:"title"`
+	Description string `json:"description"`
 }
 
 // ClaudeCodeConfig controls what Claude Code configs to generate
