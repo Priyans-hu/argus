@@ -33,14 +33,14 @@ var version = "dev"
 
 // Flags
 var (
-	outputDir         string
-	outputFormat      string
-	dryRun            bool
-	verbose           bool
-	force             bool
-	mergeMode         bool
-	addCustomBlock    bool
-	compactMode       bool
+	outputDir      string
+	outputFormat   string
+	dryRun         bool
+	verbose        bool
+	force          bool
+	mergeMode      bool
+	addCustomBlock bool
+
 	parallel          bool
 	usageMode         bool
 	monorepoMode      bool
@@ -156,7 +156,7 @@ func init() {
 	scanCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed output")
 	scanCmd.Flags().BoolVarP(&mergeMode, "merge", "m", true, "Preserve custom sections when regenerating (default: true)")
 	scanCmd.Flags().BoolVar(&addCustomBlock, "add-custom", false, "Add a custom section placeholder to output")
-	scanCmd.Flags().BoolVarP(&compactMode, "compact", "c", false, "Generate compact output (~45% smaller, optimized for token efficiency)")
+
 	scanCmd.Flags().BoolVarP(&parallel, "parallel", "p", true, "Run detectors in parallel for faster analysis (default: true)")
 	scanCmd.Flags().BoolVar(&usageMode, "usage", false, "Include AI usage insights from Claude Code session logs")
 	scanCmd.Flags().BoolVar(&aiMode, "ai", false, "Enrich output with AI-generated insights via local Ollama")
@@ -167,7 +167,7 @@ func init() {
 	syncCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed output")
 	syncCmd.Flags().BoolVarP(&mergeMode, "merge", "m", true, "Preserve custom sections when regenerating (default: true)")
 	syncCmd.Flags().BoolVar(&addCustomBlock, "add-custom", false, "Add a custom section placeholder to output")
-	syncCmd.Flags().BoolVarP(&compactMode, "compact", "c", false, "Generate compact output (~45% smaller, optimized for token efficiency)")
+
 	syncCmd.Flags().BoolVarP(&parallel, "parallel", "p", true, "Run detectors in parallel for faster analysis (default: true)")
 	syncCmd.Flags().BoolVar(&usageMode, "usage", false, "Include AI usage insights from Claude Code session logs")
 	syncCmd.Flags().BoolVar(&aiMode, "ai", false, "Enrich output with AI-generated insights via local Ollama")
@@ -346,7 +346,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 	// Generate output for each format
 	for _, format := range formats {
-		if err := generateOutput(absPath, format, analysis, dryRun, compactMode); err != nil {
+		if err := generateOutput(absPath, format, analysis, dryRun); err != nil {
 			return err
 		}
 	}
@@ -366,7 +366,7 @@ func runMonorepoScan(ctx context.Context, absPath string, cfg *config.Config, fo
 	if len(wsResults) == 0 {
 		fmt.Println("No workspaces found to analyze, falling back to single-project mode")
 		for _, format := range formats {
-			if err := generateOutput(absPath, format, rootAnalysis, dryRun, compactMode); err != nil {
+			if err := generateOutput(absPath, format, rootAnalysis, dryRun); err != nil {
 				return err
 			}
 		}
@@ -401,7 +401,7 @@ func runMonorepoScan(ctx context.Context, absPath string, cfg *config.Config, fo
 
 		wsAbsPath := filepath.Join(absPath, ws.Path)
 		for _, format := range wsFormats {
-			if err := generateOutput(wsAbsPath, format, ws.Analysis, dryRun, compactMode); err != nil {
+			if err := generateOutput(wsAbsPath, format, ws.Analysis, dryRun); err != nil {
 				fmt.Printf("   [warn] %s (%s): %v\n", ws.Path, format, err)
 			}
 		}
@@ -543,7 +543,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 
 	// Generate output for each format in config
 	for _, format := range cfg.Output {
-		if err := generateOutput(absPath, format, analysis, dryRun, compactMode); err != nil {
+		if err := generateOutput(absPath, format, analysis, dryRun); err != nil {
 			return err
 		}
 	}
@@ -557,7 +557,7 @@ type contextGenerator interface {
 	OutputFile() string
 }
 
-func generateOutput(absPath, format string, analysis *types.Analysis, dryRun, compact bool) error {
+func generateOutput(absPath, format string, analysis *types.Analysis, dryRun bool) error {
 	// Handle claude-code format separately (multi-file generator)
 	if format == "claude-code" {
 		return generateClaudeCodeOutput(absPath, analysis, dryRun)
@@ -569,7 +569,6 @@ func generateOutput(absPath, format string, analysis *types.Analysis, dryRun, co
 	switch format {
 	case "claude":
 		g := generator.NewClaudeGenerator()
-		g.SetCompact(compact)
 		gen = g
 		outputFile = g.OutputFile()
 	case "cursor":
@@ -846,7 +845,7 @@ func regenerateWithAnalyzer(ctx context.Context, absPath string, cfg *config.Con
 
 	// Generate output for each format
 	for _, format := range cfg.Output {
-		if err := generateOutput(absPath, format, analysis, false, compactMode); err != nil {
+		if err := generateOutput(absPath, format, analysis, false); err != nil {
 			return err
 		}
 	}
