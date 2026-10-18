@@ -139,3 +139,19 @@ func TestFormatHookReadsPathFromStdin(t *testing.T) {
 		})
 	}
 }
+
+func TestNoBashGuardHook(t *testing.T) {
+	analysis := &types.Analysis{
+		TechStack: types.TechStack{Languages: []types.Language{{Name: "Go"}}},
+		CodePatterns: &types.CodePatterns{Authentication: []types.PatternInfo{
+			{Name: "jwt.", FileCount: 2, Examples: []string{"api/auth.go"}},
+		}},
+	}
+	if content, ok := renderClaudeCode(t, analysis)[".claude/settings.json"]; ok {
+		t.Errorf("settings.json generated without a formatter:\n%s", content)
+	}
+	analysis.Commands = []types.Command{{Name: "fmt", Command: "gofmt -l ."}}
+	if content := renderClaudeCode(t, analysis)[".claude/settings.json"]; !strings.Contains(content, "PostToolUse") || strings.Contains(content, "PreToolUse") {
+		t.Errorf("want only the formatter hook:\n%s", content)
+	}
+}

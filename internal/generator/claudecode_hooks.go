@@ -47,12 +47,6 @@ func (g *ClaudeCodeGenerator) generateHooks(analysis *types.Analysis) []types.Ge
 		settings.Hooks["PostToolUse"] = postToolUseHooks
 	}
 
-	// Add PreToolUse hooks for validation
-	preToolUseHooks := g.buildPreToolUseHooks(analysis, ctx)
-	if len(preToolUseHooks) > 0 {
-		settings.Hooks["PreToolUse"] = preToolUseHooks
-	}
-
 	// Only generate if we have hooks to add
 	if len(settings.Hooks) == 0 {
 		return nil
@@ -130,72 +124,4 @@ func marshalJSON(v any) ([]byte, error) {
 	enc.SetIndent("", "  ")
 	err := enc.Encode(v)
 	return buf.Bytes(), err
-}
-
-// buildPreToolUseHooks creates hooks that run before tool execution
-func (g *ClaudeCodeGenerator) buildPreToolUseHooks(analysis *types.Analysis, ctx *GeneratorContext) []HookMatcher {
-	var hooks []HookMatcher
-
-	// Add security validation for bash commands if security patterns detected
-	if len(ctx.AuthPatterns) > 0 || hasSecurityPatterns(analysis) {
-		hooks = append(hooks, HookMatcher{
-			Matcher: "Bash",
-			Hooks: []HookConfig{
-				{
-					Type:    "command",
-					Command: buildSecurityValidationScript(),
-					Timeout: 10,
-				},
-			},
-		})
-	}
-
-	return hooks
-}
-
-// hasSecurityPatterns checks if the project has security-related patterns
-func hasSecurityPatterns(analysis *types.Analysis) bool {
-	if analysis.CodePatterns == nil {
-		return false
-	}
-
-	// Check for auth patterns
-	for _, pattern := range analysis.CodePatterns.Authentication {
-		if pattern.FileCount > 0 {
-			return true
-		}
-	}
-
-	return false
-}
-
-// buildSecurityValidationScript returns an inline validation script
-// that checks for potentially dangerous bash commands
-func buildSecurityValidationScript() string {
-	// This is a simple inline script that validates bash commands
-	// In a real project, this would be a separate script file
-	return `python3 -c "
-import json
-import sys
-import re
-
-DANGEROUS_PATTERNS = [
-    r'rm\s+-rf\s+/',
-    r'chmod\s+777',
-    r'curl.*\|.*sh',
-    r'wget.*\|.*sh',
-    r'eval\s+',
-]
-
-try:
-    data = json.load(sys.stdin)
-    cmd = data.get('tool_input', {}).get('command', '')
-    for pattern in DANGEROUS_PATTERNS:
-        if re.search(pattern, cmd, re.IGNORECASE):
-            print(f'Potentially dangerous command detected: {pattern}', file=sys.stderr)
-            sys.exit(2)
-    sys.exit(0)
-except Exception as e:
-    sys.exit(0)
-"`
 }
