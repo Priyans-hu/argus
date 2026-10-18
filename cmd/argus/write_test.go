@@ -7,11 +7,13 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/Priyans-hu/argus/internal/analyzer"
 	"github.com/Priyans-hu/argus/internal/config"
+	"github.com/Priyans-hu/argus/internal/merger"
 	"gopkg.in/yaml.v3"
 )
 
@@ -282,5 +284,293 @@ func TestMonorepoDoesNotCountFailedWorkspaces(t *testing.T) {
 
 	if !strings.Contains(out.String(), "Generated context files for 1/2 workspaces") {
 		t.Errorf("unexpected output:\n%s", out)
+	}
+}
+
+func TestPolicyFor(t *testing.T) {
+	tests := []struct {
+		rel  string
+		want writePolicy
+	}{
+		{"CLAUDE.md", policyMerge},
+		{"AGENTS.md", policyMerge},
+		{".cursorrules", policyMerge},
+		{".github/copilot-instructions.md", policyMerge},
+		{".continue/config.yaml", policyCreateOnly},
+		{".claude/settings.json", policyCreateOnly},
+		{".claude/mcp.json", policyCreateOnly},
+		{".claude/agents/planner.md", policyCreateOnly},
+		{".claude/rules/testing.md", policyCreateOnly},
+		{".claude/skills/test/SKILL.md", policyCreateOnly},
+	}
+	for _, tt := range tests {
+		if got := policyFor(tt.rel); got != tt.want {
+			t.Errorf("policyFor(%q) = %v, want %v", tt.rel, got, tt.want)
+		}
+	}
+}
+
+// checkMarked fails unless content holds one AUTO pair and ends with
+// exactly one newline.
+func checkMarked(t *testing.T, content string) {
+	t.Helper()
+	if strings.Count(content, merger.AutoStartMarker) != 1 || strings.Count(content, merger.AutoEndMarker) != 1 {
+		t.Errorf("want exactly one ARGUS:AUTO pair:\n%s", content)
+	}
+	if !strings.HasSuffix(content, "\n") || strings.HasSuffix(content, "\n\n") {
+		t.Errorf("want exactly one trailing newline, got %q", content[max(0, len(content)-20):])
+	}
+}
+
+// generate runs one format into root with the default config.
+func generate(t *testing.T, root, format string) {
+	t.Helper()
+	if err := generateOutput(root, "", format, goAnalysis(), config.DefaultConfig(), dryRun, false); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMergeFilesAreMarkedAndStable(t *testing.T) {
+	files := map[string]string{"claude": "CLAUDE.md", "cursor": ".cursorrules", "copilot": ".github/copilot-instructions.md"}
+	for format, rel := range files {
+		t.Run(format, func(t *testing.T) {
+			resetFlags(t)
+			out, errOut := captureOutput(t)
+			root := t.TempDir()
+
+			generate(t, root, format)
+			first := readFile(t, root, rel)
+			checkMarked(t, first)
+			if out.String() != "✅ Generated "+rel+"\n" {
+				t.Errorf("first run printed %q", out)
+			}
+
+			for run := 2; run <= 3; run++ {
+				out.Reset()
+				generate(t, root, format)
+				if got := readFile(t, root, rel); got != first {
+					t.Errorf("run %d changed %s", run, rel)
+				}
+				if out.String() != "✅ "+rel+" is up to date\n" {
+					t.Errorf("run %d printed %q", run, out)
+				}
+			}
+			if errOut.Len() != 0 {
+				t.Errorf("unexpected notices: %q", errOut)
+			}
+		})
+	}
+}
+
+func TestMergeKeepsExistingText(t *testing.T) {
+	const (
+		auto     = merger.AutoStartMarker + "\n# demo\nold generated body\n" + merger.AutoEndMarker
+		custom   = merger.CustomStartMarker + "\n## Custom Notes\n\nKEEP-CUSTOM\n\n" + merger.CustomEndMarker
+		previous = merger.CustomStartMarker + "\n## Previous Content\n\nThe following content was preserved from your original file:\n\nKEEP-PREVIOUS\n" + merger.CustomEndMarker
+	)
+	tests := []struct {
+		name     string
+		existing string
+		keep     []string // must each appear once, in this order
+		adopted  bool
+	}{
+		{"unmarked", "# demo\n\nKEEP-BODY\n", []string{merger.AutoStartMarker, "KEEP-BODY"}, true},
+		{"custom only", "# demo\n\nKEEP-BODY\n\n" + custom, []string{merger.AutoStartMarker, "KEEP-BODY", "KEEP-CUSTOM"}, true},
+		{"auto and custom", auto + "\n\n" + custom, []string{merger.AutoStartMarker, "KEEP-CUSTOM"}, false},
+		{
+			"text above, between and below",
+			"# Team rules\nKEEP-TOP\n\n" + auto + "\n\nKEEP-MID\n\n" + custom + "\n\nKEEP-BOTTOM\n",
+			[]string{"KEEP-TOP", merger.AutoStartMarker, "KEEP-MID", "KEEP-CUSTOM", "KEEP-BOTTOM"},
+			false,
+		},
+		{"previous content", auto + "\n\n" + previous, []string{merger.AutoStartMarker, "KEEP-PREVIOUS"}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resetFlags(t)
+			out, errOut := captureOutput(t)
+			root := t.TempDir()
+			writeFiles(t, root, map[string]string{"CLAUDE.md": tt.existing})
+
+			generate(t, root, "claude")
+			got := readFile(t, root, "CLAUDE.md")
+			checkMarked(t, got)
+			last := -1
+			for _, keep := range tt.keep {
+				if n := strings.Count(got, keep); n != 1 {
+					t.Errorf("%q appears %d times", keep, n)
+				}
+				if i := strings.Index(got, keep); i < last {
+					t.Errorf("%q moved out of order", keep)
+				} else {
+					last = i
+				}
+			}
+			if strings.Contains(got, "old generated body") {
+				t.Error("the old AUTO block was kept")
+			}
+			notice := "ℹ️  CLAUDE.md had no argus markers: generated block added on top, your text kept below it (remove any part an older argus run wrote)\n"
+			if want := map[bool]string{true: notice, false: ""}[tt.adopted]; errOut.String() != want {
+				t.Errorf("stderr = %q, want %q", errOut, want)
+			}
+
+			out.Reset()
+			errOut.Reset()
+			generate(t, root, "claude")
+			if again := readFile(t, root, "CLAUDE.md"); again != got {
+				t.Errorf("second run changed the file:\n%s", again)
+			}
+			if out.String() != "✅ CLAUDE.md is up to date\n" || errOut.Len() != 0 {
+				t.Errorf("second run printed %q / %q", out, errOut)
+			}
+		})
+	}
+}
+
+func TestMergeLeavesMalformedMarkersAlone(t *testing.T) {
+	resetFlags(t)
+	out, errOut := captureOutput(t)
+	root := t.TempDir()
+	malformed := "# Team rules\n" + merger.AutoStartMarker + "\nonly a start\n"
+	writeFiles(t, root, map[string]string{"CLAUDE.md": malformed})
+
+	generate(t, root, "claude")
+	if got := readFile(t, root, "CLAUDE.md"); got != malformed {
+		t.Errorf("malformed file was changed:\n%s", got)
+	}
+	want := "⚠️  CLAUDE.md: unbalanced or repeated ARGUS:AUTO markers, left unchanged (fix them or use --force to overwrite)\n"
+	if errOut.String() != want || out.Len() != 0 {
+		t.Errorf("printed %q / %q, want only the warning", out, errOut)
+	}
+
+	force = true
+	errOut.Reset()
+	generate(t, root, "claude")
+	got := readFile(t, root, "CLAUDE.md")
+	checkMarked(t, got)
+	if strings.Contains(got, "only a start") || errOut.Len() != 0 {
+		t.Errorf("--force did not write a clean file:\n%s\nstderr %q", got, errOut)
+	}
+}
+
+func TestWatchWarnsAboutMalformedMarkersOnce(t *testing.T) {
+	resetFlags(t)
+	_, errOut := captureOutput(t)
+	watchNotified = map[string]bool{}
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{"CLAUDE.md": merger.AutoEndMarker + "\n"})
+
+	for range 3 {
+		generate(t, root, "claude")
+		reportSkipped()
+	}
+	if n := strings.Count(errOut.String(), "unbalanced or repeated ARGUS:AUTO markers"); n != 1 {
+		t.Errorf("warning printed %d times, want once:\n%s", n, errOut)
+	}
+}
+
+func TestMergeDisabledReplacesWholeFile(t *testing.T) {
+	resetFlags(t)
+	captureOutput(t)
+	mergeMode = false
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{
+		"CLAUDE.md": "KEEP-TOP\n\n" + merger.AutoStartMarker + "\nold\n" + merger.AutoEndMarker + "\n\n" +
+			merger.CustomStartMarker + "\nKEEP-CUSTOM\n" + merger.CustomEndMarker + "\n",
+	})
+
+	generate(t, root, "claude")
+	got := readFile(t, root, "CLAUDE.md")
+	checkMarked(t, got)
+	if strings.Contains(got, "KEEP") {
+		t.Errorf("--merge=false kept old text:\n%s", got)
+	}
+}
+
+func TestAddCustomIsIdempotentForMergeFilesOnly(t *testing.T) {
+	resetFlags(t)
+	captureOutput(t)
+	addCustomBlock = true
+	root := t.TempDir()
+
+	for range 2 {
+		for _, format := range []string{"claude", "continue", "claude-code"} {
+			generate(t, root, format)
+		}
+	}
+	if n := strings.Count(readFile(t, root, "CLAUDE.md"), merger.CustomStartMarker); n != 1 {
+		t.Errorf("CLAUDE.md has %d CUSTOM blocks, want 1", n)
+	}
+	for _, rel := range []string{".continue/config.yaml", ".claude/agents/planner.md", ".claude/settings.json"} {
+		if strings.Contains(readFile(t, root, rel), "ARGUS:") {
+			t.Errorf("%s got argus markers", rel)
+		}
+	}
+}
+
+func TestMergeFileWithCRLFIsNotRewritten(t *testing.T) {
+	resetFlags(t)
+	out, _ := captureOutput(t)
+	root := t.TempDir()
+	generate(t, root, "claude")
+	crlf := strings.ReplaceAll(readFile(t, root, "CLAUDE.md"), "\n", "\r\n")
+	writeFiles(t, root, map[string]string{"CLAUDE.md": crlf})
+
+	out.Reset()
+	generate(t, root, "claude")
+	if readFile(t, root, "CLAUDE.md") != crlf {
+		t.Error("CRLF copy of an up-to-date file was rewritten")
+	}
+	if out.String() != "✅ CLAUDE.md is up to date\n" {
+		t.Errorf("printed %q", out)
+	}
+}
+
+func TestDryRunWritesNothing(t *testing.T) {
+	resetFlags(t)
+	out, _ := captureOutput(t)
+	dryRun = true
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{"CLAUDE.md": "# Team rules\n"})
+
+	for _, format := range []string{"claude", "cursor", "copilot", "continue", "claude-code"} {
+		generate(t, root, format)
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || readFile(t, root, "CLAUDE.md") != "# Team rules\n" {
+		t.Errorf("dry-run changed the tree: %v", entries)
+	}
+	for _, rel := range []string{"CLAUDE.md", ".cursorrules", ".continue/config.yaml", ".claude/settings.json"} {
+		if header := "📄 Would write to " + filepath.Join(root, filepath.FromSlash(rel)) + ":"; !strings.Contains(out.String(), header) {
+			t.Errorf("no preview for %s", rel)
+		}
+	}
+}
+
+func TestMergeWritesThroughSymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("creating symlinks needs extra privileges on Windows")
+	}
+	resetFlags(t)
+	captureOutput(t)
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{"docs/real.md": "# Team rules\nKEEP\n"})
+	link := filepath.Join(root, "CLAUDE.md")
+	if err := os.Symlink(filepath.Join("docs", "real.md"), link); err != nil {
+		t.Fatal(err)
+	}
+
+	generate(t, root, "claude")
+	if fi, err := os.Lstat(link); err != nil || fi.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("CLAUDE.md is no longer a symlink (err %v)", err)
+	}
+	got := readFile(t, root, "docs/real.md")
+	checkMarked(t, got)
+	if !strings.Contains(got, "KEEP") {
+		t.Errorf("target lost its text:\n%s", got)
 	}
 }

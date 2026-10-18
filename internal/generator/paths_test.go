@@ -45,3 +45,26 @@ func TestIsGeneratedPath(t *testing.T) {
 		}
 	}
 }
+
+func TestIsMergeFile(t *testing.T) {
+	tests := []struct {
+		rel  string
+		want bool
+	}{
+		{"CLAUDE.md", true},
+		{"AGENTS.md", true},
+		{".cursorrules", true},
+		{".github/copilot-instructions.md", true},
+		{".continue/config.yaml", false},
+		{".claude/settings.json", false},
+		{".claude/agents/planner.md", false},
+		{"packages/web/CLAUDE.md", false},
+		{"./CLAUDE.md", false},
+		{"claude.md", false},
+	}
+	for _, tt := range tests {
+		if got := IsMergeFile(tt.rel); got != tt.want {
+			t.Errorf("IsMergeFile(%q) = %v, want %v", tt.rel, got, tt.want)
+		}
+	}
+}

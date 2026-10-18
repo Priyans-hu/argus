@@ -9,6 +9,9 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+
+	"github.com/Priyans-hu/argus/internal/generator"
+	"github.com/Priyans-hu/argus/internal/merger"
 )
 
 // Results go to stdout and notices to stderr, so `scan --dry-run > file`
@@ -37,6 +40,61 @@ const (
 	fileUnchanged                   // already equal to the generated output
 	fileSkipped                     // differs from the generated output, left alone
 )
+
+// writePolicy is how an output that already exists is treated.
+type writePolicy int
+
+const (
+	policyCreateOnly writePolicy = iota // written once, later differences skipped
+	policyMerge                         // ARGUS:AUTO block replaced, other text kept
+)
+
+// policyFor returns the write policy for a slash path relative to its root.
+func policyFor(rel string) writePolicy {
+	if generator.IsMergeFile(rel) {
+		return policyMerge
+	}
+	return policyCreateOnly
+}
+
+// writeMerged writes a merge-policy output: the generated text replaces the
+// file's ARGUS:AUTO block and everything outside the block is kept.
+func writeMerged(root, label, rel string, generated []byte, dryRun bool) error {
+	target := filepath.Join(root, filepath.FromSlash(rel))
+	shown := displayPath(label, rel)
+	existing, err := os.ReadFile(target)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("failed to read %s: %w", shown, err)
+	}
+
+	content, outcome := merger.NewMerger(mergeMode).Merge(existing, generated)
+	if outcome == merger.Malformed {
+		if !force {
+			if notifyOnce(shown) {
+				errf("⚠️  %s: unbalanced or repeated ARGUS:AUTO markers, left unchanged (fix them or use --force to overwrite)\n", shown)
+			}
+			return nil
+		}
+		content = []byte(merger.WrapContent(string(generated)))
+	}
+	if addCustomBlock && !bytes.Contains(content, []byte(merger.CustomStartMarker)) {
+		content = []byte(merger.AddCustomSectionPlaceholder(string(content)))
+	}
+	content = append(bytes.TrimRight(content, "\r\n"), '\n')
+
+	if sameText(existing, content) {
+		reportFile(shown, fileUnchanged, dryRun)
+		return nil
+	}
+	if err := writeOutput(target, shown, content, dryRun); err != nil {
+		return err
+	}
+	reportFile(shown, fileWritten, dryRun)
+	if outcome == merger.Adopted {
+		errf("ℹ️  %s had no argus markers: generated block added on top, your text kept below it (remove any part an older argus run wrote)\n", shown)
+	}
+	return nil
+}
 
 // writeCreateOnly writes an output argus never merges into: a missing file
 // is created, an equal one is left alone, and one that differs is skipped

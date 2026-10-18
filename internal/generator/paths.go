@@ -6,7 +6,8 @@ import (
 )
 
 // Paths argus writes, relative to an output root: files by slash path,
-// directories by name.
+// directories by name. The files carry ARGUS:AUTO markers and are merged on
+// rescans; everything under the directories is create-only.
 var (
 	generatedFiles = []string{"CLAUDE.md", "AGENTS.md", ".cursorrules", ".github/copilot-instructions.md"}
 	generatedDirs  = []string{".claude", ".continue"}
@@ -28,4 +29,10 @@ func IsGeneratedPath(p string) bool {
 		}
 	}
 	return false
+}
+
+// IsMergeFile reports whether rel, a slash path relative to an output root,
+// is an output that argus merges into rather than creating only once.
+func IsMergeFile(rel string) bool {
+	return slices.Contains(generatedFiles, rel)
 }

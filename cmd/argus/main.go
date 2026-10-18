@@ -23,7 +23,6 @@ import (
 	"github.com/Priyans-hu/argus/internal/analyzer"
 	"github.com/Priyans-hu/argus/internal/config"
 	"github.com/Priyans-hu/argus/internal/generator"
-	"github.com/Priyans-hu/argus/internal/merger"
 	"github.com/Priyans-hu/argus/internal/usage"
 	"github.com/Priyans-hu/argus/pkg/types"
 	"github.com/fsnotify/fsnotify"
@@ -606,57 +605,14 @@ func generateOutput(absPath, label, format string, analysis *types.Analysis, cfg
 		return fmt.Errorf("generation failed: %w", err)
 	}
 
-	if format == "continue" {
-		status, err := writeCreateOnly(absPath, label, outputFile, content, dryRun)
-		if err != nil {
-			return err
-		}
-		reportFile(displayPath(label, outputFile), status, dryRun)
-		return nil
+	if policyFor(outputFile) == policyMerge {
+		return writeMerged(absPath, label, outputFile, content, dryRun)
 	}
-
-	outPath := filepath.Join(absPath, outputFile)
-
-	// Handle merge mode - preserve custom sections from existing file
-	if mergeMode {
-		existingContent, err := os.ReadFile(outPath)
-		if err == nil && len(existingContent) > 0 {
-			m := merger.NewMerger(true)
-			content, _ = m.Merge(existingContent, content)
-			if verbose {
-				fmt.Printf("   ℹ️  Merged with existing content (preserving custom sections)\n")
-			}
-		}
+	status, err := writeCreateOnly(absPath, label, outputFile, content, dryRun)
+	if err != nil {
+		return err
 	}
-
-	// Add custom block placeholder if requested
-	if addCustomBlock {
-		contentStr := string(content)
-		if !strings.Contains(contentStr, merger.CustomStartMarker) {
-			content = []byte(merger.AddCustomSectionPlaceholder(contentStr))
-		}
-	}
-
-	if dryRun {
-		fmt.Printf("\n📄 Would write to %s:\n", outPath)
-		fmt.Println("---")
-		fmt.Println(string(content))
-		fmt.Println("---")
-		return nil
-	}
-
-	// Ensure parent directory exists (for .github/copilot-instructions.md)
-	if dir := filepath.Dir(outPath); dir != absPath {
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return fmt.Errorf("failed to create directory: %w", err)
-		}
-	}
-
-	if err := os.WriteFile(outPath, content, 0644); err != nil {
-		return fmt.Errorf("failed to write file: %w", err)
-	}
-
-	fmt.Printf("✅ Generated %s\n", outPath)
+	reportFile(displayPath(label, outputFile), status, dryRun)
 	return nil
 }
 
