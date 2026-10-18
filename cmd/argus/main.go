@@ -485,7 +485,12 @@ func runMonorepoScan(ctx context.Context, absPath string, cfg *config.Config, fo
 			return fmt.Errorf("overview generation failed: %w", err)
 		}
 
-		if err := writeMerged(absPath, "", "CLAUDE.md", overview, dryRun); err != nil {
+		// The overview is the root AGENTS.md; the root CLAUDE.md imports it.
+		shim, _ := generator.ShimGenerator{}.Generate(rootAnalysis)
+		if err := writeMerged(absPath, "", "AGENTS.md", overview, dryRun); err != nil {
+			return err
+		}
+		if err := writeMerged(absPath, "", "CLAUDE.md", shim, dryRun); err != nil {
 			return err
 		}
 	}

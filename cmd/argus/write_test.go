@@ -247,7 +247,7 @@ func scanMonorepo(t *testing.T, root string, formats ...string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := runMonorepoScan(context.Background(), root, cfg, formats, analysis); err != nil {
+	if err := runMonorepoScan(context.Background(), root, cfg, expandFormats(formats), analysis); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -430,22 +430,28 @@ func TestMergeKeepsExistingText(t *testing.T) {
 		custom   = merger.CustomStartMarker + "\n## Custom Notes\n\nKEEP-CUSTOM\n\n" + merger.CustomEndMarker
 		previous = merger.CustomStartMarker + "\n## Previous Content\n\nThe following content was preserved from your original file:\n\nKEEP-PREVIOUS\n" + merger.CustomEndMarker
 	)
+	const (
+		adopted = "ℹ️  CLAUDE.md had no argus markers: generated block added on top, your text kept below it (remove any part an older argus run wrote)\n"
+		moved   = "ℹ️  CLAUDE.md: the generated body moved to AGENTS.md and this file now imports it"
+		kept    = " lines of your other text were kept (delete anything an older argus run wrote)\n"
+	)
 	tests := []struct {
 		name     string
 		existing string
 		keep     []string // must each appear once, in this order
-		adopted  bool
+		notice   string
 	}{
-		{"unmarked", "# demo\n\nKEEP-BODY\n", []string{merger.AutoStartMarker, "KEEP-BODY"}, true},
-		{"custom only", "# demo\n\nKEEP-BODY\n\n" + custom, []string{merger.AutoStartMarker, "KEEP-BODY", "KEEP-CUSTOM"}, true},
-		{"auto and custom", auto + "\n\n" + custom, []string{merger.AutoStartMarker, "KEEP-CUSTOM"}, false},
+		{"unmarked", "# demo\n\nKEEP-BODY\n", []string{merger.AutoStartMarker, "KEEP-BODY"}, adopted},
+		{"custom only", "# demo\n\nKEEP-BODY\n\n" + custom, []string{merger.AutoStartMarker, "KEEP-BODY", "KEEP-CUSTOM"}, adopted},
+		{"auto only", auto + "\n", []string{merger.AutoStartMarker}, moved + "\n"},
+		{"auto and custom", auto + "\n\n" + custom, []string{merger.AutoStartMarker, "KEEP-CUSTOM"}, moved + ", 4" + kept},
 		{
 			"text above, between and below",
 			"# Team rules\nKEEP-TOP\n\n" + auto + "\n\nKEEP-MID\n\n" + custom + "\n\nKEEP-BOTTOM\n",
 			[]string{"KEEP-TOP", merger.AutoStartMarker, "KEEP-MID", "KEEP-CUSTOM", "KEEP-BOTTOM"},
-			false,
+			moved + ", 8" + kept,
 		},
-		{"previous content", auto + "\n\n" + previous, []string{merger.AutoStartMarker, "KEEP-PREVIOUS"}, false},
+		{"previous content", auto + "\n\n" + previous, []string{merger.AutoStartMarker, "KEEP-PREVIOUS"}, moved + ", 5" + kept},
 	}
 
 	for _, tt := range tests {
@@ -472,9 +478,8 @@ func TestMergeKeepsExistingText(t *testing.T) {
 			if strings.Contains(got, "old generated body") {
 				t.Error("the old AUTO block was kept")
 			}
-			notice := "ℹ️  CLAUDE.md had no argus markers: generated block added on top, your text kept below it (remove any part an older argus run wrote)\n"
-			if want := map[bool]string{true: notice, false: ""}[tt.adopted]; errOut.String() != want {
-				t.Errorf("stderr = %q, want %q", errOut, want)
+			if errOut.String() != tt.notice {
+				t.Errorf("stderr = %q, want %q", errOut, tt.notice)
 			}
 
 			out.Reset()
@@ -495,38 +500,38 @@ func TestMergeLeavesMalformedMarkersAlone(t *testing.T) {
 	out, errOut := captureOutput(t)
 	root := t.TempDir()
 	malformed := "# Team rules\n" + merger.AutoStartMarker + "\nonly a start\n"
-	writeFiles(t, root, map[string]string{"CLAUDE.md": malformed})
+	writeFiles(t, root, map[string]string{"AGENTS.md": malformed})
 
-	generate(t, root, "claude")
-	if got := readFile(t, root, "CLAUDE.md"); got != malformed {
+	generate(t, root, "agents")
+	if got := readFile(t, root, "AGENTS.md"); got != malformed {
 		t.Errorf("malformed file was changed:\n%s", got)
 	}
-	want := "⚠️  CLAUDE.md: unbalanced or repeated ARGUS:AUTO markers, left unchanged (fix them or use --force to overwrite)\n"
+	want := "⚠️  AGENTS.md: unbalanced or repeated ARGUS:AUTO markers, left unchanged (fix them or use --force to overwrite)\n"
 	if errOut.String() != want || out.Len() != 0 {
 		t.Errorf("printed %q / %q, want only the warning", out, errOut)
 	}
 
-	const replaced = "⚠️  CLAUDE.md: unbalanced or repeated ARGUS:AUTO markers, replaced with a fresh generated file (--force); the old text was not kept\n"
+	const replaced = "⚠️  AGENTS.md: unbalanced or repeated ARGUS:AUTO markers, replaced with a fresh generated file (--force); the old text was not kept\n"
 	force, dryRun = true, true
 	errOut.Reset()
-	generate(t, root, "claude")
-	if got := readFile(t, root, "CLAUDE.md"); got != malformed || errOut.String() != replaced || !strings.Contains(out.String(), "Would write to") {
+	generate(t, root, "agents")
+	if got := readFile(t, root, "AGENTS.md"); got != malformed || errOut.String() != replaced || !strings.Contains(out.String(), "Would write to") {
 		t.Errorf("dry-run --force: file %q, printed %q / %q", got, out, errOut)
 	}
 
 	dryRun = false
 	errOut.Reset()
-	generate(t, root, "claude")
-	got := readFile(t, root, "CLAUDE.md")
+	generate(t, root, "agents")
+	got := readFile(t, root, "AGENTS.md")
 	checkMarked(t, got)
 	if strings.Contains(got, "only a start") || errOut.String() != replaced {
 		t.Errorf("--force did not write a clean file:\n%s\nstderr %q", got, errOut)
 	}
 
-	writeFiles(t, root, map[string]string{"CLAUDE.md": merger.AutoStartMarker + "\nstale\n" + merger.AutoEndMarker + "\n"})
+	writeFiles(t, root, map[string]string{"AGENTS.md": merger.AutoStartMarker + "\nstale\n" + merger.AutoEndMarker + "\n"})
 	errOut.Reset()
-	generate(t, root, "claude")
-	if got := readFile(t, root, "CLAUDE.md"); strings.Contains(got, "stale") || errOut.Len() != 0 {
+	generate(t, root, "agents")
+	if got := readFile(t, root, "AGENTS.md"); strings.Contains(got, "stale") || errOut.Len() != 0 {
 		t.Errorf("--force on a healthy file: file %q, stderr %q", got, errOut)
 	}
 }
@@ -672,14 +677,14 @@ func TestMergeWritesThroughSymlink(t *testing.T) {
 	captureOutput(t)
 	root := t.TempDir()
 	writeFiles(t, root, map[string]string{"docs/real.md": "# Team rules\nKEEP\n"})
-	link := filepath.Join(root, "CLAUDE.md")
+	link := filepath.Join(root, ".cursorrules")
 	if err := os.Symlink(filepath.Join("docs", "real.md"), link); err != nil {
 		t.Fatal(err)
 	}
 
-	generate(t, root, "claude")
+	generate(t, root, "cursor")
 	if fi, err := os.Lstat(link); err != nil || fi.Mode()&os.ModeSymlink == 0 {
-		t.Fatalf("CLAUDE.md is no longer a symlink (err %v)", err)
+		t.Fatalf(".cursorrules is no longer a symlink (err %v)", err)
 	}
 	got := readFile(t, root, "docs/real.md")
 	checkMarked(t, got)

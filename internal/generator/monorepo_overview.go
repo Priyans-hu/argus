@@ -72,7 +72,7 @@ func (g *MonorepoOverviewGenerator) Generate(rootAnalysis *types.Analysis, works
 		fmt.Fprintln(&buf, "Each workspace has its own generated context files with detailed analysis:")
 		fmt.Fprintln(&buf)
 		for _, ws := range workspaces {
-			fmt.Fprintf(&buf, "- `%s/CLAUDE.md`\n", ws.Path)
+			fmt.Fprintf(&buf, "- `%s/AGENTS.md`\n", ws.Path)
 		}
 		fmt.Fprintln(&buf)
 	}

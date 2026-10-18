@@ -90,8 +90,8 @@ func TestMonorepoOverviewGenerator_Generate(t *testing.T) {
 	}
 
 	// Check per-workspace context references
-	if !strings.Contains(output, "apps/web/CLAUDE.md") {
-		t.Error("missing per-workspace CLAUDE.md reference")
+	if !strings.Contains(output, "apps/web/AGENTS.md") {
+		t.Error("missing per-workspace AGENTS.md reference")
 	}
 
 	// Check root commands
