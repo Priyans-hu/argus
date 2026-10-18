@@ -3,6 +3,7 @@
 package main
 
 import (
+	"flag"
 	"os"
 	"strings"
 	"syscall"
@@ -12,8 +13,8 @@ import (
 )
 
 // A write that fails halfway (here: past RLIMIT_FSIZE) must leave the
-// existing file as it was and no temp file behind. The limit stays far above
-// what the test binary itself writes meanwhile (its test log).
+// existing file as it was and no temp file behind. The limit stays above the
+// test log, which the test binary appends to while the limit holds.
 func TestMergeFailedTempWriteLeavesFileUntouched(t *testing.T) {
 	resetFlags(t)
 	captureOutput(t)
@@ -27,12 +28,17 @@ func TestMergeFailedTempWriteLeavesFileUntouched(t *testing.T) {
 	}
 	limit := old
 	limit.Cur = 1 << 20
+	if f := flag.Lookup("test.testlogfile"); f != nil && f.Value.String() != "" {
+		if fi, err := os.Stat(f.Value.String()); err == nil {
+			limit.Cur += uint64(fi.Size())
+		}
+	}
 	if err := syscall.Setrlimit(syscall.RLIMIT_FSIZE, &limit); err != nil {
 		t.Skip(err)
 	}
 	t.Cleanup(func() { _ = syscall.Setrlimit(syscall.RLIMIT_FSIZE, &old) })
 
-	err := writeMerged(root, "", "AGENTS.md", []byte(strings.Repeat("generated line\n", 1<<17)), false)
+	err := writeMerged(root, "", "AGENTS.md", []byte(strings.Repeat("x", int(limit.Cur)+1<<20)), false)
 	if err == nil {
 		t.Fatal("a write past the size limit succeeded")
 	}
