@@ -20,6 +20,7 @@ type Analysis struct {
 	ConfigFiles      []ConfigFileInfo  `json:"config_files,omitempty"`
 	CLIInfo          *CLIInfo          `json:"cli_info,omitempty"`
 	ProjectTools     []ProjectTool     `json:"project_tools,omitempty"`
+	TestRunners      []TestRunner      `json:"test_runners,omitempty"`
 	UsageInsights    *UsageInsights    `json:"usage_insights,omitempty"`
 	AIEnrichment     *AIEnrichment     `json:"ai_enrichment,omitempty"`
 }
@@ -149,6 +150,15 @@ type Command struct {
 	Name        string `json:"name"`
 	Command     string `json:"command"`
 	Description string `json:"description,omitempty"`
+}
+
+// TestRunner tells how to run the tests of one framework in one directory;
+// placeholders are in angle brackets.
+type TestRunner struct {
+	Framework string `json:"framework"` // vitest, jest, go, pytest, cargo or gradle
+	Dir       string `json:"dir"`       // slash path, empty for the root
+	RunAll    string `json:"run_all"`
+	RunOne    string `json:"run_one"`
 }
 
 // ProjectTool represents a project-specific CLI tool that deserves a skill

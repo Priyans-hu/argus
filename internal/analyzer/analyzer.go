@@ -59,7 +59,7 @@ func (a *Analyzer) Analyze(ctx context.Context) (*types.Analysis, error) {
 	// Detect key files
 	analysis.KeyFiles = structureDetector.DetectKeyFiles()
 
-	analysis.Commands = p.commands()
+	analysis.Commands, analysis.TestRunners = p.commands()
 
 	// Conventions, patterns (branch naming, comments, logging, error
 	// handling, architecture) and framework patterns

@@ -150,9 +150,9 @@ func (pa *ParallelAnalyzer) runPhase2(ctx context.Context, p *pipeline, analysis
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		commands := p.commands()
+		commands, runners := p.commands()
 		mu.Lock()
-		analysis.Commands = commands
+		analysis.Commands, analysis.TestRunners = commands, runners
 		mu.Unlock()
 	}()
 

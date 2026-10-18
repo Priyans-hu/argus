@@ -7,18 +7,17 @@ import (
 	"github.com/Priyans-hu/argus/pkg/types"
 )
 
-// GradleCommands returns the commands of a Gradle build at root (a gradlew
-// wrapper or a build or settings script there): the debug APK for Android
-// projects (an AndroidManifest.xml in project source), else the build, and
-// the unit tests when a src/test directory exists.
-func GradleCommands(root string, files []types.FileInfo) []types.Command {
-	gradle := "gradle"
+// gradleBuild describes a Gradle build at root (a gradlew wrapper, or a
+// build or settings script there): the command to run (gradle without a
+// wrapper), whether it is an Android project (an AndroidManifest.xml in
+// project source) and whether a src/test directory exists.
+func gradleBuild(root string, files []types.FileInfo) (gradle string, android, tests, ok bool) {
+	gradle = "gradle"
 	if fileExists(filepath.Join(root, "gradlew")) {
 		gradle = "./gradlew"
 	} else if !hasAnyFile(root, "build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts") {
-		return nil
+		return "", false, false, false
 	}
-	android, tests := false, false
 	for _, f := range files {
 		rel := filepath.ToSlash(f.Path)
 		if f.IsDir || !IsProjectSource(rel) {
@@ -26,6 +25,16 @@ func GradleCommands(root string, files []types.FileInfo) []types.Command {
 		}
 		android = android || f.Name == "AndroidManifest.xml"
 		tests = tests || strings.HasPrefix(rel, "src/test/") || strings.Contains(rel, "/src/test/")
+	}
+	return gradle, android, tests, true
+}
+
+// GradleCommands returns the debug APK build for Android projects, else
+// the build, and the unit tests when a src/test directory exists.
+func GradleCommands(root string, files []types.FileInfo) []types.Command {
+	gradle, android, tests, ok := gradleBuild(root, files)
+	if !ok {
+		return nil
 	}
 	commands := []types.Command{{Name: gradle + " build", Description: "Build the project"}}
 	if android {

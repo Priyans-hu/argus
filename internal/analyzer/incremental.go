@@ -241,7 +241,7 @@ func (ia *IncrementalAnalyzer) runDetector(impact string, p *pipeline, analysis 
 		analysis.ArchitectureInfo = archDetector.Detect()
 
 	case ImpactCommands:
-		analysis.Commands = p.commands()
+		analysis.Commands, analysis.TestRunners = p.commands()
 
 	case ImpactConventions:
 		conventions, err := p.conventions()
@@ -324,6 +324,7 @@ func (ia *IncrementalAnalyzer) cloneAnalysis(src *types.Analysis) *types.Analysi
 		copy(dst.ConfigFiles, src.ConfigFiles)
 	}
 	dst.ProjectTools = slices.Clone(src.ProjectTools)
+	dst.TestRunners = slices.Clone(src.TestRunners)
 
 	// Copy pointers (shallow copy is OK since we replace whole objects)
 	dst.ReadmeContent = src.ReadmeContent
