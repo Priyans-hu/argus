@@ -236,3 +236,25 @@ func TestLeanGitIsStableAcrossHistories(t *testing.T) {
 		t.Errorf("Git sections differ or are incomplete:\n%v\n%v", a, b)
 	}
 }
+
+func TestLeanCommandsKeepTheSingleTestCommand(t *testing.T) {
+	runOne := types.Command{Name: "go test -run <TestName> ./<pkg>", Description: "Run one go test"}
+	all, verbose, mk := types.Command{Name: "go test ./..."}, types.Command{Name: "go test -v ./..."}, types.Command{Name: "make test"}
+	tests := []struct {
+		name string
+		cmds []types.Command
+		want string // the Test group
+	}{
+		{"replaces the last capped entry", []types.Command{all, verbose, mk, runOne}, "go test ./...\ngo test -v ./...\n" + runOne.Name},
+		{"already within the cap", []types.Command{all, runOne, verbose, mk}, "go test ./...\n" + runOne.Name + "\ngo test -v ./..."},
+		{"nothing to keep", []types.Command{all, verbose, mk, {Name: "npm test"}}, "go test ./...\ngo test -v ./...\nmake test"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := strings.Join(leanCommands(tt.cmds), "\n")
+			if want := "```bash\n# Test\n" + tt.want + "\n```"; got != want {
+				t.Errorf("got:\n%s\nwant:\n%s", got, want)
+			}
+		})
+	}
+}
