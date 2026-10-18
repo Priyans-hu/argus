@@ -63,6 +63,8 @@ argus is heuristic. Before finishing:
 2. Remove frameworks, patterns or endpoints the code does not use.
 3. Add what static analysis cannot see (rationale, gotchas, release steps) in a CUSTOM block. Keep the file short.
 
+Corrections inside the AUTO block are undone by the next scan, so list them for the user.
+
 ## Keeping it fresh
 
 `argus init` writes `.argus.yaml` (keys: `output`, `ignore`, `custom_conventions`). `argus sync` then regenerates every configured format; it fails without the config.
