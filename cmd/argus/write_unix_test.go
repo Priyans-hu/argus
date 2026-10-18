@@ -4,15 +4,16 @@ package main
 
 import (
 	"os"
+	"strings"
 	"syscall"
 	"testing"
 
-	"github.com/Priyans-hu/argus/internal/config"
 	"github.com/Priyans-hu/argus/internal/merger"
 )
 
 // A write that fails halfway (here: past RLIMIT_FSIZE) must leave the
-// existing file as it was and no temp file behind.
+// existing file as it was and no temp file behind. The limit stays far above
+// what the test binary itself writes meanwhile (its test log).
 func TestMergeFailedTempWriteLeavesFileUntouched(t *testing.T) {
 	resetFlags(t)
 	captureOutput(t)
@@ -25,13 +26,13 @@ func TestMergeFailedTempWriteLeavesFileUntouched(t *testing.T) {
 		t.Skip(err)
 	}
 	limit := old
-	limit.Cur = 64
+	limit.Cur = 1 << 20
 	if err := syscall.Setrlimit(syscall.RLIMIT_FSIZE, &limit); err != nil {
 		t.Skip(err)
 	}
 	t.Cleanup(func() { _ = syscall.Setrlimit(syscall.RLIMIT_FSIZE, &old) })
 
-	err := generateOutput(root, "", "agents", goAnalysis(), config.DefaultConfig(), false, false)
+	err := writeMerged(root, "", "AGENTS.md", []byte(strings.Repeat("generated line\n", 1<<17)), false)
 	if err == nil {
 		t.Fatal("a write past the size limit succeeded")
 	}
