@@ -28,6 +28,7 @@ import (
 	"github.com/Priyans-hu/argus/pkg/types"
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
+	"golang.org/x/mod/semver"
 )
 
 // version is set at release build time with -ldflags "-X main.version=...";
@@ -1185,6 +1186,21 @@ func execute(w io.Writer) int {
 	return 0
 }
 
+// releaseURL is the GitHub API endpoint for the latest release.
+var releaseURL = "https://api.github.com/repos/Priyans-hu/argus/releases/latest"
+
+// httpClient bounds every upgrade request, so a stalled connection fails
+// instead of hanging.
+var httpClient = &http.Client{Timeout: 60 * time.Second}
+
+// isNewer reports whether latest is a higher semantic version than current.
+// Invalid versions such as "dev" sort below valid ones, so a dev build
+// upgrades, a newer local build never downgrades and a malformed release tag
+// is never installed.
+func isNewer(latest, current string) bool {
+	return semver.Compare("v"+strings.TrimPrefix(latest, "v"), "v"+strings.TrimPrefix(current, "v")) > 0
+}
+
 // GitHubRelease represents a GitHub release
 type GitHubRelease struct {
 	TagName string `json:"tag_name"`
@@ -1204,13 +1220,11 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to check for updates: %w", err)
 	}
 
-	latestVersion := strings.TrimPrefix(release.TagName, "v")
-	currentVersion := strings.TrimPrefix(version, "v")
-
-	if latestVersion == currentVersion {
+	if !isNewer(release.TagName, version) {
 		fmt.Printf("✅ Already on the latest version (%s)\n", version)
 		return nil
 	}
+	latestVersion := strings.TrimPrefix(release.TagName, "v")
 
 	fmt.Printf("📦 New version available: %s → %s\n", version, release.TagName)
 
@@ -1266,7 +1280,7 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 }
 
 func getLatestRelease() (*GitHubRelease, error) {
-	resp, err := http.Get("https://api.github.com/repos/Priyans-hu/argus/releases/latest")
+	resp, err := httpClient.Get(releaseURL)
 	if err != nil {
 		return nil, err
 	}
@@ -1297,7 +1311,7 @@ func getAssetName(ver string) string {
 }
 
 func downloadAsset(url string) (string, error) {
-	resp, err := http.Get(url)
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		return "", err
 	}
