@@ -1,6 +1,7 @@
 package generator
 
 import (
+	"bytes"
 	"encoding/json"
 	"strings"
 
@@ -57,8 +58,7 @@ func (g *ClaudeCodeGenerator) generateHooks(analysis *types.Analysis) []types.Ge
 		return nil
 	}
 
-	// Marshal to JSON with indentation
-	content, err := json.MarshalIndent(settings, "", "  ")
+	content, err := marshalJSON(settings)
 	if err != nil {
 		return nil
 	}
@@ -81,18 +81,16 @@ func (g *ClaudeCodeGenerator) buildPostToolUseHooks(analysis *types.Analysis, ct
 		var formatCmd string
 
 		if hasLanguage(analysis, "Go") {
-			formatCmd = "gofmt -w $FILE_PATH"
+			formatCmd = formatHook("*.go", "gofmt -w")
 		} else if hasLanguage(analysis, "TypeScript") || hasLanguage(analysis, "JavaScript") {
 			if strings.Contains(ctx.FormatCommand, "prettier") {
-				formatCmd = "npx prettier --write $FILE_PATH"
-			} else if strings.Contains(ctx.FormatCommand, "eslint") {
-				formatCmd = "npx eslint --fix $FILE_PATH"
+				formatCmd = formatHook("*.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs", "npx prettier --write")
 			}
 		} else if hasLanguage(analysis, "Python") {
 			if strings.Contains(ctx.FormatCommand, "black") {
-				formatCmd = "black $FILE_PATH"
+				formatCmd = formatHook("*.py", "black")
 			} else if strings.Contains(ctx.FormatCommand, "ruff") {
-				formatCmd = "ruff format $FILE_PATH"
+				formatCmd = formatHook("*.py", "ruff format")
 			}
 		}
 
@@ -111,6 +109,27 @@ func (g *ClaudeCodeGenerator) buildPostToolUseHooks(analysis *types.Analysis, ct
 	}
 
 	return hooks
+}
+
+// formatHook returns a PostToolUse command that runs formatter on the edited
+// file when its name matches globs (a shell case pattern). Claude Code passes
+// the path in the hook's stdin JSON; without jq or the formatter the hook
+// exits quietly.
+func formatHook(globs, formatter string) string {
+	bin, _, _ := strings.Cut(formatter, " ")
+	return "command -v jq >/dev/null 2>&1 && command -v " + bin + " >/dev/null 2>&1 || exit 0; " +
+		`f=$(jq -r '.tool_input.file_path // empty'); case "$f" in ` + globs + ") " + formatter + ` "$f";; esac`
+}
+
+// marshalJSON indents v and ends it with a newline. Shell characters such as
+// > and & stay readable instead of being escaped.
+func marshalJSON(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	err := enc.Encode(v)
+	return buf.Bytes(), err
 }
 
 // buildPreToolUseHooks creates hooks that run before tool execution
