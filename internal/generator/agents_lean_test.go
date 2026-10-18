@@ -13,7 +13,7 @@ func TestRenderLean_Golden(t *testing.T) {
 	a := &types.Analysis{
 		ProjectName: "argus",
 		ReadmeContent: &types.ReadmeContent{
-			Description:   "The all-seeing code analyzer.\n\nHelp AI grok your codebase.",
+			Description:   "The all-seeing code analyzer.\n\nHelp agents grok your codebase.",
 			Features:      []string{"Fast scans"},
 			Prerequisites: []string{"Go 1.24"},
 		},
@@ -50,7 +50,7 @@ func TestRenderLean_Golden(t *testing.T) {
 	want := strings.Join([]string{
 		"# argus",
 		"",
-		"The all-seeing code analyzer. Help AI grok your codebase.",
+		"The all-seeing code analyzer. Help agents grok your codebase.",
 		"",
 		"## Commands",
 		"",
