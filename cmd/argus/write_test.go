@@ -287,6 +287,60 @@ func TestMonorepoDoesNotCountFailedWorkspaces(t *testing.T) {
 	}
 }
 
+func TestMonorepoMergesRootOverview(t *testing.T) {
+	resetFlags(t)
+	captureOutput(t)
+	root := monorepoFixture(t)
+
+	scanMonorepo(t, root, "claude")
+	overview := readFile(t, root, "CLAUDE.md")
+	checkMarked(t, overview)
+
+	custom := merger.CustomStartMarker + "\nKEEP-CUSTOM\n" + merger.CustomEndMarker + "\n"
+	writeFiles(t, root, map[string]string{
+		"CLAUDE.md":              "# Root notes\nKEEP-ROOT-NOTE\n\n" + overview + "\n" + custom,
+		"packages/web/CLAUDE.md": readFile(t, root, "packages/web/CLAUDE.md") + "\n" + custom,
+	})
+	scanMonorepo(t, root, "claude")
+	second := snapshotTree(t, root)
+	scanMonorepo(t, root, "claude")
+	if diff := treeDiff(second, snapshotTree(t, root)); len(diff) > 0 {
+		t.Errorf("third run changed %v", diff)
+	}
+
+	for rel, keep := range map[string][]string{
+		"CLAUDE.md":              {"KEEP-ROOT-NOTE", "KEEP-CUSTOM"},
+		"packages/web/CLAUDE.md": {"KEEP-CUSTOM"},
+		"packages/api/CLAUDE.md": nil,
+	} {
+		checkMarked(t, second[rel])
+		for _, k := range keep {
+			if !strings.Contains(second[rel], k) {
+				t.Errorf("%s lost %s", rel, k)
+			}
+		}
+	}
+}
+
+func TestMonorepoAdoptsHandWrittenRootFile(t *testing.T) {
+	resetFlags(t)
+	_, errOut := captureOutput(t)
+	root := monorepoFixture(t)
+	const notes = "# Root notes\n- KEEP-ROOT-RULE: deploys go through the release train.\n"
+	writeFiles(t, root, map[string]string{"CLAUDE.md": notes})
+
+	scanMonorepo(t, root, "claude")
+
+	got := readFile(t, root, "CLAUDE.md")
+	checkMarked(t, got)
+	if !strings.HasPrefix(got, merger.AutoStartMarker) || !strings.HasSuffix(got, "\n\n"+notes) {
+		t.Errorf("root notes not kept below the generated block:\n%s", got)
+	}
+	if !strings.Contains(errOut.String(), "CLAUDE.md had no argus markers") {
+		t.Errorf("no adoption notice: %q", errOut)
+	}
+}
+
 func TestPolicyFor(t *testing.T) {
 	tests := []struct {
 		rel  string

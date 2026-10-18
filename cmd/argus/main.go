@@ -447,14 +447,8 @@ func runMonorepoScan(ctx context.Context, absPath string, cfg *config.Config, fo
 			return fmt.Errorf("overview generation failed: %w", err)
 		}
 
-		outPath := filepath.Join(absPath, "CLAUDE.md")
-		if dryRun {
-			fmt.Printf("\n   Would write overview to %s\n", outPath)
-		} else {
-			if err := os.WriteFile(outPath, overview, 0644); err != nil {
-				return fmt.Errorf("failed to write overview: %w", err)
-			}
-			fmt.Printf("✅ Generated monorepo overview: %s\n", outPath)
+		if err := writeMerged(absPath, "", "CLAUDE.md", overview, dryRun); err != nil {
+			return err
 		}
 	}
 

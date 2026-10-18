@@ -2,8 +2,10 @@ package main
 
 import (
 	"bytes"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/Priyans-hu/argus/pkg/types"
@@ -45,6 +47,51 @@ func writeFiles(t *testing.T, root string, files map[string]string) {
 			t.Fatal(err)
 		}
 	}
+}
+
+// snapshotTree maps the slash path of every file under root, except .git,
+// to its content.
+func snapshotTree(t *testing.T, root string) map[string]string {
+	t.Helper()
+	tree := map[string]string{}
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		switch {
+		case err != nil:
+			return err
+		case d.IsDir() && d.Name() == ".git":
+			return filepath.SkipDir
+		case d.IsDir():
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(root, path)
+		tree[filepath.ToSlash(rel)] = string(data)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return tree
+}
+
+// treeDiff lists the paths whose content differs between two snapshots.
+func treeDiff(a, b map[string]string) []string {
+	var diff []string
+	for path, content := range a {
+		if other, ok := b[path]; !ok || other != content {
+			diff = append(diff, path)
+		}
+	}
+	for path := range b {
+		if _, ok := a[path]; !ok {
+			diff = append(diff, path)
+		}
+	}
+	slices.Sort(diff)
+	return diff
 }
 
 // readFile returns the content of a slash path under root.
