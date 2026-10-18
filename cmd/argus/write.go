@@ -10,8 +10,13 @@ import (
 	"path"
 	"path/filepath"
 
+	"github.com/Priyans-hu/argus/internal/generator"
 	"github.com/Priyans-hu/argus/internal/merger"
 )
+
+// tempPattern names the temp file writeFile renames over its target; scans
+// and watch skip what it leaves behind (generator.IsGeneratedPath).
+const tempPattern = generator.TempPrefix + "*"
 
 // Results go to stdout and notices to stderr, so `scan --dry-run > file`
 // keeps only results. Tests swap both.
@@ -133,7 +138,7 @@ func writeFile(target string, content []byte) error {
 	if err != nil || !fi.Mode().IsRegular() || fi.Mode().Perm()&0200 == 0 {
 		return os.WriteFile(target, content, 0644)
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(target), ".argus-*")
+	tmp, err := os.CreateTemp(filepath.Dir(target), tempPattern)
 	if err != nil {
 		return os.WriteFile(target, content, 0644)
 	}

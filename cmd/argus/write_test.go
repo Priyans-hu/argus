@@ -748,3 +748,17 @@ func TestMergeReplacesFileThroughTempFile(t *testing.T) {
 		})
 	}
 }
+
+// A temp file a crash leaves behind must read as argus output, so scans
+// and watch skip it.
+func TestTempFileNameIsGenerated(t *testing.T) {
+	root := t.TempDir()
+	f, err := os.CreateTemp(root, tempPattern)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = f.Close()
+	if !isGeneratedFile(root, f.Name()) {
+		t.Errorf("temp file %s is not skipped as argus output", filepath.Base(f.Name()))
+	}
+}
