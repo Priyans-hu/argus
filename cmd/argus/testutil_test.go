@@ -19,7 +19,7 @@ func resetFlags(t *testing.T) {
 	reset := func() {
 		outputDir, outputFormat, dryRun, verbose, force = ".", "claude", false, false, false
 		mergeMode, addCustomBlock, compactMode, parallel = true, false, false, true
-		usageMode, monorepoMode, aiMode = false, false, false
+		usageMode, monorepoMode, aiMode, fullMode = false, false, false, false
 		skipped, watchNotified = nil, nil
 	}
 	reset()

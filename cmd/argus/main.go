@@ -59,7 +59,8 @@ var (
 	force             bool
 	mergeMode         bool
 	addCustomBlock    bool
-	compactMode       bool
+	compactMode       bool // deprecated alias of the lean default
+	fullMode          bool
 	parallel          bool
 	usageMode         bool
 	monorepoMode      bool
@@ -187,7 +188,8 @@ func init() {
 	scanCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed output")
 	scanCmd.Flags().BoolVarP(&mergeMode, "merge", "m", true, "Preserve custom sections when regenerating (default: true)")
 	scanCmd.Flags().BoolVar(&addCustomBlock, "add-custom", false, "Add a custom section placeholder to output")
-	scanCmd.Flags().BoolVarP(&compactMode, "compact", "c", false, "Generate compact output (~45% smaller, optimized for token efficiency)")
+	scanCmd.Flags().BoolVar(&fullMode, "full", false, "Write the detailed AGENTS.md instead of the lean one")
+	scanCmd.Flags().BoolVarP(&compactMode, "compact", "c", false, "Deprecated: the lean output is the default")
 	scanCmd.Flags().BoolVarP(&parallel, "parallel", "p", true, "Run detectors in parallel for faster analysis (default: true)")
 	scanCmd.Flags().BoolVar(&usageMode, "usage", false, "Include AI usage insights from Claude Code session logs")
 	scanCmd.Flags().BoolVar(&aiMode, "ai", false, "Enrich output with AI-generated insights via local Ollama")
@@ -199,7 +201,8 @@ func init() {
 	syncCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed output")
 	syncCmd.Flags().BoolVarP(&mergeMode, "merge", "m", true, "Preserve custom sections when regenerating (default: true)")
 	syncCmd.Flags().BoolVar(&addCustomBlock, "add-custom", false, "Add a custom section placeholder to output")
-	syncCmd.Flags().BoolVarP(&compactMode, "compact", "c", false, "Generate compact output (~45% smaller, optimized for token efficiency)")
+	syncCmd.Flags().BoolVar(&fullMode, "full", false, "Write the detailed AGENTS.md instead of the lean one")
+	syncCmd.Flags().BoolVarP(&compactMode, "compact", "c", false, "Deprecated: the lean output is the default")
 	syncCmd.Flags().BoolVarP(&parallel, "parallel", "p", true, "Run detectors in parallel for faster analysis (default: true)")
 	syncCmd.Flags().BoolVar(&usageMode, "usage", false, "Include AI usage insights from Claude Code session logs")
 	syncCmd.Flags().BoolVar(&aiMode, "ai", false, "Enrich output with AI-generated insights via local Ollama")
@@ -213,6 +216,12 @@ func init() {
 	// Watch command flags
 	watchCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed output")
 	watchCmd.Flags().BoolVarP(&mergeMode, "merge", "m", true, "Preserve custom sections when regenerating (default: true)")
+	watchCmd.Flags().BoolVar(&fullMode, "full", false, "Write the detailed AGENTS.md instead of the lean one")
+
+	for _, c := range []*cobra.Command{scanCmd, syncCmd} {
+		_ = c.Flags().MarkDeprecated("compact", "the lean output is now the default, use --full for the detailed output")
+		c.MarkFlagsMutuallyExclusive("full", "compact")
+	}
 
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(scanCmd)
@@ -379,7 +388,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 	// Generate output for each format
 	for _, format := range formats {
-		if err := generateOutput(absPath, "", format, analysis, cfg, dryRun, compactMode); err != nil {
+		if err := generateOutput(absPath, "", format, analysis, cfg, dryRun, fullMode); err != nil {
 			return err
 		}
 	}
@@ -399,7 +408,7 @@ func runMonorepoScan(ctx context.Context, absPath string, cfg *config.Config, fo
 	if len(wsResults) == 0 {
 		fmt.Println("No workspaces found to analyze, falling back to single-project mode")
 		for _, format := range formats {
-			if err := generateOutput(absPath, "", format, rootAnalysis, cfg, dryRun, compactMode); err != nil {
+			if err := generateOutput(absPath, "", format, rootAnalysis, cfg, dryRun, fullMode); err != nil {
 				return err
 			}
 		}
@@ -435,7 +444,7 @@ func runMonorepoScan(ctx context.Context, absPath string, cfg *config.Config, fo
 		wsAbsPath := filepath.Join(absPath, ws.Path)
 		ok := true
 		for _, format := range wsFormats {
-			if err := generateOutput(wsAbsPath, ws.Path, format, ws.Analysis, cfg, dryRun, compactMode); err != nil {
+			if err := generateOutput(wsAbsPath, ws.Path, format, ws.Analysis, cfg, dryRun, fullMode); err != nil {
 				errf("   [warn] %s (%s): %v\n", ws.Path, format, err)
 				ok = false
 			}
@@ -578,7 +587,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 	formats := expandFormats(cfg.Output)
 	warnContinue(cfg, formats)
 	for _, format := range formats {
-		if err := generateOutput(absPath, "", format, analysis, cfg, dryRun, compactMode); err != nil {
+		if err := generateOutput(absPath, "", format, analysis, cfg, dryRun, fullMode); err != nil {
 			return err
 		}
 	}
@@ -642,7 +651,7 @@ type contextGenerator interface {
 
 // generateOutput renders one format into absPath. label is the workspace
 // path shown in messages ("" for the scanned directory itself).
-func generateOutput(absPath, label, format string, analysis *types.Analysis, cfg *config.Config, dryRun, compact bool) error {
+func generateOutput(absPath, label, format string, analysis *types.Analysis, cfg *config.Config, dryRun, full bool) error {
 	// Handle claude-code format separately (multi-file generator)
 	if format == "claude-code" {
 		return generateClaudeCodeOutput(absPath, label, analysis, cfg.ClaudeCode, dryRun)
@@ -653,7 +662,7 @@ func generateOutput(absPath, label, format string, analysis *types.Analysis, cfg
 
 	switch format {
 	case "agents":
-		g := generator.NewAgentsGenerator(!compact)
+		g := generator.NewAgentsGenerator(full)
 		gen = g
 		outputFile = g.OutputFile()
 	case "claude":
@@ -900,7 +909,7 @@ func regenerateWithAnalyzer(ctx context.Context, absPath string, cfg *config.Con
 
 	// Generate output for each format
 	for _, format := range expandFormats(cfg.Output) {
-		if err := generateOutput(absPath, "", format, analysis, cfg, false, compactMode); err != nil {
+		if err := generateOutput(absPath, "", format, analysis, cfg, false, fullMode); err != nil {
 			return err
 		}
 	}

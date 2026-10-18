@@ -122,10 +122,10 @@ func analyze(t *testing.T, root string, useParallel bool) *types.Analysis {
 }
 
 // writeFormats renders formats from analysis into dir with the default config.
-func writeFormats(t *testing.T, dir string, analysis *types.Analysis, compact bool, formats ...string) {
+func writeFormats(t *testing.T, dir string, analysis *types.Analysis, full bool, formats ...string) {
 	t.Helper()
 	for _, format := range formats {
-		if err := generateOutput(dir, "", format, analysis, config.DefaultConfig(), false, compact); err != nil {
+		if err := generateOutput(dir, "", format, analysis, config.DefaultConfig(), false, full); err != nil {
 			t.Fatalf("%s: %v", format, err)
 		}
 	}
@@ -160,8 +160,8 @@ func TestOutputIsDeterministic(t *testing.T) {
 			for i := range runs {
 				out := t.TempDir()
 				analysis := analyze(t, root, mode.useParallel)
-				writeFormats(t, filepath.Join(out, "full"), analysis, false, allFormats...)
-				writeFormats(t, filepath.Join(out, "compact"), analysis, true, "agents")
+				writeFormats(t, filepath.Join(out, "default"), analysis, false, allFormats...)
+				writeFormats(t, filepath.Join(out, "full"), analysis, true, "agents")
 
 				tree := snapshotTree(t, out)
 				if i == 0 {

@@ -20,9 +20,10 @@ func (g *AgentsGenerator) OutputFile() string {
 
 // Generate renders the AGENTS.md body.
 func (g *AgentsGenerator) Generate(analysis *types.Analysis) ([]byte, error) {
-	c := NewClaudeGenerator()
-	c.SetCompact(!g.full)
-	return c.Generate(analysis)
+	if g.full {
+		return NewClaudeGenerator().Generate(analysis)
+	}
+	return renderLean(analysis), nil
 }
 
 // ShimGenerator writes CLAUDE.md as an import of AGENTS.md, so Claude Code
