@@ -3,6 +3,7 @@ package generator
 import (
 	"bytes"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -67,12 +68,9 @@ func (g *CursorGenerator) writeTechContext(buf *bytes.Buffer, stack *types.TechS
 
 	// Primary language
 	if len(stack.Languages) > 0 {
-		// Sort by percentage
-		langs := make([]types.Language, len(stack.Languages))
-		copy(langs, stack.Languages)
-		sort.Slice(langs, func(i, j int) bool {
-			return langs[i].Percentage > langs[j].Percentage
-		})
+		// Sort by percentage, then name
+		langs := slices.Clone(stack.Languages)
+		slices.SortFunc(langs, compareLanguages)
 
 		primary := langs[0]
 		if primary.Version != "" {

@@ -2,7 +2,9 @@ package generator
 
 import (
 	"bytes"
+	"cmp"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"unicode"
@@ -151,27 +153,11 @@ func (g *ClaudeGenerator) writeProjectOverview(buf *bytes.Buffer, readme *types.
 	// Model Specs (for ML projects)
 	if len(readme.ModelSpecs) > 0 {
 		buf.WriteString("### Model Specifications\n\n")
-		// Order specs for consistency
+		// Known specs in a fixed order, then any others by name
 		specOrder := []string{"parameters", "architecture", "layers", "heads", "embedding", "context_length"}
-		for _, key := range specOrder {
-			if value, ok := readme.ModelSpecs[key]; ok {
-				displayName := toTitleCase(strings.ReplaceAll(key, "_", " "))
-				fmt.Fprintf(buf, "- **%s:** %s\n", displayName, value)
-			}
-		}
-		// Any remaining specs not in our order
-		for key, value := range readme.ModelSpecs {
-			found := false
-			for _, ordered := range specOrder {
-				if key == ordered {
-					found = true
-					break
-				}
-			}
-			if !found {
-				displayName := toTitleCase(strings.ReplaceAll(key, "_", " "))
-				fmt.Fprintf(buf, "- **%s:** %s\n", displayName, value)
-			}
+		for _, key := range orderedKeys(readme.ModelSpecs, specOrder) {
+			displayName := toTitleCase(strings.ReplaceAll(key, "_", " "))
+			fmt.Fprintf(buf, "- **%s:** %s\n", displayName, readme.ModelSpecs[key])
 		}
 		buf.WriteString("\n")
 	}
@@ -305,12 +291,9 @@ func (g *ClaudeGenerator) writeTechStack(buf *bytes.Buffer, stack *types.TechSta
 	// Languages
 	if len(stack.Languages) > 0 {
 		buf.WriteString("### Languages\n\n")
-		// Sort by percentage descending
-		langs := make([]types.Language, len(stack.Languages))
-		copy(langs, stack.Languages)
-		sort.Slice(langs, func(i, j int) bool {
-			return langs[i].Percentage > langs[j].Percentage
-		})
+		// Sort by percentage descending, then name
+		langs := slices.Clone(stack.Languages)
+		slices.SortFunc(langs, compareLanguages)
 
 		for _, lang := range langs {
 			if lang.Version != "" {
@@ -624,14 +607,17 @@ func groupEndpointsByResource(endpoints []types.Endpoint) map[string][]types.End
 		grouped[resource] = append(grouped[resource], ep)
 	}
 
-	// Sort endpoints within each group by path, then method
+	// Sort endpoints within each group by path, method, file and line
 	for resource := range grouped {
 		eps := grouped[resource]
-		sort.Slice(eps, func(i, j int) bool {
-			if eps[i].Path == eps[j].Path {
-				return methodPriority(eps[i].Method) < methodPriority(eps[j].Method)
-			}
-			return eps[i].Path < eps[j].Path
+		slices.SortFunc(eps, func(a, b types.Endpoint) int {
+			return cmp.Or(
+				cmp.Compare(a.Path, b.Path),
+				cmp.Compare(methodPriority(a.Method), methodPriority(b.Method)),
+				cmp.Compare(a.Method, b.Method),
+				cmp.Compare(a.File, b.File),
+				cmp.Compare(a.Line, b.Line),
+			)
 		})
 		grouped[resource] = eps
 	}
@@ -706,6 +692,13 @@ func methodPriority(method string) int {
 	return 99
 }
 
+// conventionCategoryOrder lists general convention categories in the order
+// the detectors report them; framework categories follow, sorted by name.
+var conventionCategoryOrder = []string{
+	"naming", "imports", "typescript", "testing", "code-style", "components", "structure",
+	"documentation", "logging", "error-handling", "async", "architecture", "custom",
+}
+
 // writeConventions writes the conventions section
 func (g *ClaudeGenerator) writeConventions(buf *bytes.Buffer, conventions []types.Convention, gitConventions *types.GitConventions) {
 	hasConventions := len(conventions) > 0
@@ -727,7 +720,8 @@ func (g *ClaudeGenerator) writeConventions(buf *bytes.Buffer, conventions []type
 		byCategory[cat] = append(byCategory[cat], conv)
 	}
 
-	for cat, convs := range byCategory {
+	for _, cat := range orderedKeys(byCategory, conventionCategoryOrder) {
+		convs := byCategory[cat]
 		fmt.Fprintf(buf, "### %s\n\n", titleCase(cat))
 		for _, conv := range convs {
 			fmt.Fprintf(buf, "- %s\n", conv.Description)
@@ -1063,34 +1057,36 @@ func (g *ClaudeGenerator) writeDependencies(buf *bytes.Buffer, deps []types.Depe
 	}
 
 	// Only include notable dependencies that help understand the project
-	// Skip generic/common packages that don't add context
-	notablePatterns := map[string]string{
+	// Skip generic/common packages that don't add context.
+	// Checked in order, so a name matching two patterns (gorm.io/driver/postgres)
+	// always gets the same category.
+	notablePatterns := []struct{ pattern, category string }{
 		// Databases
-		"gorm":     "ORM",
-		"sqlx":     "SQL",
-		"mongo":    "MongoDB",
-		"redis":    "Redis",
-		"postgres": "PostgreSQL",
-		"mysql":    "MySQL",
-		"sqlite":   "SQLite",
+		{"gorm", "ORM"},
+		{"sqlx", "SQL"},
+		{"mongo", "MongoDB"},
+		{"redis", "Redis"},
+		{"postgres", "PostgreSQL"},
+		{"mysql", "MySQL"},
+		{"sqlite", "SQLite"},
 		// Messaging
-		"kafka":    "Kafka",
-		"rabbitmq": "RabbitMQ",
-		"nats":     "NATS",
-		"pubsub":   "Pub/Sub",
+		{"kafka", "Kafka"},
+		{"rabbitmq", "RabbitMQ"},
+		{"nats", "NATS"},
+		{"pubsub", "Pub/Sub"},
 		// Cloud
-		"aws-sdk": "AWS",
-		"azure":   "Azure",
-		"gcloud":  "GCP",
+		{"aws-sdk", "AWS"},
+		{"azure", "Azure"},
+		{"gcloud", "GCP"},
 		// Observability
-		"prometheus":    "Metrics",
-		"sentry":        "Error tracking",
-		"opentelemetry": "Tracing",
-		"elastic":       "APM",
+		{"prometheus", "Metrics"},
+		{"sentry", "Error tracking"},
+		{"opentelemetry", "Tracing"},
+		{"elastic", "APM"},
 		// Testing
-		"testify":  "Testing",
-		"gomock":   "Mocking",
-		"httptest": "HTTP testing",
+		{"testify", "Testing"},
+		{"gomock", "Mocking"},
+		{"httptest", "HTTP testing"},
 	}
 
 	var notable []string
@@ -1098,10 +1094,10 @@ func (g *ClaudeGenerator) writeDependencies(buf *bytes.Buffer, deps []types.Depe
 
 	for _, d := range deps {
 		nameLower := strings.ToLower(d.Name)
-		for pattern, category := range notablePatterns {
-			if strings.Contains(nameLower, pattern) && !seen[category] {
-				notable = append(notable, category)
-				seen[category] = true
+		for _, np := range notablePatterns {
+			if strings.Contains(nameLower, np.pattern) && !seen[np.category] {
+				notable = append(notable, np.category)
+				seen[np.category] = true
 				break
 			}
 		}
@@ -1283,6 +1279,11 @@ func (g *ClaudeGenerator) writeCLIOutput(buf *bytes.Buffer, cliInfo *types.CLIIn
 		}
 		buf.WriteString("\n")
 	}
+}
+
+// compareLanguages orders languages by percentage descending, then name.
+func compareLanguages(a, b types.Language) int {
+	return cmp.Or(cmp.Compare(b.Percentage, a.Percentage), cmp.Compare(a.Name, b.Name))
 }
 
 // titleCase converts the first letter of a string to uppercase
@@ -1476,11 +1477,10 @@ func (g *ClaudeGenerator) writePatternsCompact(buf *bytes.Buffer, patterns *type
 			return
 		}
 
-		// Sort by file count (most common first)
-		sorted := make([]types.PatternInfo, len(patterns))
-		copy(sorted, patterns)
-		sort.Slice(sorted, func(i, j int) bool {
-			return sorted[i].FileCount > sorted[j].FileCount
+		// Sort by file count (most common first), then name
+		sorted := slices.Clone(patterns)
+		slices.SortStableFunc(sorted, func(a, b types.PatternInfo) int {
+			return cmp.Or(cmp.Compare(b.FileCount, a.FileCount), cmp.Compare(a.Name, b.Name))
 		})
 
 		buf.WriteString("### " + title + "\n\n")

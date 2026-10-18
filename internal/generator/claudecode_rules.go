@@ -427,7 +427,8 @@ func (g *ClaudeCodeGenerator) securityRuleContent(analysis *types.Analysis, ctx 
 	if len(ctx.AuthPatterns) > 0 {
 		content.WriteString("## Authentication in This Project\n\n")
 		content.WriteString("Detected patterns:\n")
-		for pattern, files := range ctx.AuthPatterns {
+		for _, pattern := range sortedKeys(ctx.AuthPatterns) {
+			files := ctx.AuthPatterns[pattern]
 			fmt.Fprintf(&content, "- **%s**", pattern)
 			if len(files) > 0 {
 				fmt.Fprintf(&content, " - see `%s`", files[0])
