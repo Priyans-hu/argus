@@ -74,7 +74,7 @@ func (p *pipeline) conventions() ([]types.Convention, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to detect patterns: %w", err)
 	}
-	framework, err := detector.NewFrameworkDetector(p.root, p.src).Detect()
+	framework, err := detector.NewFrameworkDetector(p.root, p.src, p.deps).Detect()
 	if err != nil {
 		return nil, fmt.Errorf("failed to detect framework patterns: %w", err)
 	}
