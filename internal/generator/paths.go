@@ -9,8 +9,10 @@ import (
 // directories by name. The files carry ARGUS:AUTO markers and are merged on
 // rescans; everything under the directories is create-only.
 var (
-	generatedFiles = []string{"CLAUDE.md", "AGENTS.md", ".cursorrules", ".github/copilot-instructions.md"}
+	generatedFiles = []string{"CLAUDE.md", "AGENTS.md", ".cursor/rules/argus.mdc", ".github/copilot-instructions.md"}
 	generatedDirs  = []string{".claude", ".continue"}
+	// Outputs of older argus versions: still skipped, no longer written.
+	legacyFiles = []string{".cursorrules"}
 )
 
 // IsGeneratedPath reports whether the relative path p is an argus output at
@@ -18,7 +20,7 @@ var (
 // Both slash and backslash separators are accepted.
 func IsGeneratedPath(p string) bool {
 	p = strings.TrimPrefix(strings.ReplaceAll(p, `\`, "/"), "./")
-	for _, f := range generatedFiles {
+	for _, f := range slices.Concat(generatedFiles, legacyFiles) {
 		if p == f || strings.HasSuffix(p, "/"+f) {
 			return true
 		}

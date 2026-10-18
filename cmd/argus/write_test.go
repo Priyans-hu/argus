@@ -367,7 +367,7 @@ func generate(t *testing.T, root, format string) {
 }
 
 func TestMergeFilesAreMarkedAndStable(t *testing.T) {
-	files := map[string]string{"claude": "CLAUDE.md", "cursor": ".cursorrules", "copilot": ".github/copilot-instructions.md"}
+	files := map[string]string{"claude": "CLAUDE.md", "cursor": ".cursor/rules/argus.mdc", "copilot": ".github/copilot-instructions.md"}
 	for format, rel := range files {
 		t.Run(format, func(t *testing.T) {
 			resetFlags(t)
@@ -657,7 +657,7 @@ func TestDryRunWritesNothing(t *testing.T) {
 	if len(entries) != 1 || readFile(t, root, "CLAUDE.md") != "# Team rules\n" {
 		t.Errorf("dry-run changed the tree: %v", entries)
 	}
-	for _, rel := range []string{"CLAUDE.md", ".cursorrules", ".continue/config.yaml", ".claude/settings.json"} {
+	for _, rel := range []string{"CLAUDE.md", ".cursor/rules/argus.mdc", ".continue/config.yaml", ".claude/settings.json"} {
 		if header := "📄 Would write to " + filepath.Join(root, filepath.FromSlash(rel)) + ":"; !strings.Contains(out.String(), header) {
 			t.Errorf("no preview for %s", rel)
 		}

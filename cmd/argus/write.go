@@ -51,7 +51,8 @@ func writeMerged(root, label, rel string, generated []byte, dryRun bool) error {
 		return fmt.Errorf("failed to read %s: %w", shown, err)
 	}
 
-	content, outcome := merger.NewMerger(mergeMode).Merge(existing, generated)
+	front, body, generated := splitFront(existing, generated)
+	content, outcome := merger.NewMerger(mergeMode).Merge(body, generated)
 	if outcome == merger.Malformed {
 		if !force {
 			if notifyOnce(shown) {
@@ -64,6 +65,7 @@ func writeMerged(root, label, rel string, generated []byte, dryRun bool) error {
 	if addCustomBlock && !bytes.Contains(content, []byte(merger.CustomStartMarker)) {
 		content = []byte(merger.AddCustomSectionPlaceholder(string(content)))
 	}
+	content = bytes.Join([][]byte{front, content}, nil)
 	content = append(bytes.TrimRight(content, "\r\n"), '\n')
 	// A file whose newlines are all CRLF stays CRLF; others keep an LF block.
 	crlf, lf := []byte("\r\n"), []byte("\n")
