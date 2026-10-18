@@ -127,6 +127,22 @@ func TestDownloadAsset(t *testing.T) {
 	}
 }
 
+func TestDownloadAssetOutlivesMetadataTimeout(t *testing.T) {
+	srv := serveRelease(t, 50*time.Millisecond, func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(150 * time.Millisecond)
+		_, _ = fmt.Fprint(w, "archive bytes")
+	})
+
+	path, err := downloadAsset(srv.URL + "/asset")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Remove(path) })
+	if data, err := os.ReadFile(path); err != nil || string(data) != "archive bytes" {
+		t.Errorf("downloaded %q, %v", data, err)
+	}
+}
+
 // installFixture writes an old target binary and a new one in separate
 // directories and returns their paths.
 func installFixture(t *testing.T) (target, newBinary string) {

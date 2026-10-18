@@ -1189,9 +1189,13 @@ func execute(w io.Writer) int {
 // releaseURL is the GitHub API endpoint for the latest release.
 var releaseURL = "https://api.github.com/repos/Priyans-hu/argus/releases/latest"
 
-// httpClient bounds every upgrade request, so a stalled connection fails
+// httpClient bounds the release lookup, so a stalled connection fails
 // instead of hanging.
 var httpClient = &http.Client{Timeout: 60 * time.Second}
+
+// downloadClient bounds the asset download, which takes longer than the
+// lookup on a slow connection.
+var downloadClient = &http.Client{Timeout: 5 * time.Minute}
 
 // isNewer reports whether latest is a higher semantic version than current.
 // Invalid versions such as "dev" sort below valid ones, so a dev build
@@ -1311,7 +1315,7 @@ func getAssetName(ver string) string {
 }
 
 func downloadAsset(url string) (string, error) {
-	resp, err := httpClient.Get(url)
+	resp, err := downloadClient.Get(url)
 	if err != nil {
 		return "", err
 	}
