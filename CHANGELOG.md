@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - --monorepo merges the root CLAUDE.md overview instead of overwriting hand-written content
 - Output is deterministic: repeated scans of the same repository produce identical files (map order, tie-break and goroutine order fixes)
 - Commit style detection uses real regexes: scoped feat(x): commits are recognized and ties resolve deterministically
+- Errors print once; usage is shown only for argument and flag errors
 
 ### Security
 - The Repository line no longer leaks credentials or SSH host aliases; only github.com, gitlab.com and bitbucket.org are linked, other hosts show owner/name, local remotes are omitted

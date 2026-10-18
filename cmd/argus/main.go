@@ -75,7 +75,11 @@ Argus scans your codebase and generates optimized context files
 for AI coding assistants (Claude Code, Cursor, Copilot, etc.).
 
 No more manually writing CLAUDE.md or .cursorrules - Argus sees everything.`,
+	// execute prints errors once. Usage is shown only for flag and argument
+	// errors, which cobra reports before PersistentPreRun silences it.
+	SilenceErrors: true,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		cmd.SilenceUsage = true
 		setupLogging()
 	},
 }
@@ -1167,10 +1171,17 @@ func parseSinceFlag(s string) (time.Time, error) {
 }
 
 func main() {
+	os.Exit(execute(os.Stderr))
+}
+
+// execute runs the command line, reports a failure once on w and returns the
+// exit code.
+func execute(w io.Writer) int {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		_, _ = fmt.Fprintf(w, "Error: %v\n", err)
+		return 1
 	}
+	return 0
 }
 
 // GitHubRelease represents a GitHub release

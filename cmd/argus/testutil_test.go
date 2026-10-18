@@ -44,17 +44,38 @@ func executeRoot(t *testing.T, args ...string) (out, errOut string, err error) {
 	rootCmd.SetOut(&outBuf)
 	rootCmd.SetErr(&errBuf)
 	rootCmd.SetArgs(args)
-	t.Cleanup(func() {
-		rootCmd.SetOut(nil)
-		rootCmd.SetErr(nil)
-		rootCmd.SetArgs(nil)
-		if f := rootCmd.Flags().Lookup("version"); f != nil {
-			_ = f.Value.Set(f.DefValue)
-			f.Changed = false
-		}
-	})
+	t.Cleanup(resetRoot)
 	err = rootCmd.Execute()
 	return outBuf.String(), errBuf.String(), err
+}
+
+// runCLI runs the command line as main does and returns everything that
+// would reach stderr (cobra's usage included) and the exit code. Only use it
+// for commands that fail before doing real work.
+func runCLI(t *testing.T, args ...string) (errOut string, code int) {
+	t.Helper()
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf) // cobra prints usage to stderr unless an output is set
+	rootCmd.SetErr(&buf)
+	rootCmd.SetArgs(args)
+	t.Cleanup(resetRoot)
+	code = execute(&buf)
+	return buf.String(), code
+}
+
+// resetRoot undoes what executing rootCmd leaves behind.
+func resetRoot() {
+	rootCmd.SetOut(nil)
+	rootCmd.SetErr(nil)
+	rootCmd.SetArgs(nil)
+	if f := rootCmd.Flags().Lookup("version"); f != nil {
+		_ = f.Value.Set(f.DefValue)
+		f.Changed = false
+	}
+	rootCmd.SilenceUsage = false
+	for _, c := range rootCmd.Commands() {
+		c.SilenceUsage = false
+	}
 }
 
 // writeFiles writes slash-path files under root.
