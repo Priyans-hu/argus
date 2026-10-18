@@ -59,7 +59,7 @@ func (p *pipeline) conventions() ([]types.Convention, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to detect conventions: %w", err)
 	}
-	patterns, err := detector.NewPatternDetector(p.root, p.src).Detect()
+	patterns, err := detector.NewPatternDetector(p.root, p.src, p.deps).Detect()
 	if err != nil {
 		return nil, fmt.Errorf("failed to detect patterns: %w", err)
 	}
@@ -71,15 +71,17 @@ func (p *pipeline) conventions() ([]types.Convention, error) {
 }
 
 // codePatterns runs the keyword, ML and AST detectors on project source;
-// React hooks and the Python AST results join the keyword results by name.
-// The JS and Python AST detectors skip test files, which feed only testing
-// patterns.
+// React hooks, reported only with React or Preact declared, and the Python
+// AST results join the keyword results by name. The JS and Python AST
+// detectors skip test files, which feed only testing patterns.
 func (p *pipeline) codePatterns() *types.CodePatterns {
-	patterns := detector.NewCodePatternDetector(p.root, p.src).Detect()
+	patterns := detector.NewCodePatternDetector(p.root, p.src, p.deps).Detect()
 	patterns.MLPatterns = detector.NewMLDetector(p.root, p.src).GetMLPatterns()
 	nonTest := slices.DeleteFunc(slices.Clone(p.src), func(f types.FileInfo) bool { return detector.IsTestFile(f.Path) })
-	hooks := filterByCategory(detector.NewJSASTDetector(p.root, nonTest).Detect(), "React Hooks")
-	patterns.StateManagement = mergePatterns(patterns.StateManagement, hooks)
+	if detector.NewDepSet(p.deps).Has("react", "preact") {
+		hooks := filterByCategory(detector.NewJSASTDetector(p.root, nonTest).Detect(), "React Hooks")
+		patterns.StateManagement = mergePatterns(patterns.StateManagement, hooks)
+	}
 	patterns.PythonPatterns = mergePatterns(patterns.PythonPatterns, detector.NewPythonASTDetector(p.root, nonTest).Detect())
 	return patterns
 }

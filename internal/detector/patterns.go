@@ -13,14 +13,13 @@ import (
 type PatternDetector struct {
 	rootPath string
 	files    []types.FileInfo
+	deps     DepSet
 }
 
-// NewPatternDetector creates a new pattern detector
-func NewPatternDetector(rootPath string, files []types.FileInfo) *PatternDetector {
-	return &PatternDetector{
-		rootPath: rootPath,
-		files:    files,
-	}
+// NewPatternDetector creates a pattern detector; logging libraries whose
+// calls do not name them need their package among deps.
+func NewPatternDetector(rootPath string, files []types.FileInfo, deps []types.Dependency) *PatternDetector {
+	return &PatternDetector{rootPath: rootPath, files: files, deps: NewDepSet(deps)}
 }
 
 // Detect analyzes the codebase for patterns and conventions
@@ -179,28 +178,27 @@ func (d *PatternDetector) detectCommentPatterns() []types.Convention {
 func (d *PatternDetector) detectLoggingPatterns() []types.Convention {
 	var conventions []types.Convention
 
-	// Logging patterns by language/framework with allowed extensions. Order
-	// matters: several patterns match the same lines (winston and pino,
-	// log4j and slf4j), and a tie goes to the earlier entry.
+	// Logging patterns by language/framework with allowed extensions and,
+	// for libraries their calls do not name, the package that must be
+	// declared. Order matters: several patterns match the same lines (winston
+	// and pino, zap and zerolog), and a tie goes to the earlier entry.
 	logPatterns := []struct {
 		name       string
 		pattern    *regexp.Regexp
 		extensions []string // allowed file extensions, empty means any
+		packages   []string // evidence, empty when the call names the library
 	}{
-		{"console", regexp.MustCompile(`console\.(log|info|warn|error|debug)\(`), []string{".js", ".ts", ".jsx", ".tsx"}},
-		{"winston", regexp.MustCompile(`(logger|log)\.(info|warn|error|debug)\(`), []string{".js", ".ts", ".jsx", ".tsx"}},
-		{"pino", regexp.MustCompile(`(logger|log)\.(info|warn|error|debug|fatal)\(`), []string{".js", ".ts", ".jsx", ".tsx"}},
-		{"log4j", regexp.MustCompile(`(logger|log)\.(info|warn|error|debug|trace)\(`), []string{".java"}},
-		{"slf4j", regexp.MustCompile(`(log|logger)\.(info|warn|error|debug)\(`), []string{".java"}},
-		{"python", regexp.MustCompile(`logging\.(info|warning|error|debug|critical)\(`), []string{".py"}},
-		{"python-logger", regexp.MustCompile(`logger\.(info|warning|error|debug|critical)\(`), []string{".py"}},
-		{"go-log", regexp.MustCompile(`log\.(Print|Printf|Println|Fatal|Panic)\(`), []string{".go"}},
-		{"go-slog", regexp.MustCompile(`slog\.(Info|Warn|Error|Debug)\(`), []string{".go"}},
-		{"go-zap", regexp.MustCompile(`(logger|zap)\.(Info|Warn|Error|Debug)\(`), []string{".go"}},
-		{"go-zerolog", regexp.MustCompile(`(log|logger)\.(Info|Warn|Error|Debug)\(\)\.(Msg|Msgf)\(`), []string{".go"}},
-		{"rust-log", regexp.MustCompile(`(info|warn|error|debug|trace)!\(`), []string{".rs"}},
-		{"csharp", regexp.MustCompile(`(logger|_logger)\.(Log|LogInformation|LogWarning|LogError)\(`), []string{".cs"}},
-		{"ruby", regexp.MustCompile(`(logger|Rails\.logger)\.(info|warn|error|debug)\(`), []string{".rb"}},
+		{"console", regexp.MustCompile(`console\.(log|info|warn|error|debug)\(`), []string{".js", ".ts", ".jsx", ".tsx"}, nil},
+		{"winston", regexp.MustCompile(`(logger|log)\.(info|warn|error|debug)\(`), []string{".js", ".ts", ".jsx", ".tsx"}, []string{"winston"}},
+		{"pino", regexp.MustCompile(`(logger|log)\.(info|warn|error|debug|fatal)\(`), []string{".js", ".ts", ".jsx", ".tsx"}, []string{"pino"}},
+		{"python", regexp.MustCompile(`logging\.(info|warning|error|debug|critical)\(`), []string{".py"}, nil},
+		{"python-logger", regexp.MustCompile(`logger\.(info|warning|error|debug|critical)\(`), []string{".py"}, nil},
+		{"go-log", regexp.MustCompile(`log\.(Print|Printf|Println|Fatal|Panic)\(`), []string{".go"}, nil},
+		{"go-slog", regexp.MustCompile(`slog\.(Info|Warn|Error|Debug)\(`), []string{".go"}, nil},
+		{"go-zap", regexp.MustCompile(`(logger|zap)\.(Info|Warn|Error|Debug)\(`), []string{".go"}, nil},
+		{"go-zerolog", regexp.MustCompile(`(log|logger)\.(Info|Warn|Error|Debug)\(\)\.(Msg|Msgf)\(`), []string{".go"}, nil},
+		{"rust-log", regexp.MustCompile(`(info|warn|error|debug|trace)!\(`), []string{".rs"}, nil},
+		{"ruby", regexp.MustCompile(`(logger|Rails\.logger)\.(info|warn|error|debug)\(`), []string{".rb"}, nil},
 	}
 
 	counts := make(map[string]int)
@@ -239,7 +237,7 @@ func (d *PatternDetector) detectLoggingPatterns() []types.Convention {
 				}
 			}
 
-			if logPat.pattern.MatchString(contentStr) {
+			if (len(logPat.packages) == 0 || d.deps.declares(logPat.packages)) && logPat.pattern.MatchString(contentStr) {
 				counts[logPat.name]++
 			}
 		}
@@ -267,15 +265,12 @@ func (d *PatternDetector) detectLoggingPatterns() []types.Convention {
 			"console":    "console.log/warn/error for logging",
 			"winston":    "Winston logger with structured logging",
 			"pino":       "Pino logger (fast JSON logging)",
-			"log4j":      "Log4j logging framework",
-			"slf4j":      "SLF4J logging facade",
 			"python":     "Python logging module",
 			"go-log":     "Go standard library log package",
 			"go-slog":    "Go structured logging (slog)",
 			"go-zap":     "Uber's Zap logger",
 			"go-zerolog": "Zerolog (zero-allocation JSON logging)",
 			"rust-log":   "Rust log crate macros",
-			"csharp":     "Microsoft.Extensions.Logging",
 			"ruby":       "Ruby Logger / Rails.logger",
 		}
 

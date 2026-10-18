@@ -207,3 +207,13 @@ func TestPatternDetectorsReadOnlyProjectSource(t *testing.T) {
 	}
 	same("workspace apps/docs", results[0].Analysis, control)
 }
+
+// React hooks join state management only with React or Preact declared;
+// richProject declares React and gets them.
+func TestReactHooksNeedReact(t *testing.T) {
+	root := t.TempDir()
+	writeTree(t, root, map[string]string{"package.json": `{"name": "app"}`, "src/cart.js": patternSource["cart.js"]})
+	if a, _ := analyzeBoth(t, root, nil); hasPattern(a.CodePatterns.StateManagement, "useCart") {
+		t.Errorf("hooks reported without React: %+v", a.CodePatterns.StateManagement)
+	}
+}

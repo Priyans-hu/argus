@@ -16,14 +16,13 @@ import (
 type CodePatternDetector struct {
 	rootPath string
 	files    []types.FileInfo
+	deps     DepSet
 }
 
-// NewCodePatternDetector creates a new code pattern detector
-func NewCodePatternDetector(rootPath string, files []types.FileInfo) *CodePatternDetector {
-	return &CodePatternDetector{
-		rootPath: rootPath,
-		files:    files,
-	}
+// NewCodePatternDetector creates a code pattern detector; library patterns
+// need their package among deps.
+func NewCodePatternDetector(rootPath string, files []types.FileInfo, deps []types.Dependency) *CodePatternDetector {
+	return &CodePatternDetector{rootPath: rootPath, files: files, deps: NewDepSet(deps)}
 }
 
 // PatternCategory represents a category of detected patterns
@@ -62,6 +61,228 @@ func (d *CodePatternDetector) Detect() *types.CodePatterns {
 
 	return patterns
 }
+
+// keywordRow is a keyword that marks a pattern. A row naming packages is
+// reported only when one of them is a declared dependency; a row without
+// packages is intrinsic to the language or platform.
+type keywordRow struct {
+	keyword     string
+	description string
+	packages    []string
+}
+
+// keywordTable holds the rows of one category, scanned in the files with one
+// of exts that include accepts.
+type keywordTable struct {
+	category string
+	exts     []string
+	include  func(rel string) bool
+	rows     []keywordRow
+}
+
+// report returns, in row order, a pattern for every evidenced row whose
+// keyword is found.
+func (d *CodePatternDetector) report(t keywordTable) []types.PatternInfo {
+	var keywords []string
+	for _, r := range t.rows {
+		if len(r.packages) == 0 || d.deps.declares(r.packages) {
+			keywords = append(keywords, r.keyword)
+		}
+	}
+	found := d.scanKeywords(keywords, t.exts, t.include)
+	var patterns []types.PatternInfo
+	for _, r := range t.rows {
+		if files := found[r.keyword]; len(files) > 0 {
+			patterns = append(patterns, types.PatternInfo{
+				Name: r.keyword, Category: t.category, Description: r.description,
+				FileCount: len(files), Examples: limitSlice(files, 3),
+			})
+		}
+	}
+	return patterns
+}
+
+var (
+	jsExts = []string{".js", ".jsx", ".ts", ".tsx"}
+
+	reactPkgs      = []string{"react", "preact"}
+	reduxPkgs      = []string{"@reduxjs/toolkit", "redux", "react-redux"}
+	reactQueryPkgs = []string{"@tanstack/react-query", "react-query"}
+	routerPkgs     = []string{"react-router", "react-router-dom", "@remix-run/react", "next"}
+	nextPkgs       = []string{"next"}
+	nextAuthPkgs   = []string{"next-auth"}
+	authPkgs       = []string{"next-auth", "@auth/", "firebase", "@supabase/", "@clerk/", "aws-amplify"}
+	hookFormPkgs   = []string{"react-hook-form"}
+	testingLibPkgs = []string{"@testing-library/"}
+	tailwindPkgs   = []string{"tailwindcss", "@tailwindcss/"}
+	muiStylesPkgs  = []string{"@material-ui/core", "@mui/styles"}
+	axiosPkgs      = []string{"axios"}
+	prismaPkgs     = []string{"@prisma/client", "prisma"}
+	graphqlPkgs    = []string{"graphql", "@apollo/client", "@apollo/server", "apollo-server", "graphql-request", "urql", "graphql-yoga",
+		"graphene", "strawberry-graphql", "ariadne", "github.com/99designs/gqlgen", "github.com/graphql-go/graphql"}
+)
+
+var reactStateTable = keywordTable{"state", jsExts, nonTestFile, []keywordRow{
+	{"useState", "React useState hook for local component state", reactPkgs},
+	{"useReducer", "React useReducer for complex state logic", reactPkgs},
+	{"useContext", "React Context API for prop drilling avoidance", reactPkgs},
+	{"createContext", "React Context creation", reactPkgs},
+	{"zustand", "Zustand - lightweight state management", []string{"zustand"}},
+	{"create(", "Zustand store creation", []string{"zustand"}},
+	{"useStore", "Zustand/generic store hook", []string{"zustand", "@nanostores/react", "@tanstack/react-store"}},
+	{"jotai", "Jotai - atomic state management", []string{"jotai"}},
+	{"atom(", "Jotai/Recoil atom definition", []string{"jotai", "recoil"}},
+	{"useAtom", "Jotai atom hook", []string{"jotai"}},
+	{"recoil", "Recoil state management", []string{"recoil"}},
+	{"useRecoilState", "Recoil state hook", []string{"recoil"}},
+	{"@reduxjs/toolkit", "Redux Toolkit", reduxPkgs},
+	{"createSlice", "Redux Toolkit slice", reduxPkgs},
+	{"useSelector", "Redux selector hook", reduxPkgs},
+	{"useDispatch", "Redux dispatch hook", reduxPkgs},
+	{"configureStore", "Redux store configuration", reduxPkgs},
+}}
+
+var vueStateTable = keywordTable{"state", []string{".vue", ".js", ".ts"}, nonTestFile, []keywordRow{
+	{"defineStore", "Pinia store definition", []string{"pinia"}},
+	{"storeToRefs", "Pinia reactive store refs", []string{"pinia"}},
+	{"createPinia", "Pinia initialization", []string{"pinia"}},
+	{"ref(", "Vue ref for reactive primitives", []string{"vue", "nuxt"}},
+	{"reactive(", "Vue reactive for objects", []string{"vue", "nuxt"}},
+	{"computed(", "Vue computed properties", []string{"vue", "nuxt"}},
+	{"watch(", "Vue watch for side effects", []string{"vue", "nuxt"}},
+	{"watchEffect(", "Vue watchEffect for automatic tracking", []string{"vue", "nuxt"}},
+}}
+
+var jsDataFetchingTable = keywordTable{"data-fetching", jsExts, nonTestFile, []keywordRow{
+	{"useQuery", "TanStack Query (React Query) for server state", reactQueryPkgs},
+	{"useMutation", "TanStack Query mutation hook", reactQueryPkgs},
+	{"useInfiniteQuery", "TanStack Query infinite scrolling", reactQueryPkgs},
+	{"QueryClient", "TanStack Query client setup", reactQueryPkgs},
+	{"useSWR", "SWR data fetching hook", []string{"swr"}},
+	{"axios", "Axios HTTP client", axiosPkgs},
+	{"axios.get", "Axios GET request", axiosPkgs},
+	{"axios.post", "Axios POST request", axiosPkgs},
+	{"fetch(", "Native Fetch API", nil},
+	{"$fetch", "Nuxt/ofetch utility", []string{"nuxt", "ofetch"}},
+	{"useFetch", "Nuxt/custom fetch hook", []string{"nuxt", "@vueuse/core"}},
+	{"getServerSideProps", "Next.js server-side data fetching", nextPkgs},
+	{"getStaticProps", "Next.js static data fetching", nextPkgs},
+	{"useLoaderData", "Remix loader data hook", []string{"@remix-run/react", "react-router", "react-router-dom"}},
+	{"trpc", "tRPC type-safe API calls", []string{"@trpc/"}},
+}}
+
+var jsRoutingTable = keywordTable{"routing", jsExts, nonTestFile, []keywordRow{
+	{"useRouter", "Next.js/custom router hook", nextPkgs},
+	{"useNavigate", "React Router navigation hook", []string{"react-router", "react-router-dom", "@remix-run/react"}},
+	{"useParams", "React Router URL params", routerPkgs},
+	{"useSearchParams", "React Router/Next.js search params", routerPkgs},
+	{"<Link", "Router Link component", routerPkgs},
+	{"<Route", "React Router Route component", []string{"react-router", "react-router-dom"}},
+	{"createBrowserRouter", "React Router v6 browser router", []string{"react-router", "react-router-dom"}},
+	{"next/navigation", "Next.js App Router navigation", nextPkgs},
+	{"next/link", "Next.js Link component", nextPkgs},
+	{"usePathname", "Next.js pathname hook", nextPkgs},
+}}
+
+var jsFormsTable = keywordTable{"forms", jsExts, nonTestFile, []keywordRow{
+	{"useForm", "React Hook Form / TanStack Form", []string{"react-hook-form", "@tanstack/react-form"}},
+	{"useFormContext", "React Hook Form context", hookFormPkgs},
+	{"zodResolver", "Zod schema validation with forms", []string{"@hookform/resolvers"}},
+	{"yupResolver", "Yup schema validation with forms", []string{"@hookform/resolvers"}},
+	{"Formik", "Formik form library", []string{"formik"}},
+	{"useFormik", "Formik hook", []string{"formik"}},
+	{"<form", "HTML form element", nil},
+	{"register(", "React Hook Form field registration", hookFormPkgs},
+	{"Controller", "React Hook Form Controller", hookFormPkgs},
+	{"z.object", "Zod object schema", []string{"zod"}},
+	{"z.string", "Zod string validation", []string{"zod"}},
+}}
+
+// jsTestingTable is read from test files only.
+var jsTestingTable = keywordTable{"testing", jsExts, IsTestFile, []keywordRow{
+	{"describe(", "Test suite definition (Jest/Vitest/Mocha)", nil},
+	{"it(", "Test case (Jest/Vitest/Mocha)", nil},
+	{"test(", "Test case (Jest/Vitest)", nil},
+	{"expect(", "Assertion (Jest/Vitest/Chai)", nil},
+	{"vi.mock", "Vitest mocking", []string{"vitest"}},
+	{"jest.mock", "Jest mocking", []string{"jest", "@jest/globals"}},
+	{"@testing-library", "Testing Library", testingLibPkgs},
+	{"render(", "Testing Library render", testingLibPkgs},
+	{"screen.", "Testing Library screen queries", testingLibPkgs},
+	{"userEvent", "Testing Library user events", testingLibPkgs},
+	{"fireEvent", "Testing Library fire events", testingLibPkgs},
+	{"cy.", "Cypress commands", []string{"cypress"}},
+	{"playwright", "Playwright testing", []string{"playwright", "@playwright/test"}},
+}}
+
+var jsStylingTable = keywordTable{"styling", []string{".js", ".jsx", ".ts", ".tsx", ".css", ".scss"}, nonTestFile, []keywordRow{
+	{"className=", "CSS class usage", nil},
+	{"tailwind", "Tailwind CSS", tailwindPkgs},
+	{"@apply", "Tailwind @apply directive", tailwindPkgs},
+	{"styled.", "styled-components", []string{"styled-components", "@emotion/styled"}},
+	{"css`", "Emotion/styled-components CSS", []string{"@emotion/react", "@emotion/css", "styled-components"}},
+	{"makeStyles", "Material-UI makeStyles", muiStylesPkgs},
+	{"useStyles", "Material-UI styles hook", muiStylesPkgs},
+	{"sx={", "MUI sx prop", []string{"@mui/material", "@mui/system"}},
+	{"clsx", "clsx class utility", []string{"clsx"}},
+	{"cn(", "shadcn/ui cn utility", []string{"tailwind-merge", "clsx"}},
+	{"cva(", "Class Variance Authority", []string{"class-variance-authority"}},
+	{"module.css", "CSS Modules", nil},
+}}
+
+var jsAuthTable = keywordTable{"auth", jsExts, nonTestFile, []keywordRow{
+	{"useAuth", "Custom auth hook", reactPkgs},
+	{"useSession", "NextAuth/custom session hook", nextAuthPkgs},
+	{"signIn", "Auth sign in function", authPkgs},
+	{"signOut", "Auth sign out function", authPkgs},
+	{"getSession", "NextAuth getSession", nextAuthPkgs},
+	{"NextAuth", "NextAuth.js", nextAuthPkgs},
+	{"Auth0", "Auth0 integration", []string{"auth0", "@auth0/"}},
+	{"clerk", "Clerk authentication", []string{"@clerk/"}},
+	{"supabase.auth", "Supabase authentication", []string{"@supabase/"}},
+	{"firebase.auth", "Firebase authentication", []string{"firebase", "firebase-admin"}},
+	{"jwt", "JWT handling", []string{"jsonwebtoken", "jose", "jwt-decode", "express-jwt", "passport-jwt", "@nestjs/jwt"}},
+}}
+
+// apiTable is read in JS, Python and Go files; its packages come from all three.
+var apiTable = keywordTable{"api", []string{".js", ".jsx", ".ts", ".tsx", ".py", ".go"}, nonTestFile, []keywordRow{
+	{"GraphQL", "GraphQL API", graphqlPkgs},
+	{"gql`", "GraphQL query", []string{"graphql-tag", "@apollo/client", "graphql-request", "urql"}},
+	{"useQuery", "GraphQL/React Query", append([]string{"@apollo/client", "urql"}, reactQueryPkgs...)},
+	{"useMutation", "GraphQL/React Query mutation", append([]string{"@apollo/client", "urql"}, reactQueryPkgs...)},
+	{"tRPC", "tRPC type-safe API", []string{"@trpc/"}},
+	{"OpenAPI", "OpenAPI/Swagger spec", []string{"openapi-typescript", "openapi-fetch", "swagger-ui-express", "@nestjs/swagger",
+		"fastapi", "github.com/getkin/kin-openapi", "github.com/swaggo/swag"}},
+	{"grpc", "gRPC protocol", []string{"@grpc/grpc-js", "grpcio", "google.golang.org/grpc"}},
+	{"socket.io", "Socket.IO real-time", []string{"socket.io", "socket.io-client"}},
+}}
+
+var jsDatabaseTable = keywordTable{"database", []string{".js", ".ts", ".tsx"}, nonTestFile, []keywordRow{
+	{"prisma", "Prisma ORM", prismaPkgs},
+	{"PrismaClient", "Prisma client", prismaPkgs},
+	{"drizzle", "Drizzle ORM", []string{"drizzle-orm"}},
+	{"typeorm", "TypeORM", []string{"typeorm"}},
+	{"@Entity", "TypeORM entity decorator", []string{"typeorm", "@mikro-orm/core"}},
+	{"sequelize", "Sequelize ORM", []string{"sequelize", "sequelize-typescript"}},
+	{"mongoose", "Mongoose ODM (MongoDB)", []string{"mongoose"}},
+	{"knex", "Knex.js query builder", []string{"knex"}},
+	{"kysely", "Kysely type-safe SQL", []string{"kysely"}},
+	{"supabase", "Supabase client", []string{"@supabase/"}},
+}}
+
+var jsUtilitiesTable = keywordTable{"utilities", jsExts, nonTestFile, []keywordRow{
+	{"lodash", "Lodash utility library", []string{"lodash", "lodash-es"}},
+	{"dayjs", "Day.js date library", []string{"dayjs"}},
+	{"moment", "Moment.js date library", []string{"moment"}},
+	{"date-fns", "date-fns date utilities", []string{"date-fns"}},
+	{"uuid", "UUID generation", []string{"uuid"}},
+	{"nanoid", "Nano ID generation", []string{"nanoid"}},
+	{"zod", "Zod schema validation", []string{"zod"}},
+	{"yup", "Yup schema validation", []string{"yup"}},
+	{"ajv", "AJV JSON schema validation", []string{"ajv"}},
+	{"immer", "Immer immutable updates", []string{"immer"}},
+	{"ramda", "Ramda FP utilities", []string{"ramda"}},
+}}
 
 // bareCalls are keywords that also must not follow '.', so that method calls
 // such as Object.create( or foo.it( do not count.
@@ -173,69 +394,8 @@ func (d *CodePatternDetector) scanForKeywordsWithImports(patterns []PatternWithI
 
 // detectStateManagement detects state management patterns
 func (d *CodePatternDetector) detectStateManagement() []types.PatternInfo {
-	var patterns []types.PatternInfo
-	jsExts := []string{".js", ".jsx", ".ts", ".tsx"}
-	vueExts := []string{".vue", ".js", ".ts"}
+	patterns := slices.Concat(d.report(reactStateTable), d.report(vueStateTable))
 	pyExts := []string{".py"}
-
-	// React state management
-	reactKeywords := map[string]string{
-		"useState":         "React useState hook for local component state",
-		"useReducer":       "React useReducer for complex state logic",
-		"useContext":       "React Context API for prop drilling avoidance",
-		"createContext":    "React Context creation",
-		"zustand":          "Zustand - lightweight state management",
-		"create(":          "Zustand store creation",
-		"useStore":         "Zustand/generic store hook",
-		"jotai":            "Jotai - atomic state management",
-		"atom(":            "Jotai/Recoil atom definition",
-		"useAtom":          "Jotai atom hook",
-		"recoil":           "Recoil state management",
-		"useRecoilState":   "Recoil state hook",
-		"@reduxjs/toolkit": "Redux Toolkit",
-		"createSlice":      "Redux Toolkit slice",
-		"useSelector":      "Redux selector hook",
-		"useDispatch":      "Redux dispatch hook",
-		"configureStore":   "Redux store configuration",
-	}
-
-	jsResults := d.scanForKeywords(keys(reactKeywords), jsExts)
-	for kw, files := range jsResults {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "state",
-				Description: reactKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
-
-	// Vue state management
-	vueKeywords := map[string]string{
-		"defineStore":  "Pinia store definition",
-		"storeToRefs":  "Pinia reactive store refs",
-		"createPinia":  "Pinia initialization",
-		"ref(":         "Vue ref for reactive primitives",
-		"reactive(":    "Vue reactive for objects",
-		"computed(":    "Vue computed properties",
-		"watch(":       "Vue watch for side effects",
-		"watchEffect(": "Vue watchEffect for automatic tracking",
-	}
-
-	vueResults := d.scanForKeywords(keys(vueKeywords), vueExts)
-	for kw, files := range vueResults {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "state",
-				Description: vueKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
 
 	// Python state patterns - use import-aware scanning to reduce false positives
 	pyPatterns := []PatternWithImport{
@@ -268,42 +428,9 @@ func (d *CodePatternDetector) detectStateManagement() []types.PatternInfo {
 
 // detectDataFetching detects data fetching patterns
 func (d *CodePatternDetector) detectDataFetching() []types.PatternInfo {
-	var patterns []types.PatternInfo
-	jsExts := []string{".js", ".jsx", ".ts", ".tsx"}
+	patterns := d.report(jsDataFetchingTable)
 	pyExts := []string{".py"}
 	goExts := []string{".go"}
-
-	// React/JS data fetching
-	jsKeywords := map[string]string{
-		"useQuery":           "TanStack Query (React Query) for server state",
-		"useMutation":        "TanStack Query mutation hook",
-		"useInfiniteQuery":   "TanStack Query infinite scrolling",
-		"QueryClient":        "TanStack Query client setup",
-		"useSWR":             "SWR data fetching hook",
-		"axios":              "Axios HTTP client",
-		"axios.get":          "Axios GET request",
-		"axios.post":         "Axios POST request",
-		"fetch(":             "Native Fetch API",
-		"$fetch":             "Nuxt/ofetch utility",
-		"useFetch":           "Nuxt/custom fetch hook",
-		"getServerSideProps": "Next.js server-side data fetching",
-		"getStaticProps":     "Next.js static data fetching",
-		"useLoaderData":      "Remix loader data hook",
-		"trpc":               "tRPC type-safe API calls",
-	}
-
-	jsResults := d.scanForKeywords(keys(jsKeywords), jsExts)
-	for kw, files := range jsResults {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "data-fetching",
-				Description: jsKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
 
 	// Python data fetching
 	pyKeywords := map[string]string{
@@ -352,37 +479,9 @@ func (d *CodePatternDetector) detectDataFetching() []types.PatternInfo {
 
 // detectRouting detects routing patterns
 func (d *CodePatternDetector) detectRouting() []types.PatternInfo {
-	var patterns []types.PatternInfo
-	jsExts := []string{".js", ".jsx", ".ts", ".tsx"}
+	patterns := d.report(jsRoutingTable)
 	pyExts := []string{".py"}
 	goExts := []string{".go"}
-
-	// React routing
-	jsKeywords := map[string]string{
-		"useRouter":           "Next.js/custom router hook",
-		"useNavigate":         "React Router navigation hook",
-		"useParams":           "React Router URL params",
-		"useSearchParams":     "React Router/Next.js search params",
-		"<Link":               "Router Link component",
-		"<Route":              "React Router Route component",
-		"createBrowserRouter": "React Router v6 browser router",
-		"next/navigation":     "Next.js App Router navigation",
-		"next/link":           "Next.js Link component",
-		"usePathname":         "Next.js pathname hook",
-	}
-
-	jsResults := d.scanForKeywords(keys(jsKeywords), jsExts)
-	for kw, files := range jsResults {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "routing",
-				Description: jsKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
 
 	// Python routing - use import-aware scanning to reduce false positives
 	pyRoutingPatterns := []PatternWithImport{
@@ -447,78 +546,15 @@ func (d *CodePatternDetector) detectRouting() []types.PatternInfo {
 
 // detectForms detects form handling patterns
 func (d *CodePatternDetector) detectForms() []types.PatternInfo {
-	var patterns []types.PatternInfo
-	jsExts := []string{".js", ".jsx", ".ts", ".tsx"}
-
-	jsKeywords := map[string]string{
-		"useForm":        "React Hook Form / TanStack Form",
-		"useFormContext": "React Hook Form context",
-		"zodResolver":    "Zod schema validation with forms",
-		"yupResolver":    "Yup schema validation with forms",
-		"Formik":         "Formik form library",
-		"useFormik":      "Formik hook",
-		"<form":          "HTML form element",
-		"onSubmit":       "Form submission handler",
-		"handleSubmit":   "Form submit handler pattern",
-		"register(":      "React Hook Form field registration",
-		"Controller":     "React Hook Form Controller",
-		"z.object":       "Zod object schema",
-		"z.string":       "Zod string validation",
-	}
-
-	jsResults := d.scanForKeywords(keys(jsKeywords), jsExts)
-	for kw, files := range jsResults {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "forms",
-				Description: jsKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
-
-	return patterns
+	return d.report(jsFormsTable)
 }
 
 // detectTesting detects testing patterns
 func (d *CodePatternDetector) detectTesting() []types.PatternInfo {
-	var patterns []types.PatternInfo
-	jsExts := []string{".js", ".jsx", ".ts", ".tsx"}
+	patterns := d.report(jsTestingTable)
 	pyExts := []string{".py"}
 	goTestExts := []string{"_test.go"}
 	goExts := []string{".go"}
-
-	// JS testing, in test files only
-	jsKeywords := map[string]string{
-		"describe(":        "Test suite definition (Jest/Vitest/Mocha)",
-		"it(":              "Test case (Jest/Vitest/Mocha)",
-		"test(":            "Test case (Jest/Vitest)",
-		"expect(":          "Assertion (Jest/Vitest/Chai)",
-		"vi.mock":          "Vitest mocking",
-		"jest.mock":        "Jest mocking",
-		"@testing-library": "Testing Library",
-		"render(":          "Testing Library render",
-		"screen.":          "Testing Library screen queries",
-		"userEvent":        "Testing Library user events",
-		"fireEvent":        "Testing Library fire events",
-		"cy.":              "Cypress commands",
-		"playwright":       "Playwright testing",
-	}
-
-	jsResults := d.scanTestKeywords(keys(jsKeywords), jsExts)
-	for kw, files := range jsResults {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "testing",
-				Description: jsKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
 
 	// Python testing, in test files only
 	pyKeywords := map[string]string{
@@ -626,75 +662,14 @@ func (d *CodePatternDetector) detectTesting() []types.PatternInfo {
 
 // detectStyling detects styling patterns
 func (d *CodePatternDetector) detectStyling() []types.PatternInfo {
-	var patterns []types.PatternInfo
-	jsExts := []string{".js", ".jsx", ".ts", ".tsx", ".css", ".scss"}
-
-	jsKeywords := map[string]string{
-		"className=": "CSS class usage",
-		"tailwind":   "Tailwind CSS",
-		"@apply":     "Tailwind @apply directive",
-		"styled.":    "styled-components",
-		"css`":       "Emotion/styled-components CSS",
-		"makeStyles": "Material-UI makeStyles",
-		"useStyles":  "Material-UI styles hook",
-		"sx={":       "MUI sx prop",
-		"clsx":       "clsx class utility",
-		"cn(":        "shadcn/ui cn utility",
-		"cva(":       "Class Variance Authority",
-		"module.css": "CSS Modules",
-	}
-
-	jsResults := d.scanForKeywords(keys(jsKeywords), jsExts)
-	for kw, files := range jsResults {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "styling",
-				Description: jsKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
-
-	return patterns
+	return d.report(jsStylingTable)
 }
 
 // detectAuthentication detects auth patterns
 func (d *CodePatternDetector) detectAuthentication() []types.PatternInfo {
-	var patterns []types.PatternInfo
-	jsExts := []string{".js", ".jsx", ".ts", ".tsx"}
+	patterns := d.report(jsAuthTable)
 	pyExts := []string{".py"}
 	goExts := []string{".go"}
-
-	// JS auth
-	jsKeywords := map[string]string{
-		"useAuth":       "Custom auth hook",
-		"useSession":    "NextAuth/custom session hook",
-		"signIn":        "Auth sign in function",
-		"signOut":       "Auth sign out function",
-		"getSession":    "NextAuth getSession",
-		"NextAuth":      "NextAuth.js",
-		"Auth0":         "Auth0 integration",
-		"clerk":         "Clerk authentication",
-		"supabase.auth": "Supabase authentication",
-		"firebase.auth": "Firebase authentication",
-		"jwt":           "JWT handling",
-		"Bearer":        "Bearer token auth",
-	}
-
-	jsResults := d.scanForKeywords(keys(jsKeywords), jsExts)
-	for kw, files := range jsResults {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "auth",
-				Description: jsKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
 
 	// Python auth
 	pyKeywords := map[string]string{
@@ -721,10 +696,7 @@ func (d *CodePatternDetector) detectAuthentication() []types.PatternInfo {
 
 	// Go auth
 	goKeywords := map[string]string{
-		"jwt.":          "JWT handling",
-		"middleware":    "Auth middleware",
-		"Authorization": "Authorization header",
-		"Bearer":        "Bearer token",
+		"jwt.": "JWT handling",
 	}
 
 	goResults := d.scanForKeywords(keys(goKeywords), goExts)
@@ -745,73 +717,14 @@ func (d *CodePatternDetector) detectAuthentication() []types.PatternInfo {
 
 // detectAPIPatterns detects API design patterns
 func (d *CodePatternDetector) detectAPIPatterns() []types.PatternInfo {
-	var patterns []types.PatternInfo
-	allExts := []string{".js", ".jsx", ".ts", ".tsx", ".py", ".go"}
-
-	keywords := map[string]string{
-		"REST":        "RESTful API design",
-		"GraphQL":     "GraphQL API",
-		"gql`":        "GraphQL query",
-		"useQuery":    "GraphQL/React Query",
-		"useMutation": "GraphQL/React Query mutation",
-		"tRPC":        "tRPC type-safe API",
-		"OpenAPI":     "OpenAPI/Swagger spec",
-		"swagger":     "Swagger documentation",
-		"grpc":        "gRPC protocol",
-		"protobuf":    "Protocol Buffers",
-		"websocket":   "WebSocket communication",
-		"socket.io":   "Socket.IO real-time",
-	}
-
-	results := d.scanForKeywords(keys(keywords), allExts)
-	for kw, files := range results {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "api",
-				Description: keywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
-
-	return patterns
+	return d.report(apiTable)
 }
 
 // detectDatabasePatterns detects database/ORM patterns
 func (d *CodePatternDetector) detectDatabasePatterns() []types.PatternInfo {
-	var patterns []types.PatternInfo
-	jsExts := []string{".js", ".ts", ".tsx"}
+	patterns := d.report(jsDatabaseTable)
 	pyExts := []string{".py"}
 	goExts := []string{".go"}
-
-	// JS/TS ORMs
-	jsKeywords := map[string]string{
-		"prisma":       "Prisma ORM",
-		"PrismaClient": "Prisma client",
-		"drizzle":      "Drizzle ORM",
-		"typeorm":      "TypeORM",
-		"@Entity":      "TypeORM entity decorator",
-		"sequelize":    "Sequelize ORM",
-		"mongoose":     "Mongoose ODM (MongoDB)",
-		"knex":         "Knex.js query builder",
-		"kysely":       "Kysely type-safe SQL",
-		"supabase":     "Supabase client",
-	}
-
-	jsResults := d.scanForKeywords(keys(jsKeywords), jsExts)
-	for kw, files := range jsResults {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "database",
-				Description: jsKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
 
 	// Python ORMs
 	pyKeywords := map[string]string{
@@ -883,37 +796,7 @@ func (d *CodePatternDetector) detectDatabasePatterns() []types.PatternInfo {
 
 // detectUtilityPatterns detects utility/helper patterns
 func (d *CodePatternDetector) detectUtilityPatterns() []types.PatternInfo {
-	var patterns []types.PatternInfo
-	jsExts := []string{".js", ".jsx", ".ts", ".tsx"}
-
-	jsKeywords := map[string]string{
-		"lodash":   "Lodash utility library",
-		"dayjs":    "Day.js date library",
-		"moment":   "Moment.js date library",
-		"date-fns": "date-fns date utilities",
-		"uuid":     "UUID generation",
-		"nanoid":   "Nano ID generation",
-		"zod":      "Zod schema validation",
-		"yup":      "Yup schema validation",
-		"ajv":      "AJV JSON schema validation",
-		"immer":    "Immer immutable updates",
-		"ramda":    "Ramda FP utilities",
-	}
-
-	jsResults := d.scanForKeywords(keys(jsKeywords), jsExts)
-	for kw, files := range jsResults {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "utilities",
-				Description: jsKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
-
-	return patterns
+	return d.report(jsUtilitiesTable)
 }
 
 // detectGoPatterns detects Go-specific patterns
@@ -1058,7 +941,6 @@ func (d *CodePatternDetector) detectGoPatterns() []types.PatternInfo {
 		"json.Unmarshal": "JSON deserialization",
 		"yaml.Marshal":   "YAML serialization",
 		"yaml.Unmarshal": "YAML deserialization",
-		"protobuf":       "Protocol Buffers",
 		"encoding/xml":   "XML encoding",
 	}
 

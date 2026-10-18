@@ -287,3 +287,15 @@ func (s DepSet) HasModule(path string) bool {
 	}
 	return false
 }
+
+// declares reports whether one of packages is declared: by exact name, a Go
+// module also by a path below it, and a name ending in "/", such as the npm
+// scope "@trpc/", as a prefix.
+func (s DepSet) declares(packages []string) bool {
+	for _, p := range packages {
+		if strings.HasSuffix(p, "/") && s.HasPrefix(p) || s.HasModule(p) {
+			return true
+		}
+	}
+	return false
+}
