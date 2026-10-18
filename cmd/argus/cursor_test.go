@@ -70,3 +70,27 @@ func TestCursorRuleAdoptsUnmarkedFile(t *testing.T) {
 		t.Errorf("second run changed the adopted file:\n%s", again)
 	}
 }
+
+func TestCursorrulesIsLeftAloneWithNotice(t *testing.T) {
+	resetFlags(t)
+	_, errOut := captureOutput(t)
+	watchNotified = map[string]bool{}
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{".cursorrules": "old rules\n"})
+
+	generate(t, root, "claude")
+	if errOut.Len() != 0 {
+		t.Errorf("notice without the cursor format: %q", errOut)
+	}
+	for range 3 {
+		generate(t, root, "cursor")
+	}
+	if got := readFile(t, root, ".cursorrules"); got != "old rules\n" {
+		t.Errorf(".cursorrules changed: %q", got)
+	}
+	want := "ℹ️  .cursorrules is no longer written by argus and was left unchanged (rules now go to .cursor/rules/argus.mdc; " +
+		"delete the old file once its rules are moved, since a stale one can shadow AGENTS.md in tools like Zed)\n"
+	if errOut.String() != want {
+		t.Errorf("stderr = %q, want the notice once", errOut)
+	}
+}

@@ -593,6 +593,7 @@ type contextGenerator interface {
 // generateOutput renders one format into absPath. label is the workspace
 // path shown in messages ("" for the scanned directory itself).
 func generateOutput(absPath, label, format string, analysis *types.Analysis, cfg *config.Config, dryRun, compact bool) error {
+	defer legacyNotices(absPath, label, format)
 	// Handle claude-code format separately (multi-file generator)
 	if format == "claude-code" {
 		return generateClaudeCodeOutput(absPath, label, analysis, cfg.ClaudeCode, dryRun)
