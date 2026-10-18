@@ -146,7 +146,7 @@ argus init      # Initialize config (optional)
 argus scan      # Analyze and generate files
 argus sync      # Update files with changes
 argus scan --force   # Also overwrite edited .claude/ and .continue/ files
-argus version   # Print version
+argus --version # Print version (same as argus version)
 ```
 
 ## Configuration (Optional)

@@ -35,6 +35,28 @@ func captureOutput(t *testing.T) (out, errOut *bytes.Buffer) {
 	return out, errOut
 }
 
+// executeRoot runs rootCmd with args and returns what cobra printed to its
+// output and error streams. Only use it for commands that return before
+// doing real work (version, help, argument and path errors).
+func executeRoot(t *testing.T, args ...string) (out, errOut string, err error) {
+	t.Helper()
+	var outBuf, errBuf bytes.Buffer
+	rootCmd.SetOut(&outBuf)
+	rootCmd.SetErr(&errBuf)
+	rootCmd.SetArgs(args)
+	t.Cleanup(func() {
+		rootCmd.SetOut(nil)
+		rootCmd.SetErr(nil)
+		rootCmd.SetArgs(nil)
+		if f := rootCmd.Flags().Lookup("version"); f != nil {
+			_ = f.Value.Set(f.DefValue)
+			f.Changed = false
+		}
+	})
+	err = rootCmd.Execute()
+	return outBuf.String(), errBuf.String(), err
+}
+
 // writeFiles writes slash-path files under root.
 func writeFiles(t *testing.T, root string, files map[string]string) {
 	t.Helper()

@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"syscall"
@@ -29,7 +30,22 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// version is set at release build time with -ldflags "-X main.version=...";
+// init resolves it further for go install builds.
 var version = "dev"
+
+// resolveVersion returns the version argus reports: the release version set
+// with ldflags, else the module version go install records (without its
+// leading "v"), else "dev".
+func resolveVersion(ldflag, mainVersion string) string {
+	if ldflag != "" && ldflag != "dev" {
+		return ldflag
+	}
+	if mainVersion != "" && mainVersion != "(devel)" {
+		return strings.TrimPrefix(mainVersion, "v")
+	}
+	return "dev"
+}
 
 // Flags
 var (
@@ -129,7 +145,7 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print version information",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("argus version %s\n", version)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "argus version %s\n", version)
 	},
 }
 
@@ -146,6 +162,13 @@ This command will:
 }
 
 func init() {
+	var mainVersion string
+	if info, ok := debug.ReadBuildInfo(); ok {
+		mainVersion = info.Main.Version
+	}
+	version = resolveVersion(version, mainVersion)
+	rootCmd.Version = version
+
 	// Init command flags
 	initCmd.Flags().BoolVarP(&force, "force", "f", false, "Overwrite existing config file")
 

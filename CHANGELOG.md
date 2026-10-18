@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Agent Skill (`skills/argus/SKILL.md`), installable with `npx skills add Priyans-hu/argus`
 - Claude Code plugin marketplace manifest (`.claude-plugin/marketplace.json`)
 - `--force` on scan and sync overwrites files argus would otherwise skip
+- `argus --version`, matching `argus version`; `go install` builds report their module version
 
 ### Changed
 - Repo dev skills in `.claude/skills/` are marked `metadata.internal: true`, so the skills CLI no longer offers them
