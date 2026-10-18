@@ -1,9 +1,11 @@
 package detector
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -153,20 +155,14 @@ func (d *CargoDetector) Detect() *CargoInfo {
 	info.DevDependencies = extractCargoDeps(cargo.DevDependencies)
 
 	// Extract features
-	for feature := range cargo.Features {
-		info.Features = append(info.Features, feature)
-	}
+	info.Features = slices.Sorted(maps.Keys(cargo.Features))
 
 	return info
 }
 
 // extractCargoDeps extracts dependency names from Cargo dependency format
 func extractCargoDeps(deps map[string]interface{}) []string {
-	var result []string
-	for name := range deps {
-		result = append(result, name)
-	}
-	return result
+	return slices.Sorted(maps.Keys(deps))
 }
 
 // DetectRustPatterns detects Rust patterns from Cargo.toml

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/Priyans-hu/argus/pkg/types"
@@ -180,6 +181,7 @@ func (d *ConventionDetector) detectImportStyles() []types.Convention {
 					cleanAlias := strings.TrimSuffix(alias, "/*")
 					aliases = append(aliases, cleanAlias)
 				}
+				slices.Sort(aliases)
 
 				if len(aliases) > 0 {
 					conventions = append(conventions, types.Convention{
@@ -269,11 +271,11 @@ func (d *ConventionDetector) detectTypeScriptConfig() []types.Convention {
 
 	var tsconfig struct {
 		CompilerOptions struct {
-			Strict                 bool `json:"strict"`
-			StrictNullChecks       bool `json:"strictNullChecks"`
-			NoImplicitAny          bool `json:"noImplicitAny"`
-			NoUnusedLocals         bool `json:"noUnusedLocals"`
-			NoUnusedParameters     bool `json:"noUnusedParameters"`
+			Strict                     bool `json:"strict"`
+			StrictNullChecks           bool `json:"strictNullChecks"`
+			NoImplicitAny              bool `json:"noImplicitAny"`
+			NoUnusedLocals             bool `json:"noUnusedLocals"`
+			NoUnusedParameters         bool `json:"noUnusedParameters"`
 			ExactOptionalPropertyTypes bool `json:"exactOptionalPropertyTypes"`
 		} `json:"compilerOptions"`
 	}
@@ -594,12 +596,14 @@ func detectNamingPattern(name string) NamingPattern {
 	return Unknown
 }
 
+// dominantPattern returns the most used naming pattern; a tie goes to the
+// first of PascalCase, camelCase, kebab-case, snake_case.
 func dominantPattern(patterns map[NamingPattern]int) (NamingPattern, int) {
 	var maxPattern NamingPattern
 	maxCount := 0
 
-	for pattern, count := range patterns {
-		if count > maxCount {
+	for _, pattern := range []NamingPattern{PascalCase, CamelCase, KebabCase, SnakeCase} {
+		if count := patterns[pattern]; count > maxCount {
 			maxCount = count
 			maxPattern = pattern
 		}

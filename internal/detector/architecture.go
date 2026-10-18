@@ -114,22 +114,22 @@ func (d *ArchitectureDetector) detectPrimaryLanguage() string {
 		return "Python"
 	}
 
-	// Fallback: use file extension counts
+	// Fallback: use file extension counts; a tie goes to the earlier entry
 	maxCount := 0
 	maxLang := ""
-	langMap := map[string]string{
-		".go":  "Go",
-		".rs":  "Rust",
-		".ts":  "TypeScript",
-		".tsx": "TypeScript",
-		".js":  "JavaScript",
-		".jsx": "JavaScript",
-		".py":  "Python",
+	langByExt := []struct{ ext, lang string }{
+		{".go", "Go"},
+		{".rs", "Rust"},
+		{".ts", "TypeScript"},
+		{".tsx", "TypeScript"},
+		{".js", "JavaScript"},
+		{".jsx", "JavaScript"},
+		{".py", "Python"},
 	}
-	for ext, lang := range langMap {
-		if extCounts[ext] > maxCount {
-			maxCount = extCounts[ext]
-			maxLang = lang
+	for _, l := range langByExt {
+		if extCounts[l.ext] > maxCount {
+			maxCount = extCounts[l.ext]
+			maxLang = l.lang
 		}
 	}
 	return maxLang

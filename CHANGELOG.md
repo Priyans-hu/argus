@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The Continue config stays valid YAML on repeated runs; claude_code settings in the root .argus.yaml apply to monorepo workspaces; Claude Code config write errors are reported
 - Generated Markdown files end with exactly one newline and are not rewritten when unchanged
 - --monorepo merges the root CLAUDE.md overview instead of overwriting hand-written content
+- Output is deterministic: repeated scans of the same repository produce identical files (map order, tie-break and goroutine order fixes)
 
 ## [0.3.0] - 2026-01-25
 

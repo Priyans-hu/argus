@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/Priyans-hu/argus/internal/detector"
@@ -197,17 +199,17 @@ func (a *Analyzer) detectDependencies(rootPath string) []types.Dependency {
 			DevDependencies map[string]string `json:"devDependencies"`
 		}
 		if json.Unmarshal(data, &pkg) == nil {
-			for name, version := range pkg.Dependencies {
+			for _, name := range slices.Sorted(maps.Keys(pkg.Dependencies)) {
 				deps = append(deps, types.Dependency{
 					Name:    name,
-					Version: version,
+					Version: pkg.Dependencies[name],
 					Type:    "runtime",
 				})
 			}
-			for name, version := range pkg.DevDependencies {
+			for _, name := range slices.Sorted(maps.Keys(pkg.DevDependencies)) {
 				deps = append(deps, types.Dependency{
 					Name:    name,
-					Version: version,
+					Version: pkg.DevDependencies[name],
 					Type:    "dev",
 				})
 			}
@@ -279,10 +281,10 @@ func detectPyProjectCommands(info *detector.PyProjectInfo) []types.Command {
 	var commands []types.Command
 
 	// Add script commands
-	for name, cmd := range info.Scripts {
+	for _, name := range slices.Sorted(maps.Keys(info.Scripts)) {
 		commands = append(commands, types.Command{
 			Name:        name,
-			Command:     cmd,
+			Command:     info.Scripts[name],
 			Description: "Script from pyproject.toml",
 		})
 	}

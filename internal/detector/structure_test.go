@@ -3,6 +3,7 @@ package detector
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/Priyans-hu/argus/pkg/types"
@@ -440,5 +441,44 @@ func TestHasTestSuffix(t *testing.T) {
 		if result != tt.expected {
 			t.Errorf("hasTestSuffix(%q) = %v, expected %v", tt.name, result, tt.expected)
 		}
+	}
+}
+
+func TestStructureDirectoriesAreSortedByPath(t *testing.T) {
+	root, files := writeProject(t, map[string]string{
+		"src/b/x.ts": "", "src/a/x.ts": "", "docs/x.md": "", "cmd/x.go": "", "lib/x.ts": "", "scripts/x.sh": "",
+	})
+
+	structure := stableResult(t, func() *types.ProjectStructure {
+		s, err := NewStructureDetector(root, files).Detect()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s
+	})
+
+	var paths []string
+	for _, d := range structure.Directories {
+		paths = append(paths, d.Path)
+	}
+	if want := []string{"cmd", "docs", "lib", "scripts", "src/a", "src/b"}; !reflect.DeepEqual(paths, want) {
+		t.Errorf("Directories = %v, want %v", paths, want)
+	}
+}
+
+func TestPackageJSONScriptsAreSortedByName(t *testing.T) {
+	root, _ := writeProject(t, map[string]string{
+		"package.json": `{"scripts": {"test": "vitest", "build": "vite build", "lint": "eslint .", "dev": "vite", "start": "node ."}}`,
+	})
+
+	commands := stableResult(t, func() []types.Command { return detectPackageJSONCommands(root, "") })
+
+	var names []string
+	for _, c := range commands {
+		names = append(names, c.Name)
+	}
+	want := []string{"npm run build", "npm run dev", "npm run lint", "npm start", "npm test"}
+	if !reflect.DeepEqual(names, want) {
+		t.Errorf("commands = %v, want %v", names, want)
 	}
 }

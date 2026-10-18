@@ -179,27 +179,28 @@ func (d *PatternDetector) detectCommentPatterns() []types.Convention {
 func (d *PatternDetector) detectLoggingPatterns() []types.Convention {
 	var conventions []types.Convention
 
-	// Logging patterns by language/framework with allowed extensions
-	type logPattern struct {
+	// Logging patterns by language/framework with allowed extensions. Order
+	// matters: several patterns match the same lines (winston and pino,
+	// log4j and slf4j), and a tie goes to the earlier entry.
+	logPatterns := []struct {
+		name       string
 		pattern    *regexp.Regexp
 		extensions []string // allowed file extensions, empty means any
-	}
-
-	logPatterns := map[string]logPattern{
-		"console":       {regexp.MustCompile(`console\.(log|info|warn|error|debug)\(`), []string{".js", ".ts", ".jsx", ".tsx"}},
-		"winston":       {regexp.MustCompile(`(logger|log)\.(info|warn|error|debug)\(`), []string{".js", ".ts", ".jsx", ".tsx"}},
-		"pino":          {regexp.MustCompile(`(logger|log)\.(info|warn|error|debug|fatal)\(`), []string{".js", ".ts", ".jsx", ".tsx"}},
-		"log4j":         {regexp.MustCompile(`(logger|log)\.(info|warn|error|debug|trace)\(`), []string{".java"}},
-		"slf4j":         {regexp.MustCompile(`(log|logger)\.(info|warn|error|debug)\(`), []string{".java"}},
-		"python":        {regexp.MustCompile(`logging\.(info|warning|error|debug|critical)\(`), []string{".py"}},
-		"python-logger": {regexp.MustCompile(`logger\.(info|warning|error|debug|critical)\(`), []string{".py"}},
-		"go-log":        {regexp.MustCompile(`log\.(Print|Printf|Println|Fatal|Panic)\(`), []string{".go"}},
-		"go-slog":       {regexp.MustCompile(`slog\.(Info|Warn|Error|Debug)\(`), []string{".go"}},
-		"go-zap":        {regexp.MustCompile(`(logger|zap)\.(Info|Warn|Error|Debug)\(`), []string{".go"}},
-		"go-zerolog":    {regexp.MustCompile(`(log|logger)\.(Info|Warn|Error|Debug)\(\)\.(Msg|Msgf)\(`), []string{".go"}},
-		"rust-log":      {regexp.MustCompile(`(info|warn|error|debug|trace)!\(`), []string{".rs"}},
-		"csharp":        {regexp.MustCompile(`(logger|_logger)\.(Log|LogInformation|LogWarning|LogError)\(`), []string{".cs"}},
-		"ruby":          {regexp.MustCompile(`(logger|Rails\.logger)\.(info|warn|error|debug)\(`), []string{".rb"}},
+	}{
+		{"console", regexp.MustCompile(`console\.(log|info|warn|error|debug)\(`), []string{".js", ".ts", ".jsx", ".tsx"}},
+		{"winston", regexp.MustCompile(`(logger|log)\.(info|warn|error|debug)\(`), []string{".js", ".ts", ".jsx", ".tsx"}},
+		{"pino", regexp.MustCompile(`(logger|log)\.(info|warn|error|debug|fatal)\(`), []string{".js", ".ts", ".jsx", ".tsx"}},
+		{"log4j", regexp.MustCompile(`(logger|log)\.(info|warn|error|debug|trace)\(`), []string{".java"}},
+		{"slf4j", regexp.MustCompile(`(log|logger)\.(info|warn|error|debug)\(`), []string{".java"}},
+		{"python", regexp.MustCompile(`logging\.(info|warning|error|debug|critical)\(`), []string{".py"}},
+		{"python-logger", regexp.MustCompile(`logger\.(info|warning|error|debug|critical)\(`), []string{".py"}},
+		{"go-log", regexp.MustCompile(`log\.(Print|Printf|Println|Fatal|Panic)\(`), []string{".go"}},
+		{"go-slog", regexp.MustCompile(`slog\.(Info|Warn|Error|Debug)\(`), []string{".go"}},
+		{"go-zap", regexp.MustCompile(`(logger|zap)\.(Info|Warn|Error|Debug)\(`), []string{".go"}},
+		{"go-zerolog", regexp.MustCompile(`(log|logger)\.(Info|Warn|Error|Debug)\(\)\.(Msg|Msgf)\(`), []string{".go"}},
+		{"rust-log", regexp.MustCompile(`(info|warn|error|debug|trace)!\(`), []string{".rs"}},
+		{"csharp", regexp.MustCompile(`(logger|_logger)\.(Log|LogInformation|LogWarning|LogError)\(`), []string{".cs"}},
+		{"ruby", regexp.MustCompile(`(logger|Rails\.logger)\.(info|warn|error|debug)\(`), []string{".rb"}},
 	}
 
 	counts := make(map[string]int)
@@ -223,7 +224,7 @@ func (d *PatternDetector) detectLoggingPatterns() []types.Convention {
 
 		contentStr := string(content)
 
-		for name, logPat := range logPatterns {
+		for _, logPat := range logPatterns {
 			// Check if file extension matches allowed extensions
 			if len(logPat.extensions) > 0 {
 				matched := false
@@ -239,7 +240,7 @@ func (d *PatternDetector) detectLoggingPatterns() []types.Convention {
 			}
 
 			if logPat.pattern.MatchString(contentStr) {
-				counts[name]++
+				counts[logPat.name]++
 			}
 		}
 
@@ -249,10 +250,10 @@ func (d *PatternDetector) detectLoggingPatterns() []types.Convention {
 	// Find dominant logging pattern
 	var dominantLogger string
 	maxCount := 0
-	for name, count := range counts {
-		if count > maxCount && count >= 3 {
+	for _, logPat := range logPatterns {
+		if count := counts[logPat.name]; count > maxCount && count >= 3 {
 			maxCount = count
-			dominantLogger = name
+			dominantLogger = logPat.name
 		}
 	}
 
