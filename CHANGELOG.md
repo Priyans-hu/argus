@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Commit style detection uses real regexes: scoped feat(x): commits are recognized and ties resolve deterministically
 - Errors print once; usage is shown only for argument and flag errors
 - `argus upgrade` compares versions with semver and times out stalled requests
+- `argus upgrade` replaces the running binary atomically instead of overwriting it in place
 
 ### Security
 - The Repository line no longer leaks credentials or SSH host aliases; only github.com, gitlab.com and bitbucket.org are linked, other hosts show owner/name, local remotes are omitted

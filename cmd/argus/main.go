@@ -1430,27 +1430,53 @@ func extractZip(archivePath string) (string, error) {
 	return "", fmt.Errorf("argus.exe not found in archive")
 }
 
-func replaceBinary(newBinary, targetPath string) error {
-	// On Windows, we can't replace a running executable directly
-	// So we rename the old one first
-	if runtime.GOOS == "windows" {
-		oldPath := targetPath + ".old"
-		_ = os.Remove(oldPath) // Remove any existing .old file
-		if err := os.Rename(targetPath, oldPath); err != nil {
-			return err
-		}
-	}
-
-	// Read the new binary
-	data, err := os.ReadFile(newBinary)
+// replaceBinary installs newBinary at targetPath. The new binary is copied to
+// a temporary file next to the target and renamed over it, so the running
+// executable is never written in place (Linux refuses that with ETXTBSY, and
+// macOS can kill a signed binary whose pages change). Windows cannot replace
+// a running executable, so the old one is moved aside first and moved back
+// if the install fails.
+func replaceBinary(newBinary, targetPath string) (err error) {
+	src, err := os.Open(newBinary)
 	if err != nil {
 		return err
 	}
+	defer func() { _ = src.Close() }()
 
-	// Write to target
-	if err := os.WriteFile(targetPath, data, 0755); err != nil {
+	tmp, err := os.CreateTemp(filepath.Dir(targetPath), ".argus-upgrade-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer func() {
+		if err != nil {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
+	_, err = io.Copy(tmp, src)
+	if closeErr := tmp.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return err
+	}
+	if err = os.Chmod(tmpPath, 0755); err != nil {
 		return err
 	}
 
+	if runtime.GOOS != "windows" {
+		return os.Rename(tmpPath, targetPath)
+	}
+
+	oldPath := targetPath + ".old"
+	_ = os.Remove(oldPath) // left by an earlier upgrade
+	if err = os.Rename(targetPath, oldPath); err != nil {
+		return err
+	}
+	if err = os.Rename(tmpPath, targetPath); err != nil {
+		_ = os.Rename(oldPath, targetPath)
+		return err
+	}
 	return nil
 }

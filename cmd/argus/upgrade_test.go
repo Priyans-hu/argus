@@ -5,6 +5,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -121,4 +125,113 @@ func TestDownloadAsset(t *testing.T) {
 	if data, err := os.ReadFile(path); err != nil || string(data) != "archive bytes" {
 		t.Errorf("downloaded %q, %v", data, err)
 	}
+}
+
+// installFixture writes an old target binary and a new one in separate
+// directories and returns their paths.
+func installFixture(t *testing.T) (target, newBinary string) {
+	t.Helper()
+	target = filepath.Join(t.TempDir(), "argus")
+	newBinary = filepath.Join(t.TempDir(), "argus-new")
+	if err := os.WriteFile(target, []byte("old"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(newBinary, []byte("new"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	return target, newBinary
+}
+
+// checkInstall fails unless target holds want and its directory holds
+// nothing else.
+func checkInstall(t *testing.T, target, want string) {
+	t.Helper()
+	if data, err := os.ReadFile(target); err != nil || string(data) != want {
+		t.Errorf("target = %q, %v; want %q", data, err, want)
+	}
+	entries, err := os.ReadDir(filepath.Dir(target))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	if runtime.GOOS == "windows" {
+		names = slices.DeleteFunc(names, func(n string) bool { return n == "argus.old" })
+	}
+	if !slices.Equal(names, []string{"argus"}) {
+		t.Errorf("directory holds %v, want only the target", names)
+	}
+}
+
+func TestReplaceBinary(t *testing.T) {
+	target, newBinary := installFixture(t)
+	if err := replaceBinary(newBinary, target); err != nil {
+		t.Fatal(err)
+	}
+	checkInstall(t, target, "new")
+	if info, err := os.Stat(target); err != nil || (runtime.GOOS != "windows" && info.Mode().Perm()&0111 == 0) {
+		t.Errorf("target is not executable: %v", err)
+	}
+}
+
+func TestReplaceBinaryMissingNewBinary(t *testing.T) {
+	target, _ := installFixture(t)
+	if err := replaceBinary(filepath.Join(t.TempDir(), "missing"), target); err == nil {
+		t.Fatal("installing a missing binary succeeded")
+	}
+	checkInstall(t, target, "old")
+}
+
+func TestReplaceBinaryUnwritableDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs a directory the test user cannot write")
+	}
+	target, newBinary := installFixture(t)
+	dir := filepath.Dir(target)
+	if err := os.Chmod(dir, 0555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0755) })
+
+	if err := replaceBinary(newBinary, target); err == nil {
+		t.Fatal("installing into a read-only directory succeeded")
+	}
+	checkInstall(t, target, "old")
+}
+
+// TestReplaceBinaryWhileRunning replaces a copy of the test binary while it
+// runs; writing it in place fails with ETXTBSY on Linux.
+func TestReplaceBinaryWhileRunning(t *testing.T) {
+	if os.Getenv("ARGUS_TEST_SLEEP") == "1" {
+		time.Sleep(time.Minute) // the parent kills this process
+		return
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows moves the running binary aside instead")
+	}
+	self, err := os.Executable()
+	if err != nil {
+		t.Skip(err)
+	}
+	data, err := os.ReadFile(self)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, newBinary := installFixture(t)
+	if err := os.WriteFile(target, data, 0755); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(target, "-test.run=^TestReplaceBinaryWhileRunning$")
+	cmd.Env = append(os.Environ(), "ARGUS_TEST_SLEEP=1")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
+
+	if err := replaceBinary(newBinary, target); err != nil {
+		t.Fatalf("replacing a running binary: %v", err)
+	}
+	checkInstall(t, target, "new")
 }
