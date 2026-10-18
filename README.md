@@ -103,32 +103,36 @@ Run `argus scan` or `argus sync` as often as you like:
 ## Output Example
 <!-- verify -->
 
-```markdown
+````markdown
 # your-project
 
-## Tech Stack
-- **Framework**: Next.js 14 (App Router)
-- **Language**: TypeScript (strict mode)
-- **Database**: PostgreSQL + Prisma ORM
-- **Styling**: TailwindCSS + shadcn/ui
+## Commands
 
-## Project Structure
-src/
-├── app/           # Pages (App Router)
-├── components/    # React components
-├── lib/           # Utilities
-└── types/         # TypeScript definitions
+```bash
+# Build
+npm run build
+
+# Test
+npm test
+npx vitest run <file>  # one test
+
+# Run
+npm run dev
+```
+
+## Stack
+
+- Languages: TypeScript 94%, CSS 6%
+- Frameworks: Next.js, React, Prisma
+- Databases: PostgreSQL
 
 ## Conventions
-- Components: PascalCase (UserCard.tsx)
-- Utilities: camelCase (formatDate.ts)
-- Use @/ path alias for imports
 
-## Commands
-- npm run dev — Start dev server
-- npm run build — Production build
-- npm test — Run tests
-```
+- TypeScript strict mode is enabled
+- Use the @/ path alias for imports
+````
+
+`argus scan --full` adds the project structure, key files, detected patterns and dependencies.
 
 ## Supported Output Formats
 
