@@ -192,6 +192,27 @@ func TestReplaceBinary(t *testing.T) {
 	}
 }
 
+func TestReplaceBinaryKeepsPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows has no permission bits")
+	}
+	target, newBinary := installFixture(t)
+	if err := os.Chmod(target, 0750); err != nil {
+		t.Fatal(err)
+	}
+	if err := replaceBinary(newBinary, target); err != nil {
+		t.Fatal(err)
+	}
+	checkInstall(t, target, "new")
+	info, err := os.Stat(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0750 {
+		t.Errorf("mode = %v, want %v", info.Mode().Perm(), os.FileMode(0750))
+	}
+}
+
 func TestReplaceBinaryMissingNewBinary(t *testing.T) {
 	target, _ := installFixture(t)
 	if err := replaceBinary(filepath.Join(t.TempDir(), "missing"), target); err == nil {

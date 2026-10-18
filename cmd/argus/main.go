@@ -1465,7 +1465,11 @@ func replaceBinary(newBinary, targetPath string) (err error) {
 	if err != nil {
 		return err
 	}
-	if err = os.Chmod(tmpPath, 0755); err != nil {
+	mode := os.FileMode(0755)
+	if fi, statErr := os.Stat(targetPath); statErr == nil {
+		mode = fi.Mode().Perm()
+	}
+	if err = os.Chmod(tmpPath, mode); err != nil {
 		return err
 	}
 
