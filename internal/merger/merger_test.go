@@ -27,162 +27,102 @@ func TestNewMerger(t *testing.T) {
 	}
 }
 
+const (
+	generated = "# demo\n\nnew body\n"
+	block     = AutoStartMarker + "\n# demo\n\nnew body\n" + AutoEndMarker
+	oldBlock  = AutoStartMarker + "\n# demo\n\nold body\n" + AutoEndMarker
+	custom    = CustomStartMarker + "\n## Notes\nkeep me\n" + CustomEndMarker
+	previous  = CustomStartMarker + "\n## Previous Content\n\nThe following content was preserved from your original file:\n\n# demo\nold body\n" + CustomEndMarker
+)
+
+func TestMerge(t *testing.T) {
+	tests := []struct {
+		name     string
+		existing string
+		want     string
+		outcome  Outcome
+	}{
+		{"missing", "", block, Created},
+		{"whitespace only", "  \n\t\n", block, Created},
+		{"auto only", oldBlock + "\n", block + "\n", Replaced},
+		{
+			"text above, between and below",
+			"# Team rules\nKEEP-TOP\n\n" + oldBlock + "\n\nKEEP-MID\n\n" + custom + "\n\nKEEP-BOTTOM\n",
+			"# Team rules\nKEEP-TOP\n\n" + block + "\n\nKEEP-MID\n\n" + custom + "\n\nKEEP-BOTTOM\n",
+			Replaced,
+		},
+		{"auto moved below custom", custom + "\n\n" + oldBlock + "\n", custom + "\n\n" + block + "\n", Replaced},
+		{"v0.4.0 previous content kept", oldBlock + "\n\n" + previous, block + "\n\n" + previous, Replaced},
+		{"hand-written", "\n\n# Team rules\n- use the mock\n", block + "\n\n# Team rules\n- use the mock\n", Adopted},
+		{"custom only", "# demo\nold body\n\n" + custom, block + "\n\n# demo\nold body\n\n" + custom, Adopted},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, outcome := NewMerger(true).Merge([]byte(tt.existing), []byte(generated))
+			if string(got) != tt.want {
+				t.Errorf("Merge() =\n%q\nwant\n%q", got, tt.want)
+			}
+			if outcome != tt.outcome {
+				t.Errorf("outcome = %v, want %v", outcome, tt.outcome)
+			}
+
+			again, outcome := NewMerger(true).Merge(got, []byte(generated))
+			if string(again) != string(got) || outcome != Replaced {
+				t.Errorf("merging the result again = %q (%v), want it unchanged (Replaced)", again, outcome)
+			}
+		})
+	}
+}
+
+func TestMerge_NilExisting(t *testing.T) {
+	got, outcome := NewMerger(true).Merge(nil, []byte(generated))
+	if string(got) != block || outcome != Created {
+		t.Errorf("Merge(nil) = %q (%v), want %q (Created)", got, outcome, block)
+	}
+}
+
+func TestMerge_Malformed(t *testing.T) {
+	tests := []struct {
+		name     string
+		existing string
+	}{
+		{"two starts", oldBlock + "\n" + AutoStartMarker + "\nstray\n"},
+		{"start only", AutoStartMarker + "\nonly a start\n"},
+		{"end only", "text\n" + AutoEndMarker + "\n"},
+		{"end before start", AutoEndMarker + "\nbody\n" + AutoStartMarker + "\n"},
+		{"two pairs", oldBlock + "\n\n" + oldBlock + "\n"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, outcome := NewMerger(true).Merge([]byte(tt.existing), []byte(generated))
+			if string(got) != tt.existing {
+				t.Errorf("Merge() changed a malformed file:\n%q", got)
+			}
+			if outcome != Malformed {
+				t.Errorf("outcome = %v, want Malformed", outcome)
+			}
+		})
+	}
+}
+
+func TestMerge_KeepsCRLFOutsideBlock(t *testing.T) {
+	existing := "# Team rules\r\nKEEP-TOP\r\n\r\n" + strings.ReplaceAll(oldBlock, "\n", "\r\n") + "\r\n\r\nKEEP-BOTTOM\r\n"
+	want := "# Team rules\r\nKEEP-TOP\r\n\r\n" + block + "\r\n\r\nKEEP-BOTTOM\r\n"
+
+	got, outcome := NewMerger(true).Merge([]byte(existing), []byte(generated))
+	if string(got) != want || outcome != Replaced {
+		t.Errorf("Merge() = %q (%v), want %q (Replaced)", got, outcome, want)
+	}
+}
+
 func TestMerge_PreserveCustomDisabled(t *testing.T) {
-	m := NewMerger(false)
-	existing := []byte("old content")
-	new := []byte("new content")
+	existing := "# Team rules\n\n" + oldBlock + "\n\n" + custom + "\n"
 
-	result := m.Merge(existing, new)
-
-	if string(result) != "new content" {
-		t.Errorf("Merge() = %q, want %q", string(result), "new content")
-	}
-}
-
-func TestMerge_NoMarkersInExisting(t *testing.T) {
-	m := NewMerger(true)
-	existing := []byte("existing content without markers")
-	new := []byte("new generated content")
-
-	result := m.Merge(existing, new)
-	resultStr := string(result)
-
-	// Should wrap new content with auto markers
-	if !strings.Contains(resultStr, AutoStartMarker) {
-		t.Error("Result should contain AutoStartMarker")
-	}
-	if !strings.Contains(resultStr, AutoEndMarker) {
-		t.Error("Result should contain AutoEndMarker")
-	}
-	if !strings.Contains(resultStr, "new generated content") {
-		t.Error("Result should contain new content")
-	}
-
-	// Should preserve existing content in custom section
-	if !strings.Contains(resultStr, CustomStartMarker) {
-		t.Error("Result should contain CustomStartMarker for preserved content")
-	}
-	if !strings.Contains(resultStr, "existing content without markers") {
-		t.Error("Result should preserve existing content")
-	}
-	if !strings.Contains(resultStr, "Previous Content") {
-		t.Error("Result should have 'Previous Content' heading for preserved content")
-	}
-}
-
-func TestMerge_EmptyExistingNoMarkers(t *testing.T) {
-	m := NewMerger(true)
-	existing := []byte("   \n\t  ") // whitespace only
-	new := []byte("new generated content")
-
-	result := m.Merge(existing, new)
-	resultStr := string(result)
-
-	// Should wrap new content with markers
-	if !strings.Contains(resultStr, AutoStartMarker) {
-		t.Error("Result should contain AutoStartMarker")
-	}
-	if !strings.Contains(resultStr, "new generated content") {
-		t.Error("Result should contain new content")
-	}
-
-	// Should NOT add custom section for empty/whitespace content
-	if strings.Contains(resultStr, CustomStartMarker) {
-		t.Error("Result should not contain CustomStartMarker for empty content")
-	}
-}
-
-func TestMerge_WithCustomSections(t *testing.T) {
-	m := NewMerger(true)
-
-	existing := AutoStartMarker + "\nold auto content\n" + AutoEndMarker + "\n\n" +
-		CustomStartMarker + "\n## My Custom Notes\nImportant info here\n" + CustomEndMarker
-
-	new := []byte("new auto content")
-
-	result := m.Merge([]byte(existing), new)
-	resultStr := string(result)
-
-	// Should contain new auto content
-	if !strings.Contains(resultStr, "new auto content") {
-		t.Error("Result should contain new auto content")
-	}
-
-	// Should preserve custom section
-	if !strings.Contains(resultStr, "My Custom Notes") {
-		t.Error("Result should preserve custom section content")
-	}
-	if !strings.Contains(resultStr, "Important info here") {
-		t.Error("Result should preserve custom section details")
-	}
-}
-
-func TestMerge_MultipleCustomSections(t *testing.T) {
-	m := NewMerger(true)
-
-	existing := AutoStartMarker + "\nauto\n" + AutoEndMarker + "\n\n" +
-		CustomStartMarker + "\n## Section 1\n" + CustomEndMarker + "\n\n" +
-		CustomStartMarker + "\n## Section 2\n" + CustomEndMarker
-
-	new := []byte("new content")
-
-	result := m.Merge([]byte(existing), new)
-	resultStr := string(result)
-
-	// Should preserve both custom sections
-	if strings.Count(resultStr, CustomStartMarker) != 2 {
-		t.Errorf("Expected 2 custom start markers, got %d", strings.Count(resultStr, CustomStartMarker))
-	}
-	if !strings.Contains(resultStr, "Section 1") {
-		t.Error("Result should preserve Section 1")
-	}
-	if !strings.Contains(resultStr, "Section 2") {
-		t.Error("Result should preserve Section 2")
-	}
-}
-
-func TestMergeWithSections_PreserveCustomDisabled(t *testing.T) {
-	m := NewMerger(false)
-	existing := []byte("old content")
-	new := []byte("new content")
-
-	result := m.MergeWithSections(existing, new)
-
-	if string(result) != "new content" {
-		t.Errorf("MergeWithSections() = %q, want %q", string(result), "new content")
-	}
-}
-
-func TestMergeWithSections_WithCustomSections(t *testing.T) {
-	m := NewMerger(true)
-
-	existing := AutoStartMarker + "\nold\n" + AutoEndMarker + "\n\n" +
-		CustomStartMarker + "\n## Custom Notes\nMy notes\n" + CustomEndMarker
-
-	result := m.MergeWithSections([]byte(existing), []byte("new content"))
-	resultStr := string(result)
-
-	if !strings.Contains(resultStr, "new content") {
-		t.Error("Result should contain new content")
-	}
-	if !strings.Contains(resultStr, "Custom Notes") {
-		t.Error("Result should preserve custom section")
-	}
-}
-
-func TestMergeWithSections_NoCustomSections(t *testing.T) {
-	m := NewMerger(true)
-
-	existing := AutoStartMarker + "\nold auto only\n" + AutoEndMarker
-
-	result := m.MergeWithSections([]byte(existing), []byte("new content"))
-	resultStr := string(result)
-
-	if !strings.Contains(resultStr, "new content") {
-		t.Error("Result should contain new content")
-	}
-	if !strings.Contains(resultStr, AutoStartMarker) {
-		t.Error("Result should have auto markers")
+	got, outcome := NewMerger(false).Merge([]byte(existing), []byte(generated))
+	if string(got) != block || outcome != Replaced {
+		t.Errorf("Merge() = %q (%v), want %q (Replaced)", got, outcome, block)
 	}
 }
 
@@ -219,30 +159,6 @@ func TestWrapContent(t *testing.T) {
 	}
 }
 
-func TestHasMarkers(t *testing.T) {
-	tests := []struct {
-		name     string
-		content  string
-		expected bool
-	}{
-		{"no markers", "plain content", false},
-		{"auto start marker", AutoStartMarker + " content", true},
-		{"auto end marker", "content " + AutoEndMarker, true},
-		{"custom start marker", CustomStartMarker + " content", true},
-		{"custom end marker", "content " + CustomEndMarker, true},
-		{"full auto section", AutoStartMarker + "\ncontent\n" + AutoEndMarker, true},
-		{"full custom section", CustomStartMarker + "\ncontent\n" + CustomEndMarker, true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := hasMarkers(tt.content); got != tt.expected {
-				t.Errorf("hasMarkers() = %v, want %v", got, tt.expected)
-			}
-		})
-	}
-}
-
 func TestExtractCustomSections(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -266,53 +182,6 @@ func TestExtractCustomSections(t *testing.T) {
 			sections := extractCustomSections(tt.content)
 			if len(sections) != tt.expectedCount {
 				t.Errorf("extractCustomSections() returned %d sections, want %d", len(sections), tt.expectedCount)
-			}
-		})
-	}
-}
-
-func TestParseSections(t *testing.T) {
-	content := AutoStartMarker + "\nauto content\n" + AutoEndMarker + "\n\n" +
-		CustomStartMarker + "\n## Custom Heading\ncustom content\n" + CustomEndMarker
-
-	sections := parseSections(content)
-
-	autoCount := 0
-	customCount := 0
-	for _, s := range sections {
-		if s.Type == "auto" {
-			autoCount++
-		}
-		if s.Type == "custom" {
-			customCount++
-		}
-	}
-
-	if autoCount != 1 {
-		t.Errorf("Expected 1 auto section, got %d", autoCount)
-	}
-	if customCount != 1 {
-		t.Errorf("Expected 1 custom section, got %d", customCount)
-	}
-}
-
-func TestExtractSectionName(t *testing.T) {
-	tests := []struct {
-		name     string
-		content  string
-		expected string
-	}{
-		{"with heading", "## My Section\nsome content", "My Section"},
-		{"with heading multiline", "\n## Spaced Heading\nmore", "Spaced Heading"},
-		{"no heading", "just content\nno heading here", ""},
-		{"h1 heading (not h2)", "# H1 Heading\ncontent", ""},
-		{"h3 heading (not h2)", "### H3 Heading\ncontent", ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := extractSectionName(tt.content); got != tt.expected {
-				t.Errorf("extractSectionName() = %q, want %q", got, tt.expected)
 			}
 		})
 	}
@@ -389,25 +258,5 @@ func TestWrapWithMarkers_TrimsTrailingWhitespace(t *testing.T) {
 	expected := AutoStartMarker + "\ncontent with trailing whitespace\n" + AutoEndMarker
 	if result != expected {
 		t.Errorf("wrapWithMarkers() = %q, want %q", result, expected)
-	}
-}
-
-func TestFormatCustomSection(t *testing.T) {
-	section := Section{
-		Type:    "custom",
-		Content: "\n## My Section\nContent here\n",
-		Name:    "My Section",
-	}
-
-	result := formatCustomSection(section)
-
-	if !strings.HasPrefix(result, CustomStartMarker) {
-		t.Error("Result should start with CustomStartMarker")
-	}
-	if !strings.HasSuffix(result, CustomEndMarker) {
-		t.Error("Result should end with CustomEndMarker")
-	}
-	if !strings.Contains(result, "My Section") {
-		t.Error("Result should contain section name")
 	}
 }

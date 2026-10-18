@@ -600,7 +600,7 @@ func generateOutput(absPath, format string, analysis *types.Analysis, dryRun, co
 		existingContent, err := os.ReadFile(outPath)
 		if err == nil && len(existingContent) > 0 {
 			m := merger.NewMerger(true)
-			content = m.Merge(existingContent, content)
+			content, _ = m.Merge(existingContent, content)
 			if verbose {
 				fmt.Printf("   ℹ️  Merged with existing content (preserving custom sections)\n")
 			}
