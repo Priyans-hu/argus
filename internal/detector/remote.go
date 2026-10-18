@@ -2,6 +2,7 @@ package detector
 
 import (
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/Priyans-hu/argus/pkg/types"
@@ -16,9 +17,14 @@ var linkedHosts = map[string]string{
 	"bitbucket.org": "bitbucket",
 }
 
+// remotePath is an owner/name path of letters, digits, '.', '_' and '-', so
+// nothing in it can break the Repository line or its link.
+var remotePath = regexp.MustCompile("^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)+$")
+
 // repositoryFromRemote builds the repository info for a git remote URL
 // without keeping the URL itself, which can carry credentials or a private
-// SSH host alias. It returns nil for local paths and unparseable remotes.
+// SSH host alias. It returns nil for local paths, unparseable remotes and
+// paths remotePath rejects.
 func repositoryFromRemote(remote string) *types.GitRepository {
 	host, owner, name, ok := parseRemote(remote)
 	if !ok {
@@ -35,9 +41,9 @@ func repositoryFromRemote(remote string) *types.GitRepository {
 // parseRemote splits a remote in scp style (user@host:path, host:path),
 // ssh:// or https:// form into host, owner and name. Userinfo, port and a
 // trailing .git are dropped; the host is lowercased and loses a leading
-// "www.". The path is split at its last slash, so GitLab subgroups stay in
-// the owner. Remotes without a host, or with a single-letter host (a Windows
-// drive), are local and report false.
+// "www.". The path must match remotePath and is split at its last slash, so
+// GitLab subgroups stay in the owner. Remotes without a host, or with a
+// single-letter host (a Windows drive), are local and report false.
 func parseRemote(remote string) (host, owner, name string, ok bool) {
 	remote = strings.TrimSpace(remote)
 	var path string
@@ -66,13 +72,9 @@ func parseRemote(remote string) (host, owner, name string, ok bool) {
 
 	path = strings.Trim(path, "/")
 	path = strings.TrimSuffix(path, ".git")
+	if !remotePath.MatchString(path) {
+		return "", "", "", false
+	}
 	slash := strings.LastIndexByte(path, '/')
-	if slash < 0 {
-		return "", "", "", false
-	}
-	owner, name = strings.Trim(path[:slash], "/"), path[slash+1:]
-	if owner == "" || name == "" {
-		return "", "", "", false
-	}
-	return host, owner, name, true
+	return host, path[:slash], path[slash+1:], true
 }

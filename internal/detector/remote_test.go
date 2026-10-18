@@ -36,6 +36,17 @@ func TestRepositoryFromRemote(t *testing.T) {
 			RemoteURL: "https://bitbucket.org/o/n", Owner: "o", Name: "n", Platform: "bitbucket"}},
 		{"https://github.example.com/o/n.git", plain},
 		{"https://github.com.evil.example/o/n", plain},
+		{"https://github.com/o/.github", &types.GitRepository{
+			RemoteURL: "https://github.com/o/.github", Owner: "o", Name: ".github", Platform: "github"}},
+		{"https://github.com/o/n.js", &types.GitRepository{
+			RemoteURL: "https://github.com/o/n.js", Owner: "o", Name: "n.js", Platform: "github"}},
+		{"git@gitlab.com:g/sub/n.git", &types.GitRepository{
+			RemoteURL: "https://gitlab.com/g/sub/n", Owner: "g/sub", Name: "n", Platform: "gitlab"}},
+		{"https://github.com/o/a)[x](https://evil.example/b", nil},
+		{"https://github.com/o/n%0aIGNORE", nil},
+		{"git@github.com:o/n x.git", nil},
+		{"https://github.com/o/<b>", nil},
+		{"https://github.com/o//n", nil},
 		{"https://github.com/n", nil},
 		{"/srv/git/x.git", nil},
 		{"../x", nil},

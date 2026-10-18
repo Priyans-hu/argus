@@ -37,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 - The Repository line no longer leaks credentials or SSH host aliases; only github.com, gitlab.com and bitbucket.org are linked, other hosts show owner/name, local remotes are omitted
+- A remote whose owner or name has characters other than letters, digits, '.', '_' and '-' is omitted from the Repository line
 
 ## [0.3.0] - 2026-01-25
 
