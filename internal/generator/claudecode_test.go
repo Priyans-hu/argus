@@ -2,6 +2,7 @@ package generator
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/Priyans-hu/argus/pkg/types"
@@ -76,5 +77,17 @@ func TestClaudeCodePatternListsAreSortedByName(t *testing.T) {
 			continue
 		}
 		assertInOrder(t, content, tt.want...)
+	}
+}
+
+func TestClaudeCodeWritesNoMCPConfig(t *testing.T) {
+	files := renderClaudeCode(t, renderFixture())
+	if len(files) == 0 {
+		t.Fatal("no files generated")
+	}
+	for path := range files {
+		if strings.Contains(path, "mcp") {
+			t.Errorf("generated %s", path)
+		}
 	}
 }

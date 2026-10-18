@@ -17,7 +17,7 @@ type ClaudeCodeConfig struct {
 	Agents bool `yaml:"agents"`
 	Skills bool `yaml:"skills"` // Skills replace commands in Claude Code
 	Rules  bool `yaml:"rules"`
-	MCP    bool `yaml:"mcp"`
+	MCP    bool `yaml:"mcp"`   // Ignored: argus no longer generates MCP config
 	Hooks  bool `yaml:"hooks"` // Generate .claude/settings.json with hooks
 }
 
@@ -191,7 +191,6 @@ custom_conventions:
 #   agents: true    # Generate .claude/agents/*.md
 #   skills: true    # Generate .claude/skills/*/SKILL.md (replaces commands)
 #   rules: true     # Generate .claude/rules/*.md
-#   mcp: true       # Generate .claude/mcp.json (MCP server configs)
 #   hooks: true     # Generate .claude/settings.json with automation hooks
 
 # AI usage analysis (parses Claude Code session logs)
