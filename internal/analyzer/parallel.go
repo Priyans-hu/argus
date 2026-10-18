@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 
@@ -156,6 +157,10 @@ func (pa *ParallelAnalyzer) runPhase2(ctx context.Context, files []types.FileInf
 	var mu sync.Mutex
 	errChan := make(chan detectorResult, 12)
 
+	// Written by one goroutine each and merged after Wait, in the order
+	// Analyzer.Analyze uses, so the result does not depend on scheduling.
+	var conventions, patterns, frameworkPatterns []types.Convention
+
 	// Commands (no dependencies)
 	wg.Add(1)
 	go func() {
@@ -196,44 +201,38 @@ func (pa *ParallelAnalyzer) runPhase2(ctx context.Context, files []types.FileInf
 	go func() {
 		defer wg.Done()
 		conventionDetector := detector.NewConventionDetector(pa.rootPath, files)
-		conventions, err := conventionDetector.Detect()
+		result, err := conventionDetector.Detect()
 		if err != nil {
 			errChan <- detectorResult{"conventions", err}
 			return
 		}
-		mu.Lock()
-		analysis.Conventions = conventions
-		mu.Unlock()
+		conventions = result
 	}()
 
-	// Patterns (appends to conventions)
+	// Patterns (merged into conventions)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		patternDetector := detector.NewPatternDetector(pa.rootPath, files)
-		patterns, err := patternDetector.Detect()
+		result, err := patternDetector.Detect()
 		if err != nil {
 			errChan <- detectorResult{"patterns", err}
 			return
 		}
-		mu.Lock()
-		analysis.Conventions = append(analysis.Conventions, patterns...)
-		mu.Unlock()
+		patterns = result
 	}()
 
-	// Framework patterns (appends to conventions)
+	// Framework patterns (merged into conventions)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		frameworkDetector := detector.NewFrameworkDetector(pa.rootPath, files)
-		frameworkPatterns, err := frameworkDetector.Detect()
+		result, err := frameworkDetector.Detect()
 		if err != nil {
 			errChan <- detectorResult{"framework", err}
 			return
 		}
-		mu.Lock()
-		analysis.Conventions = append(analysis.Conventions, frameworkPatterns...)
-		mu.Unlock()
+		frameworkPatterns = result
 	}()
 
 	// Endpoints (no dependencies)
@@ -358,6 +357,8 @@ func (pa *ParallelAnalyzer) runPhase2(ctx context.Context, files []types.FileInf
 			return fmt.Errorf("failed to detect %s: %w", result.name, result.err)
 		}
 	}
+
+	analysis.Conventions = slices.Concat(conventions, patterns, frameworkPatterns)
 
 	// Phase 3: CLI detector depends on TechStack (which is now available)
 	cliDetector := detector.NewCLIDetector(pa.rootPath, files, &analysis.TechStack)
