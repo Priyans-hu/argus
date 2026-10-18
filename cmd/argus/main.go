@@ -784,7 +784,7 @@ func runWatch(cmd *cobra.Command, args []string) error {
 			}
 
 			// Skip generated files to avoid infinite loops
-			if isGeneratedFile(event.Name) {
+			if isGeneratedFile(absPath, event.Name) {
 				continue
 			}
 
@@ -913,19 +913,15 @@ func isRelevantChange(event fsnotify.Event) bool {
 	return relevantExts[ext] || configFiles[name]
 }
 
-func isGeneratedFile(path string) bool {
-	// Check if path is in .claude/ directory
-	if strings.Contains(path, ".claude/") || strings.Contains(path, ".claude"+string(filepath.Separator)) {
-		return true
+// isGeneratedFile reports whether path, an event path under the watch root,
+// is an argus output. Only the part below root counts, so a root inside a
+// .claude directory is still watched.
+func isGeneratedFile(root, path string) bool {
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		return false
 	}
-
-	name := filepath.Base(path)
-	generated := map[string]bool{
-		"CLAUDE.md":               true,
-		".cursorrules":            true,
-		"copilot-instructions.md": true,
-	}
-	return generated[name]
+	return generator.IsGeneratedPath(rel)
 }
 
 func runInsights(cmd *cobra.Command, args []string) error {

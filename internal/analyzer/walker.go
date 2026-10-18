@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Priyans-hu/argus/internal/generator"
 	"github.com/Priyans-hu/argus/pkg/types"
 )
 
@@ -85,6 +86,14 @@ func (w *Walker) Walk(ctx context.Context) ([]types.FileInfo, error) {
 
 		// Skip root
 		if relPath == "." {
+			return nil
+		}
+
+		// argus's own outputs are not project files
+		if generator.IsGeneratedPath(relPath) {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 
