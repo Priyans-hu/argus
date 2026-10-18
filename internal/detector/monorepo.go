@@ -71,7 +71,7 @@ func (d *MonorepoDetector) detectMonorepoTools(info *types.MonorepoInfo) {
 	// Check for pnpm-workspace.yaml
 	if _, err := os.Stat(filepath.Join(d.rootPath, "pnpm-workspace.yaml")); err == nil {
 		info.IsMonorepo = true
-		info.PackageManager = "pnpm"
+		info.PackageManager = DetectPackageManager(d.rootPath, d.rootPath)
 	}
 }
 

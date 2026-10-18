@@ -96,10 +96,11 @@ type Endpoint struct {
 
 // TechStack represents detected technologies
 type TechStack struct {
-	Languages  []Language  `json:"languages"`
-	Frameworks []Framework `json:"frameworks"`
-	Databases  []string    `json:"databases"`
-	Tools      []string    `json:"tools"`
+	Languages      []Language  `json:"languages"`
+	Frameworks     []Framework `json:"frameworks"`
+	Databases      []string    `json:"databases"`
+	Tools          []string    `json:"tools"`
+	PackageManager string      `json:"package_manager,omitempty"` // of the root package.json: npm, yarn, pnpm or bun
 }
 
 // Language represents a programming language

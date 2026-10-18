@@ -534,14 +534,14 @@ func DetectCommands(rootPath string) []types.Command {
 	var commands []types.Command
 
 	// Try root package.json
-	commands = append(commands, detectPackageJSONCommands(rootPath, "")...)
+	commands = append(commands, detectPackageJSONCommands(rootPath, rootPath, "")...)
 
 	// Try monorepo subdirectories
 	monorepoSubdirs := []string{"frontend", "backend", "client", "server", "web", "api", "app"}
 	for _, subdir := range monorepoSubdirs {
 		subdirPath := filepath.Join(rootPath, subdir)
 		if _, err := os.Stat(subdirPath); err == nil {
-			commands = append(commands, detectPackageJSONCommands(subdirPath, subdir)...)
+			commands = append(commands, detectPackageJSONCommands(rootPath, subdirPath, subdir)...)
 		}
 	}
 
@@ -553,7 +553,7 @@ func DetectCommands(rootPath string) []types.Command {
 				if entry.IsDir() {
 					pkgPath := filepath.Join(workspacePath, entry.Name())
 					prefix := workspaceDir + "/" + entry.Name()
-					commands = append(commands, detectPackageJSONCommands(pkgPath, prefix)...)
+					commands = append(commands, detectPackageJSONCommands(rootPath, pkgPath, prefix)...)
 				}
 			}
 		}
@@ -593,8 +593,9 @@ func DetectCommands(rootPath string) []types.Command {
 	return commands
 }
 
-// detectPackageJSONCommands extracts commands from a package.json file
-func detectPackageJSONCommands(pkgDir string, prefix string) []types.Command {
+// detectPackageJSONCommands extracts commands from the package.json in
+// pkgDir, a directory at or below rootPath
+func detectPackageJSONCommands(rootPath, pkgDir, prefix string) []types.Command {
 	var commands []types.Command
 
 	pkgPath := filepath.Join(pkgDir, "package.json")
@@ -613,8 +614,7 @@ func detectPackageJSONCommands(pkgDir string, prefix string) []types.Command {
 		return commands
 	}
 
-	// Determine package manager (npm, yarn, pnpm, bun)
-	pkgManager := detectPackageManager(pkgDir)
+	pkgManager := DetectPackageManager(pkgDir, rootPath)
 
 	for _, name := range slices.Sorted(maps.Keys(scripts)) {
 		cmdStr, ok := scripts[name].(string)
@@ -622,17 +622,9 @@ func detectPackageJSONCommands(pkgDir string, prefix string) []types.Command {
 			continue
 		}
 
-		cmdName := pkgManager + " run " + name
+		cmdName := scriptCommand(pkgManager, name)
 		if prefix != "" {
 			cmdName = cmdName + " (in " + prefix + ")"
-		}
-
-		// Common scripts can use shortcuts
-		if name == "start" || name == "test" {
-			cmdName = pkgManager + " " + name
-			if prefix != "" {
-				cmdName = cmdName + " (in " + prefix + ")"
-			}
 		}
 
 		commands = append(commands, types.Command{
@@ -645,36 +637,15 @@ func detectPackageJSONCommands(pkgDir string, prefix string) []types.Command {
 	return commands
 }
 
-// detectPackageManager determines which package manager is being used
-func detectPackageManager(pkgDir string) string {
-	// Check for lock files
-	if _, err := os.Stat(filepath.Join(pkgDir, "bun.lockb")); err == nil {
-		return "bun"
-	}
-	if _, err := os.Stat(filepath.Join(pkgDir, "pnpm-lock.yaml")); err == nil {
-		return "pnpm"
-	}
-	if _, err := os.Stat(filepath.Join(pkgDir, "yarn.lock")); err == nil {
-		return "yarn"
-	}
-	// Default to npm
-	return "npm"
-}
-
-// detectNodePackageManagerCommands adds common npm/yarn/pnpm/bun commands
+// detectNodePackageManagerCommands returns the install and, with a
+// lockfile, the clean install of the root package manager
 func detectNodePackageManagerCommands(rootPath string) []types.Command {
-	pkgManager := detectPackageManager(rootPath)
-
-	return []types.Command{
-		{
-			Name:        pkgManager + " install",
-			Description: "Install dependencies",
-		},
-		{
-			Name:        pkgManager + " ci",
-			Description: "Clean install dependencies",
-		},
+	installs := installCommands(DetectPackageManager(rootPath, rootPath), rootPath, rootPath)
+	commands := []types.Command{{Name: installs[0], Description: "Install dependencies"}}
+	if len(installs) > 1 {
+		commands = append(commands, types.Command{Name: installs[1], Description: "Clean install dependencies"})
 	}
+	return commands
 }
 
 // detectGoCommands returns standard Go commands

@@ -262,14 +262,7 @@ func (d *DevelopmentDetector) inferSetupSteps() []types.SetupStep {
 
 	// Node.js project
 	if d.hasFile("package.json") {
-		pkgManager := "npm"
-		if d.hasFile("yarn.lock") {
-			pkgManager = "yarn"
-		} else if d.hasFile("pnpm-lock.yaml") {
-			pkgManager = "pnpm"
-		} else if d.hasFile("bun.lockb") {
-			pkgManager = "bun"
-		}
+		pkgManager := DetectPackageManager(d.rootPath, d.rootPath)
 
 		steps = append(steps, types.SetupStep{
 			Command:     pkgManager + " install",

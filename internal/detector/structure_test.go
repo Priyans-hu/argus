@@ -471,7 +471,7 @@ func TestPackageJSONScriptsAreSortedByName(t *testing.T) {
 		"package.json": `{"scripts": {"test": "vitest", "build": "vite build", "lint": "eslint .", "dev": "vite", "start": "node ."}}`,
 	})
 
-	commands := stableResult(t, func() []types.Command { return detectPackageJSONCommands(root, "") })
+	commands := stableResult(t, func() []types.Command { return detectPackageJSONCommands(root, root, "") })
 
 	var names []string
 	for _, c := range commands {
