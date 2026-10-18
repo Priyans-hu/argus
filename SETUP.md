@@ -96,7 +96,7 @@ Install argus CLI tool on my system:
 
 ```
 Set up argus for this project:
-1. Run `argus init` to generate initial context files
+1. Run `argus scan` to generate AGENTS.md and CLAUDE.md
 2. Show me what files were created
 3. Add the generated files to git
 ```
@@ -120,10 +120,11 @@ cd your-project
 argus init
 ```
 
-This creates:
-- `CLAUDE.md` - For Claude Code / Claude AI
-- `.cursorrules` - For Cursor IDE
-- `.github/copilot-instructions.md` - For GitHub Copilot
+This creates `.argus.yaml`. `argus scan` then writes:
+- `AGENTS.md` - For Codex, Cursor, Copilot, Gemini CLI and other agents
+- `CLAUDE.md` - For Claude Code (imports `AGENTS.md`)
+
+List `claude-code` (`.claude/`), `cursor` (`.cursor/rules/argus.mdc`) or `copilot` (`.github/copilot-instructions.md`) under `output:` for more.
 
 ### Regenerate Files
 
@@ -131,7 +132,7 @@ This creates:
 argus sync
 ```
 
-Sync replaces only the `ARGUS:AUTO` block of `CLAUDE.md`, `.cursorrules` and `.github/copilot-instructions.md` and keeps your text around it. It never overwrites `.claude/**` or `.continue/config.yaml` files you edited; it reports them as skipped. Run `argus sync --force` or delete the file to regenerate one.
+Sync replaces only the `ARGUS:AUTO` block of `AGENTS.md`, `CLAUDE.md`, `.cursor/rules/argus.mdc` and `.github/copilot-instructions.md` and keeps your text around it. It never overwrites `.claude/**` or `.continue/config.yaml` files you edited; it reports them as skipped. Run `argus sync --force` or delete the file to regenerate one.
 
 ### Watch Mode (Auto-regenerate)
 
@@ -142,7 +143,7 @@ argus watch
 ### Scan Without Writing Files
 
 ```bash
-argus scan
+argus scan --dry-run
 ```
 
 ---
@@ -155,20 +156,22 @@ argus scan
 |------|-------------|---------|
 | `--merge` | Preserve custom sections when regenerating | `true` |
 | `--add-custom` | Add placeholder for custom sections | `false` |
-| `--force` | Overwrite files argus would otherwise skip (edited `.claude/**` and `.continue/config.yaml`, unbalanced or repeated `ARGUS:AUTO` markers); scan and sync only | `false` |
-| `--path`, `-p` | Path to scan | `.` (current directory) |
+| `--full` | Write the detailed sections (structure, key files, patterns, dependencies) | `false` |
+| `--force` | Overwrite files argus would otherwise skip (edited `.claude/**` and `.continue/config.yaml`, an `AGENTS.md` without markers, unbalanced or repeated `ARGUS:AUTO` markers); scan and sync only | `false` |
+
+The path to scan is an argument (`argus scan /path/to/project`). `--compact` (lean output is now the default) and `-o`/`--output` (no effect) are deprecated.
 
 ### Examples
 
 ```bash
-# Generate only CLAUDE.md
-argus scan --format claude
+# Generate only AGENTS.md
+argus scan --format agents
 
 # Generate with custom section placeholder
 argus scan --add-custom
 
 # Scan a different directory
-argus scan -p /path/to/project
+argus scan /path/to/project
 ```
 
 ---
@@ -194,7 +197,7 @@ Add your custom documentation here. This section will be preserved when regenera
 <!-- /ARGUS:CUSTOM -->
 ```
 
-Edit the content between `<!-- ARGUS:CUSTOM -->` and `<!-- /ARGUS:CUSTOM -->` - it will be preserved on every `argus sync`.
+Edit the content between `<!-- ARGUS:CUSTOM -->` and `<!-- /ARGUS:CUSTOM -->` - it will be preserved on every `argus sync`, like any other text outside the `ARGUS:AUTO` block. `CLAUDE.md` gets an empty CUSTOM block for Claude-only notes when it is created.
 
 ---
 
@@ -288,8 +291,9 @@ argus/
 │   │   ├── frameworks.go   # Framework patterns
 │   │   └── patterns.go     # Code patterns
 │   ├── generator/      # Output generators
-│   │   ├── claude.go       # CLAUDE.md
-│   │   ├── cursor.go       # .cursorrules
+│   │   ├── agents.go       # AGENTS.md and the CLAUDE.md shim
+│   │   ├── claude.go       # AGENTS.md body
+│   │   ├── cursor.go       # .cursor/rules/argus.mdc
 │   │   └── copilot.go      # copilot-instructions.md
 │   └── merger/         # Content merging (custom sections)
 └── pkg/types/          # Shared types
@@ -321,7 +325,7 @@ argus sync --force
 ```
 or delete the file and run `argus sync` again.
 
-In `CLAUDE.md`, `.cursorrules` and `.github/copilot-instructions.md` only the `ARGUS:AUTO` block is regenerated. If argus warns about unbalanced or repeated `ARGUS:AUTO` markers, fix the markers or run with `--force`. To replace these files completely, dropping your own text:
+In `AGENTS.md`, `CLAUDE.md`, `.cursor/rules/argus.mdc` and `.github/copilot-instructions.md` only the `ARGUS:AUTO` block is regenerated. An `AGENTS.md` without markers is left unchanged: add an empty `ARGUS:AUTO` pair where the generated block should go, or run with `--force`. If argus warns about unbalanced or repeated `ARGUS:AUTO` markers, fix the markers or run with `--force`. To replace these files completely, dropping your own text:
 ```bash
 argus sync --merge=false
 ```
