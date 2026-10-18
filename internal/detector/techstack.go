@@ -47,6 +47,8 @@ func (d *TechStackDetector) Detect() (*types.TechStack, error) {
 	d.detectFromPython(stack)
 	d.detectFromCargo(stack)
 
+	d.detectFromAppManifests(stack)
+
 	// Detect from config files
 	d.detectFromConfigFiles(stack)
 
@@ -73,6 +75,8 @@ func (d *TechStackDetector) detectLanguages(stack *types.TechStack) {
 		".c":      "C",
 		".vue":    "Vue",
 		".svelte": "Svelte",
+		".dart":   "Dart",
+		".zig":    "Zig",
 	}
 
 	langCounts := make(map[string]int)
@@ -113,6 +117,7 @@ func (d *TechStackDetector) detectFromPackageJSON(stack *types.TechStack) {
 		"vue":           {"Vue.js", "frontend"},
 		"nuxt":          {"Nuxt.js", "frontend"},
 		"svelte":        {"Svelte", "frontend"},
+		"@sveltejs/kit": {"SvelteKit", "frontend"},
 		"@angular/core": {"Angular", "frontend"},
 		"solid-js":      {"SolidJS", "frontend"},
 		"astro":         {"Astro", "frontend"},
@@ -125,7 +130,9 @@ func (d *TechStackDetector) detectFromPackageJSON(stack *types.TechStack) {
 		"@nestjs/core": {"NestJS", "backend"},
 
 		// Full-stack
-		"remix": {"Remix", "fullstack"},
+		"remix":           {"Remix", "fullstack"},
+		"@tauri-apps/cli": {"Tauri", "fullstack"},
+		"@tauri-apps/api": {"Tauri", "fullstack"},
 
 		// Styling
 		"tailwindcss":       {"TailwindCSS", "styling"},
@@ -266,11 +273,34 @@ func (d *TechStackDetector) detectFromCargo(stack *types.TechStack) {
 		"diesel":    {"Diesel", "database"},
 		"sqlx":      {"SQLx", "database"},
 		"clap":      {"Clap", "cli"},
+		"tauri":     {"Tauri", "fullstack"},
 	}
 
 	for _, pkg := range slices.Sorted(maps.Keys(rustFrameworks)) {
 		if d.deps.Has(pkg) {
 			addFramework(stack, types.Framework{Name: rustFrameworks[pkg].name, Category: rustFrameworks[pkg].category})
+		}
+	}
+}
+
+var flutterSDK = regexp.MustCompile(`(?m)^\s*sdk:\s*flutter\b`)
+
+// detectFromAppManifests detects Flutter from a pubspec.yaml that depends on
+// the Flutter SDK and Tauri from a tauri.conf.json, at the root or up to two
+// directories deep in project source.
+func (d *TechStackDetector) detectFromAppManifests(stack *types.TechStack) {
+	for _, f := range d.files {
+		rel := filepath.ToSlash(f.Path)
+		if f.IsDir || strings.Count(rel, "/") > 2 || !IsProjectSource(rel) {
+			continue
+		}
+		switch f.Name {
+		case "pubspec.yaml":
+			if data, err := os.ReadFile(filepath.Join(d.rootPath, f.Path)); err == nil && flutterSDK.Match(data) {
+				addFramework(stack, types.Framework{Name: "Flutter", Category: "frontend"})
+			}
+		case "tauri.conf.json":
+			addFramework(stack, types.Framework{Name: "Tauri", Category: "fullstack"})
 		}
 	}
 }
