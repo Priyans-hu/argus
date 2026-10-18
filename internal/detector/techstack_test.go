@@ -11,7 +11,7 @@ func detectStack(t *testing.T, files map[string]string) *types.TechStack {
 	t.Helper()
 	root, infos := writeProject(t, files)
 	return stableResult(t, func() *types.TechStack {
-		stack, err := NewTechStackDetector(root, infos).Detect()
+		stack, err := NewTechStackDetector(root, infos, ReadDependencies(root, infos)).Detect()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -74,5 +74,45 @@ func TestTechStackPythonFrameworksAreDeduplicated(t *testing.T) {
 	}
 	if want := []string{"FastAPI", "Pydantic", "pytest"}; !reflect.DeepEqual(names, want) {
 		t.Errorf("Frameworks = %v, want %v", names, want)
+	}
+}
+
+// frameworkNames returns the stack's frameworks as name@version.
+func frameworkNames(stack *types.TechStack) []string {
+	var names []string
+	for _, fw := range stack.Frameworks {
+		names = append(names, fw.Name+"@"+fw.Version)
+	}
+	return names
+}
+
+func TestTechStackPeerOnlyFrameworkHasNoVersion(t *testing.T) {
+	stack := detectStack(t, map[string]string{
+		"package.json": `{"peerDependencies": {"react": ">=18"}, "devDependencies": {"vitest": "^2.0.0"}}`,
+	})
+	if got, want := frameworkNames(stack), []string{"React@", "Vitest@2.0.0"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("frameworks = %v, want %v", got, want)
+	}
+}
+
+func TestTechStackReadsSubdirectoryManifests(t *testing.T) {
+	stack := detectStack(t, map[string]string{
+		"web/package.json":     `{"dependencies": {"next": "14.0.0"}}`,
+		"src-tauri/Cargo.toml": "[dependencies]\ntokio = \"1\"\n",
+		"go.mod":               "module m\n\ngo 1.24\n\nrequire github.com/labstack/echo/v4 v4.11.0\n",
+	})
+	if got, want := frameworkNames(stack), []string{"Next.js@14.0.0", "Echo@", "Tokio@"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("frameworks = %v, want %v", got, want)
+	}
+}
+
+func TestTechStackComparesExactNames(t *testing.T) {
+	stack := detectStack(t, map[string]string{
+		"requirements.txt": "pytest-cov\ndjango-extensions\n",
+		"go.mod": "module m\n\ngo 1.24\n\n// github.com/gin-gonic/gin is not used\nrequire (\n" +
+			"\tgithub.com/gin-gonic/gin v1.9.0 // indirect\n\tgithub.com/spf13/cobra-cli v1.0.0\n)\n",
+	})
+	if len(stack.Frameworks) != 0 {
+		t.Errorf("frameworks = %v, want none", frameworkNames(stack))
 	}
 }

@@ -53,10 +53,11 @@ func (pa *ParallelAnalyzer) Analyze(ctx context.Context) (*types.Analysis, error
 
 	slog.Debug("file walk complete", "fileCount", len(files), "duration", time.Since(startTime))
 
-	// Initialize analysis
+	// Initialize analysis; dependencies are cheap and the tech stack needs them
 	analysis := &types.Analysis{
-		ProjectName: getProjectName(pa.rootPath),
-		RootPath:    pa.rootPath,
+		ProjectName:  getProjectName(pa.rootPath),
+		RootPath:     pa.rootPath,
+		Dependencies: detector.ReadDependencies(pa.rootPath, files),
 	}
 
 	// Phase 1: Run essential detectors that others depend on
@@ -103,7 +104,7 @@ func (pa *ParallelAnalyzer) runPhase1(ctx context.Context, files []types.FileInf
 			return
 		default:
 		}
-		techDetector := detector.NewTechStackDetector(pa.rootPath, files)
+		techDetector := detector.NewTechStackDetector(pa.rootPath, files, analysis.Dependencies)
 		techStack, err := techDetector.Detect()
 		if err != nil {
 			errChan <- detectorResult{"techstack", err}
@@ -183,17 +184,6 @@ func (pa *ParallelAnalyzer) runPhase2(ctx context.Context, files []types.FileInf
 
 		mu.Lock()
 		analysis.Commands = commands
-		mu.Unlock()
-	}()
-
-	// Dependencies (no dependencies)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		a := &Analyzer{rootPath: pa.rootPath}
-		deps := a.detectDependencies(pa.rootPath)
-		mu.Lock()
-		analysis.Dependencies = deps
 		mu.Unlock()
 	}()
 

@@ -219,16 +219,13 @@ func DetermineImpact(changedFile string) []string {
 func (ia *IncrementalAnalyzer) runDetector(impact string, files []types.FileInfo, analysis *types.Analysis) error {
 	switch impact {
 	case ImpactTechStack:
-		techDetector := detector.NewTechStackDetector(ia.rootPath, files)
+		analysis.Dependencies = detector.ReadDependencies(ia.rootPath, files)
+		techDetector := detector.NewTechStackDetector(ia.rootPath, files, analysis.Dependencies)
 		techStack, err := techDetector.Detect()
 		if err != nil {
 			return err
 		}
 		analysis.TechStack = *techStack
-
-		// Also update dependencies since they're related
-		a := &Analyzer{rootPath: ia.rootPath}
-		analysis.Dependencies = a.detectDependencies(ia.rootPath)
 
 	case ImpactStructure:
 		structureDetector := detector.NewStructureDetector(ia.rootPath, files)

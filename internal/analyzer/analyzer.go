@@ -2,14 +2,11 @@ package analyzer
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"maps"
-	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 
 	"github.com/Priyans-hu/argus/internal/detector"
 	"github.com/Priyans-hu/argus/pkg/types"
@@ -60,12 +57,13 @@ func (a *Analyzer) Analyze(ctx context.Context) (*types.Analysis, error) {
 
 	// Initialize analysis
 	analysis := &types.Analysis{
-		ProjectName: projectName,
-		RootPath:    absPath,
+		ProjectName:  projectName,
+		RootPath:     absPath,
+		Dependencies: detector.ReadDependencies(absPath, files),
 	}
 
 	// Detect tech stack
-	techDetector := detector.NewTechStackDetector(absPath, files)
+	techDetector := detector.NewTechStackDetector(absPath, files, analysis.Dependencies)
 	techStack, err := techDetector.Detect()
 	if err != nil {
 		return nil, fmt.Errorf("failed to detect tech stack: %w", err)
@@ -99,9 +97,6 @@ func (a *Analyzer) Analyze(ctx context.Context) (*types.Analysis, error) {
 		analysis.Commands = filterNonCargoCommands(analysis.Commands)
 		analysis.Commands = append(analysis.Commands, cargoDetector.DetectCargoCommands()...)
 	}
-
-	// Detect dependencies
-	analysis.Dependencies = a.detectDependencies(absPath)
 
 	// Detect conventions
 	conventionDetector := detector.NewConventionDetector(absPath, files)
@@ -186,95 +181,6 @@ func (a *Analyzer) Analyze(ctx context.Context) (*types.Analysis, error) {
 
 	normalize(analysis)
 	return analysis, nil
-}
-
-// detectDependencies extracts dependencies from package managers
-func (a *Analyzer) detectDependencies(rootPath string) []types.Dependency {
-	var deps []types.Dependency
-
-	// Try package.json
-	pkgPath := filepath.Join(rootPath, "package.json")
-	if data, err := os.ReadFile(pkgPath); err == nil {
-		var pkg struct {
-			Dependencies    map[string]string `json:"dependencies"`
-			DevDependencies map[string]string `json:"devDependencies"`
-		}
-		if json.Unmarshal(data, &pkg) == nil {
-			for _, name := range slices.Sorted(maps.Keys(pkg.Dependencies)) {
-				deps = append(deps, types.Dependency{
-					Name:    name,
-					Version: pkg.Dependencies[name],
-					Type:    "runtime",
-				})
-			}
-			for _, name := range slices.Sorted(maps.Keys(pkg.DevDependencies)) {
-				deps = append(deps, types.Dependency{
-					Name:    name,
-					Version: pkg.DevDependencies[name],
-					Type:    "dev",
-				})
-			}
-		}
-	}
-
-	// Try go.mod (simplified)
-	modPath := filepath.Join(rootPath, "go.mod")
-	if data, err := os.ReadFile(modPath); err == nil {
-		lines := strings.Split(string(data), "\n")
-		inRequire := false
-		for _, line := range lines {
-			line = strings.TrimSpace(line)
-			if line == "require (" {
-				inRequire = true
-				continue
-			}
-			if line == ")" {
-				inRequire = false
-				continue
-			}
-			if inRequire && line != "" {
-				// Skip indirect dependencies
-				if strings.Contains(line, "// indirect") {
-					continue
-				}
-
-				parts := strings.Fields(line)
-				if len(parts) >= 2 {
-					pkgName := parts[0]
-
-					// Filter out internal/vendor packages
-					if isInternalPackage(pkgName) {
-						continue
-					}
-
-					deps = append(deps, types.Dependency{
-						Name:    pkgName,
-						Version: parts[1],
-						Type:    "runtime",
-					})
-				}
-			}
-		}
-	}
-
-	return deps
-}
-
-// isInternalPackage checks if a package path is internal/vendor
-func isInternalPackage(pkg string) bool {
-	// Skip internal subpackages
-	if strings.Contains(pkg, "/internal/") {
-		return true
-	}
-	// Skip service-specific subpackages (AWS SDK pattern)
-	if strings.Contains(pkg, "/service/internal/") {
-		return true
-	}
-	// Skip feature subpackages
-	if strings.Contains(pkg, "/feature/") {
-		return true
-	}
-	return false
 }
 
 // detectPyProjectCommands extracts commands from pyproject.toml
