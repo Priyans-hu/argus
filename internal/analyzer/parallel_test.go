@@ -344,49 +344,6 @@ func TestParallelAnalyzer_MultipleRuns(t *testing.T) {
 	}
 }
 
-func TestGetProjectName(t *testing.T) {
-	tests := []struct {
-		path     string
-		expected string
-	}{
-		{"/path/to/project", "project"},
-		{"/single", "single"},
-		{"relative/path", "path"},
-		{"simple", "simple"},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.path, func(t *testing.T) {
-			result := getProjectName(tc.path)
-			if result != tc.expected {
-				t.Errorf("getProjectName(%q) = %q, expected %q", tc.path, result, tc.expected)
-			}
-		})
-	}
-}
-
-func TestBaseFileName(t *testing.T) {
-	tests := []struct {
-		path     string
-		expected string
-	}{
-		{"/path/to/file.go", "file.go"},
-		{"file.go", "file.go"},
-		{"/root", "root"},
-		{"a/b/c/d", "d"},
-		{"", ""},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.path, func(t *testing.T) {
-			result := baseFileName(tc.path)
-			if result != tc.expected {
-				t.Errorf("baseFileName(%q) = %q, expected %q", tc.path, result, tc.expected)
-			}
-		})
-	}
-}
-
 func BenchmarkSequentialAnalyzer(b *testing.B) {
 	// Use the current directory for a more realistic benchmark
 	tmpDir, err := os.MkdirTemp("", "bench-seq")

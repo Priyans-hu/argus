@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"slices"
 	"sync"
 	"time"
 
@@ -26,12 +25,6 @@ func NewParallelAnalyzer(rootPath string, config *types.Config) *ParallelAnalyze
 	}
 }
 
-// detectorResult holds the result of a detector execution
-type detectorResult struct {
-	name string
-	err  error
-}
-
 // Analyze performs parallel codebase analysis
 func (pa *ParallelAnalyzer) Analyze(ctx context.Context) (*types.Analysis, error) {
 	// Check for cancellation
@@ -44,33 +37,27 @@ func (pa *ParallelAnalyzer) Analyze(ctx context.Context) (*types.Analysis, error
 	startTime := time.Now()
 	slog.Debug("starting parallel analysis", "rootPath", pa.rootPath)
 
-	// Get absolute path and walk file tree first (required by all detectors)
-	walker := NewWalker(pa.rootPath, pa.config)
-	files, err := walker.Walk(ctx)
+	// Walk the file tree and read dependencies first (required by all detectors)
+	p, err := newPipeline(ctx, pa.rootPath, pa.config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to walk directory: %w", err)
+		return nil, err
 	}
 
-	slog.Debug("file walk complete", "fileCount", len(files), "duration", time.Since(startTime))
+	slog.Debug("file walk complete", "fileCount", len(p.files), "duration", time.Since(startTime))
 
-	// Initialize analysis; dependencies are cheap and the tech stack needs them
-	analysis := &types.Analysis{
-		ProjectName:  getProjectName(pa.rootPath),
-		RootPath:     pa.rootPath,
-		Dependencies: detector.ReadDependencies(pa.rootPath, files),
-	}
+	analysis := p.newAnalysis()
 
 	// Phase 1: Run essential detectors that others depend on
 	// These must complete before parallel phase
 	phase1Start := time.Now()
-	if err := pa.runPhase1(ctx, files, analysis); err != nil {
+	if err := pa.runPhase1(ctx, p, analysis); err != nil {
 		return nil, err
 	}
 	slog.Debug("phase1 complete", "duration", time.Since(phase1Start))
 
 	// Phase 2: Run remaining detectors in parallel
 	phase2Start := time.Now()
-	if err := pa.runPhase2(ctx, files, analysis); err != nil {
+	if err := pa.runPhase2(ctx, p, analysis); err != nil {
 		return nil, err
 	}
 	slog.Debug("phase2 complete", "duration", time.Since(phase2Start))
@@ -81,7 +68,7 @@ func (pa *ParallelAnalyzer) Analyze(ctx context.Context) (*types.Analysis, error
 }
 
 // runPhase1 runs detectors that must complete before others can start
-func (pa *ParallelAnalyzer) runPhase1(ctx context.Context, files []types.FileInfo, analysis *types.Analysis) error {
+func (pa *ParallelAnalyzer) runPhase1(ctx context.Context, p *pipeline, analysis *types.Analysis) error {
 	// Check for cancellation
 	select {
 	case <-ctx.Done():
@@ -90,7 +77,7 @@ func (pa *ParallelAnalyzer) runPhase1(ctx context.Context, files []types.FileInf
 	}
 
 	var wg sync.WaitGroup
-	errChan := make(chan detectorResult, 2)
+	errChan := make(chan error, 2)
 
 	// TechStack and Structure can run in parallel with each other
 	wg.Add(2)
@@ -100,17 +87,16 @@ func (pa *ParallelAnalyzer) runPhase1(ctx context.Context, files []types.FileInf
 		defer wg.Done()
 		select {
 		case <-ctx.Done():
-			errChan <- detectorResult{"techstack", ctx.Err()}
+			errChan <- ctx.Err()
 			return
 		default:
 		}
-		techDetector := detector.NewTechStackDetector(pa.rootPath, files, analysis.Dependencies)
-		techStack, err := techDetector.Detect()
+		techStack, err := p.techStack()
 		if err != nil {
-			errChan <- detectorResult{"techstack", err}
+			errChan <- err
 			return
 		}
-		analysis.TechStack = *techStack
+		analysis.TechStack = techStack
 	}()
 
 	// Structure detector
@@ -118,14 +104,14 @@ func (pa *ParallelAnalyzer) runPhase1(ctx context.Context, files []types.FileInf
 		defer wg.Done()
 		select {
 		case <-ctx.Done():
-			errChan <- detectorResult{"structure", ctx.Err()}
+			errChan <- ctx.Err()
 			return
 		default:
 		}
-		structureDetector := detector.NewStructureDetector(pa.rootPath, files)
+		structureDetector := detector.NewStructureDetector(p.root, p.files)
 		structure, err := structureDetector.Detect()
 		if err != nil {
-			errChan <- detectorResult{"structure", err}
+			errChan <- fmt.Errorf("failed to detect structure: %w", err)
 			return
 		}
 		analysis.Structure = *structure
@@ -137,9 +123,9 @@ func (pa *ParallelAnalyzer) runPhase1(ctx context.Context, files []types.FileInf
 	close(errChan)
 
 	// Check for errors
-	for result := range errChan {
-		if result.err != nil {
-			return fmt.Errorf("failed to detect %s: %w", result.name, result.err)
+	for err := range errChan {
+		if err != nil {
+			return err
 		}
 	}
 
@@ -147,7 +133,7 @@ func (pa *ParallelAnalyzer) runPhase1(ctx context.Context, files []types.FileInf
 }
 
 // runPhase2 runs all remaining detectors in parallel
-func (pa *ParallelAnalyzer) runPhase2(ctx context.Context, files []types.FileInfo, analysis *types.Analysis) error {
+func (pa *ParallelAnalyzer) runPhase2(ctx context.Context, p *pipeline, analysis *types.Analysis) error {
 	// Check for cancellation
 	select {
 	case <-ctx.Done():
@@ -155,85 +141,43 @@ func (pa *ParallelAnalyzer) runPhase2(ctx context.Context, files []types.FileInf
 	default:
 	}
 
+	root, files := p.root, p.files
 	var wg sync.WaitGroup
 	var mu sync.Mutex
-	errChan := make(chan detectorResult, 12)
-
-	// Written by one goroutine each and merged after Wait, in the order
-	// Analyzer.Analyze uses, so the result does not depend on scheduling.
-	var conventions, patterns, frameworkPatterns []types.Convention
+	errChan := make(chan error, 10)
 
 	// Commands (no dependencies)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		commands := detector.DetectCommands(pa.rootPath)
-
-		// Add pyproject.toml commands (Python)
-		pyprojectDetector := detector.NewPyProjectDetector(pa.rootPath)
-		if pyInfo := pyprojectDetector.Detect(); pyInfo != nil && pyInfo.HasPyProject {
-			commands = append(commands, detectPyProjectCommands(pyInfo)...)
-		}
-
-		// Add Cargo.toml commands (Rust)
-		cargoDetector := detector.NewCargoDetector(pa.rootPath)
-		if cargoInfo := cargoDetector.Detect(); cargoInfo != nil && cargoInfo.HasCargo {
-			commands = filterNonCargoCommands(commands)
-			commands = append(commands, cargoDetector.DetectCargoCommands()...)
-		}
-
+		commands := p.commands()
 		mu.Lock()
 		analysis.Commands = commands
 		mu.Unlock()
 	}()
 
-	// Conventions (no dependencies)
+	// Conventions, patterns and framework patterns, in that order
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		conventionDetector := detector.NewConventionDetector(pa.rootPath, files)
-		result, err := conventionDetector.Detect()
+		conventions, err := p.conventions()
 		if err != nil {
-			errChan <- detectorResult{"conventions", err}
+			errChan <- err
 			return
 		}
-		conventions = result
-	}()
-
-	// Patterns (merged into conventions)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		patternDetector := detector.NewPatternDetector(pa.rootPath, files)
-		result, err := patternDetector.Detect()
-		if err != nil {
-			errChan <- detectorResult{"patterns", err}
-			return
-		}
-		patterns = result
-	}()
-
-	// Framework patterns (merged into conventions)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		frameworkDetector := detector.NewFrameworkDetector(pa.rootPath, files)
-		result, err := frameworkDetector.Detect()
-		if err != nil {
-			errChan <- detectorResult{"framework", err}
-			return
-		}
-		frameworkPatterns = result
+		mu.Lock()
+		analysis.Conventions = conventions
+		mu.Unlock()
 	}()
 
 	// Endpoints (no dependencies)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		endpointDetector := detector.NewEndpointDetector(pa.rootPath, files)
+		endpointDetector := detector.NewEndpointDetector(root, files)
 		endpoints, err := endpointDetector.Detect()
 		if err != nil {
-			errChan <- detectorResult{"endpoints", err}
+			errChan <- fmt.Errorf("failed to detect endpoints: %w", err)
 			return
 		}
 		mu.Lock()
@@ -245,7 +189,7 @@ func (pa *ParallelAnalyzer) runPhase2(ctx context.Context, files []types.FileInf
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		readmeDetector := detector.NewReadmeDetector(pa.rootPath)
+		readmeDetector := detector.NewReadmeDetector(root)
 		content := readmeDetector.Detect()
 		mu.Lock()
 		analysis.ReadmeContent = content
@@ -256,39 +200,18 @@ func (pa *ParallelAnalyzer) runPhase2(ctx context.Context, files []types.FileInf
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		monorepoDetector := detector.NewMonorepoDetector(pa.rootPath, files)
+		monorepoDetector := detector.NewMonorepoDetector(root, files)
 		info := monorepoDetector.Detect()
 		mu.Lock()
 		analysis.MonorepoInfo = info
 		mu.Unlock()
 	}()
 
-	// Code patterns (no dependencies)
+	// Code patterns: keyword, ML and AST detectors
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		codePatternDetector := detector.NewCodePatternDetector(pa.rootPath, files)
-		patterns := codePatternDetector.Detect()
-
-		// Add ML-specific patterns
-		mlDetector := detector.NewMLDetector(pa.rootPath, files)
-		if mlPatterns := mlDetector.GetMLPatterns(); len(mlPatterns) > 0 {
-			patterns.MLPatterns = mlPatterns
-		}
-
-		// Add AST-based JavaScript/TypeScript patterns
-		jsASTDetector := detector.NewJSASTDetector(pa.rootPath, files)
-		if jsPatterns := jsASTDetector.Detect(); len(jsPatterns) > 0 {
-			patterns.DataFetching = mergePatterns(patterns.DataFetching, filterByCategory(jsPatterns, "JavaScript Frameworks"))
-			patterns.StateManagement = mergePatterns(patterns.StateManagement, filterByCategory(jsPatterns, "React Hooks"))
-		}
-
-		// Add AST-based Python patterns
-		pyASTDetector := detector.NewPythonASTDetector(pa.rootPath, files)
-		if pyPatterns := pyASTDetector.Detect(); len(pyPatterns) > 0 {
-			patterns.PythonPatterns = mergePatterns(patterns.PythonPatterns, pyPatterns)
-		}
-
+		patterns := p.codePatterns()
 		mu.Lock()
 		analysis.CodePatterns = patterns
 		mu.Unlock()
@@ -298,7 +221,7 @@ func (pa *ParallelAnalyzer) runPhase2(ctx context.Context, files []types.FileInf
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		gitDetector := detector.NewGitDetectorGoGit(pa.rootPath)
+		gitDetector := detector.NewGitDetectorGoGit(root)
 		conventions := gitDetector.Detect()
 		mu.Lock()
 		analysis.GitConventions = conventions
@@ -309,7 +232,7 @@ func (pa *ParallelAnalyzer) runPhase2(ctx context.Context, files []types.FileInf
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		archDetector := detector.NewArchitectureDetector(pa.rootPath, files)
+		archDetector := detector.NewArchitectureDetector(root, files)
 		info := archDetector.Detect()
 		mu.Lock()
 		analysis.ArchitectureInfo = info
@@ -320,7 +243,7 @@ func (pa *ParallelAnalyzer) runPhase2(ctx context.Context, files []types.FileInf
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		devDetector := detector.NewDevelopmentDetector(pa.rootPath, files)
+		devDetector := detector.NewDevelopmentDetector(root, files)
 		info := devDetector.Detect()
 		mu.Lock()
 		analysis.DevelopmentInfo = info
@@ -331,7 +254,7 @@ func (pa *ParallelAnalyzer) runPhase2(ctx context.Context, files []types.FileInf
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		configDetector := detector.NewConfigDetector(pa.rootPath, files)
+		configDetector := detector.NewConfigDetector(root, files)
 		configs := configDetector.Detect()
 		mu.Lock()
 		analysis.ConfigFiles = configs
@@ -343,36 +266,18 @@ func (pa *ParallelAnalyzer) runPhase2(ctx context.Context, files []types.FileInf
 	close(errChan)
 
 	// Check for errors
-	for result := range errChan {
-		if result.err != nil {
-			return fmt.Errorf("failed to detect %s: %w", result.name, result.err)
+	for err := range errChan {
+		if err != nil {
+			return err
 		}
 	}
 
-	analysis.Conventions = slices.Concat(conventions, patterns, frameworkPatterns)
-
-	// Phase 3: CLI detector depends on TechStack (which is now available)
-	cliDetector := detector.NewCLIDetector(pa.rootPath, files, &analysis.TechStack)
+	// Phase 3: CLI info needs the tech stack, project tools need CLI info and the README
+	cliDetector := detector.NewCLIDetector(root, files, &analysis.TechStack)
 	analysis.CLIInfo = cliDetector.Detect()
+	analysis.ProjectTools = p.projectTools(analysis)
 
 	return nil
-}
-
-// getProjectName extracts project name from path
-func getProjectName(rootPath string) string {
-	// Use filepath.Base for simple extraction
-	return baseFileName(rootPath)
-}
-
-// baseFileName returns the last element of path
-func baseFileName(path string) string {
-	// Find the last separator
-	for i := len(path) - 1; i >= 0; i-- {
-		if path[i] == '/' || path[i] == '\\' {
-			return path[i+1:]
-		}
-	}
-	return path
 }
 
 // mergePatterns merges two PatternInfo slices, avoiding duplicates by name

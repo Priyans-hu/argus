@@ -3,6 +3,7 @@ package analyzer
 import (
 	"context"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -32,23 +33,17 @@ type IncrementalAnalyzer struct {
 	cache       *types.Analysis
 	cacheMu     sync.RWMutex
 	lastUpdated time.Time
-	walker      *Walker
 }
 
 // NewIncrementalAnalyzer creates a new incremental analyzer; cfg may be nil
 func NewIncrementalAnalyzer(rootPath string, cfg *types.Config) *IncrementalAnalyzer {
 	absPath, _ := filepath.Abs(rootPath)
-	return &IncrementalAnalyzer{
-		rootPath: absPath,
-		config:   cfg,
-		walker:   NewWalker(absPath, cfg),
-	}
+	return &IncrementalAnalyzer{rootPath: absPath, config: cfg}
 }
 
-// AnalyzeFull performs a full analysis and caches the result
+// AnalyzeFull performs a full analysis, the same as scan's, and caches the result
 func (ia *IncrementalAnalyzer) AnalyzeFull(ctx context.Context) (*types.Analysis, error) {
-	a := NewAnalyzer(ia.rootPath, ia.config)
-	analysis, err := a.Analyze(ctx)
+	analysis, err := NewParallelAnalyzer(ia.rootPath, ia.config).Analyze(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -83,8 +78,8 @@ func (ia *IncrementalAnalyzer) AnalyzeIncremental(ctx context.Context, changedFi
 		}
 	}
 
-	// Get fresh file list
-	files, err := ia.walker.Walk(ctx)
+	// Fresh file list and dependencies
+	p, err := newPipeline(ctx, ia.rootPath, ia.config)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -96,12 +91,13 @@ func (ia *IncrementalAnalyzer) AnalyzeIncremental(ctx context.Context, changedFi
 
 	// Run only affected detectors
 	for _, impact := range impacts {
-		if err := ia.runDetector(impact, files, analysis); err != nil {
+		if err := ia.runDetector(impact, p, analysis); err != nil {
 			// On error, fall back to full analysis
 			fullAnalysis, fullErr := ia.AnalyzeFull(ctx)
 			return fullAnalysis, []string{ImpactAll}, fullErr
 		}
 	}
+	analysis.ProjectTools = p.projectTools(analysis)
 	normalize(analysis)
 
 	// Update cache
@@ -138,7 +134,7 @@ func DetermineImpact(changedFile string) []string {
 		return []string{ImpactAll}
 	}
 
-	// Package manager / dependency files
+	// Dependencies are evidence for the tech stack and the pattern detectors
 	depFiles := map[string]bool{
 		"go.mod": true, "go.sum": true,
 		"package.json": true, "package-lock.json": true,
@@ -149,8 +145,8 @@ func DetermineImpact(changedFile string) []string {
 		"pom.xml": true, "build.gradle": true,
 		"Gemfile": true, "Gemfile.lock": true,
 	}
-	if depFiles[name] {
-		return []string{ImpactTechStack, ImpactDevelopment}
+	if depFiles[name] || (strings.HasPrefix(name, "requirements") && ext == ".txt") {
+		return []string{ImpactAll}
 	}
 
 	// Makefile changes
@@ -216,19 +212,19 @@ func DetermineImpact(changedFile string) []string {
 }
 
 // runDetector runs a specific detector and updates the analysis
-func (ia *IncrementalAnalyzer) runDetector(impact string, files []types.FileInfo, analysis *types.Analysis) error {
+func (ia *IncrementalAnalyzer) runDetector(impact string, p *pipeline, analysis *types.Analysis) error {
+	root, files := p.root, p.files
 	switch impact {
 	case ImpactTechStack:
-		analysis.Dependencies = detector.ReadDependencies(ia.rootPath, files)
-		techDetector := detector.NewTechStackDetector(ia.rootPath, files, analysis.Dependencies)
-		techStack, err := techDetector.Detect()
+		techStack, err := p.techStack()
 		if err != nil {
 			return err
 		}
-		analysis.TechStack = *techStack
+		analysis.TechStack = techStack
+		analysis.Dependencies = p.deps
 
 	case ImpactStructure:
-		structureDetector := detector.NewStructureDetector(ia.rootPath, files)
+		structureDetector := detector.NewStructureDetector(root, files)
 		structure, err := structureDetector.Detect()
 		if err != nil {
 			return err
@@ -237,61 +233,26 @@ func (ia *IncrementalAnalyzer) runDetector(impact string, files []types.FileInfo
 		analysis.KeyFiles = structureDetector.DetectKeyFiles()
 
 		// Also update monorepo info
-		monorepoDetector := detector.NewMonorepoDetector(ia.rootPath, files)
+		monorepoDetector := detector.NewMonorepoDetector(root, files)
 		analysis.MonorepoInfo = monorepoDetector.Detect()
 
 		// And architecture
-		archDetector := detector.NewArchitectureDetector(ia.rootPath, files)
+		archDetector := detector.NewArchitectureDetector(root, files)
 		analysis.ArchitectureInfo = archDetector.Detect()
 
 	case ImpactCommands:
-		commands := detector.DetectCommands(ia.rootPath)
-
-		// Add pyproject.toml commands (Python)
-		pyprojectDetector := detector.NewPyProjectDetector(ia.rootPath)
-		if pyInfo := pyprojectDetector.Detect(); pyInfo != nil && pyInfo.HasPyProject {
-			commands = append(commands, detectPyProjectCommands(pyInfo)...)
-		}
-
-		// Add Cargo.toml commands (Rust)
-		cargoDetector := detector.NewCargoDetector(ia.rootPath)
-		if cargoInfo := cargoDetector.Detect(); cargoInfo != nil && cargoInfo.HasCargo {
-			commands = filterNonCargoCommands(commands)
-			commands = append(commands, cargoDetector.DetectCargoCommands()...)
-		}
-
-		analysis.Commands = commands
+		analysis.Commands = p.commands()
 
 	case ImpactConventions:
-		conventionDetector := detector.NewConventionDetector(ia.rootPath, files)
-		conventions, err := conventionDetector.Detect()
+		conventions, err := p.conventions()
 		if err != nil {
 			return err
 		}
 		analysis.Conventions = conventions
-
-		// Also run pattern detectors
-		patternDetector := detector.NewPatternDetector(ia.rootPath, files)
-		patterns, err := patternDetector.Detect()
-		if err != nil {
-			return err
-		}
-		analysis.Conventions = append(analysis.Conventions, patterns...)
-
-		// Framework patterns
-		frameworkDetector := detector.NewFrameworkDetector(ia.rootPath, files)
-		frameworkPatterns, err := frameworkDetector.Detect()
-		if err != nil {
-			return err
-		}
-		analysis.Conventions = append(analysis.Conventions, frameworkPatterns...)
-
-		// Code patterns
-		codePatternDetector := detector.NewCodePatternDetector(ia.rootPath, files)
-		analysis.CodePatterns = codePatternDetector.Detect()
+		analysis.CodePatterns = p.codePatterns()
 
 	case ImpactEndpoints:
-		endpointDetector := detector.NewEndpointDetector(ia.rootPath, files)
+		endpointDetector := detector.NewEndpointDetector(root, files)
 		endpoints, err := endpointDetector.Detect()
 		if err != nil {
 			return err
@@ -299,23 +260,23 @@ func (ia *IncrementalAnalyzer) runDetector(impact string, files []types.FileInfo
 		analysis.Endpoints = endpoints
 
 	case ImpactConfig:
-		configDetector := detector.NewConfigDetector(ia.rootPath, files)
+		configDetector := detector.NewConfigDetector(root, files)
 		analysis.ConfigFiles = configDetector.Detect()
 
 	case ImpactDevelopment:
-		devDetector := detector.NewDevelopmentDetector(ia.rootPath, files)
+		devDetector := detector.NewDevelopmentDetector(root, files)
 		analysis.DevelopmentInfo = devDetector.Detect()
 
 		// CLI info depends on tech stack
-		cliDetector := detector.NewCLIDetector(ia.rootPath, files, &analysis.TechStack)
+		cliDetector := detector.NewCLIDetector(root, files, &analysis.TechStack)
 		analysis.CLIInfo = cliDetector.Detect()
 
 	case ImpactReadme:
-		readmeDetector := detector.NewReadmeDetector(ia.rootPath)
+		readmeDetector := detector.NewReadmeDetector(root)
 		analysis.ReadmeContent = readmeDetector.Detect()
 
 	case ImpactGit:
-		gitDetector := detector.NewGitDetectorGoGit(ia.rootPath)
+		gitDetector := detector.NewGitDetectorGoGit(root)
 		analysis.GitConventions = gitDetector.Detect()
 	}
 
@@ -362,6 +323,7 @@ func (ia *IncrementalAnalyzer) cloneAnalysis(src *types.Analysis) *types.Analysi
 		dst.ConfigFiles = make([]types.ConfigFileInfo, len(src.ConfigFiles))
 		copy(dst.ConfigFiles, src.ConfigFiles)
 	}
+	dst.ProjectTools = slices.Clone(src.ProjectTools)
 
 	// Copy pointers (shallow copy is OK since we replace whole objects)
 	dst.ReadmeContent = src.ReadmeContent

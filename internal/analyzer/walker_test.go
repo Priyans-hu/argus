@@ -2,7 +2,6 @@ package analyzer
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -10,19 +9,6 @@ import (
 
 	"github.com/Priyans-hu/argus/pkg/types"
 )
-
-func writeTree(t *testing.T, root string, files map[string]string) {
-	t.Helper()
-	for rel, content := range files {
-		path := filepath.Join(root, filepath.FromSlash(rel))
-		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
-			t.Fatal(err)
-		}
-	}
-}
 
 // walkPaths walks root and zeroes directory sizes, which depend on how many
 // entries a directory holds rather than on what the walk returns.

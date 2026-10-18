@@ -20,11 +20,14 @@ func TestDetermineImpact_PackageManager(t *testing.T) {
 		file     string
 		expected []string
 	}{
-		{"go.mod", []string{ImpactTechStack, ImpactDevelopment}},
-		{"package.json", []string{ImpactTechStack, ImpactDevelopment}},
-		{"Cargo.toml", []string{ImpactTechStack, ImpactDevelopment}},
-		{"pyproject.toml", []string{ImpactTechStack, ImpactDevelopment}},
-		{"requirements.txt", []string{ImpactTechStack, ImpactDevelopment}},
+		{"go.mod", []string{ImpactAll}},
+		{"package.json", []string{ImpactAll}},
+		{"web/package.json", []string{ImpactAll}},
+		{"Cargo.toml", []string{ImpactAll}},
+		{"pyproject.toml", []string{ImpactAll}},
+		{"requirements.txt", []string{ImpactAll}},
+		{"requirements-dev.txt", []string{ImpactAll}},
+		{"yarn.lock", []string{ImpactAll}},
 	}
 
 	for _, tt := range tests {

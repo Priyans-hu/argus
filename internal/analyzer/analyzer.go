@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
-	"path/filepath"
 	"slices"
 
 	"github.com/Priyans-hu/argus/internal/detector"
@@ -36,42 +35,21 @@ func (a *Analyzer) Analyze(ctx context.Context) (*types.Analysis, error) {
 	}
 
 	slog.Debug("starting analysis", "rootPath", a.rootPath)
-
-	// Get absolute path
-	absPath, err := filepath.Abs(a.rootPath)
+	p, err := newPipeline(ctx, a.rootPath, a.config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get absolute path: %w", err)
+		return nil, err
 	}
-
-	// Extract project name from directory
-	projectName := filepath.Base(absPath)
-
-	// Walk the file tree
-	walker := NewWalker(absPath, a.config)
-	files, err := walker.Walk(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to walk directory: %w", err)
-	}
-
-	slog.Debug("file walk complete", "fileCount", len(files))
-
-	// Initialize analysis
-	analysis := &types.Analysis{
-		ProjectName:  projectName,
-		RootPath:     absPath,
-		Dependencies: detector.ReadDependencies(absPath, files),
-	}
+	slog.Debug("file walk complete", "fileCount", len(p.files))
+	root, files := p.root, p.files
+	analysis := p.newAnalysis()
 
 	// Detect tech stack
-	techDetector := detector.NewTechStackDetector(absPath, files, analysis.Dependencies)
-	techStack, err := techDetector.Detect()
-	if err != nil {
-		return nil, fmt.Errorf("failed to detect tech stack: %w", err)
+	if analysis.TechStack, err = p.techStack(); err != nil {
+		return nil, err
 	}
-	analysis.TechStack = *techStack
 
 	// Detect structure
-	structureDetector := detector.NewStructureDetector(absPath, files)
+	structureDetector := detector.NewStructureDetector(root, files)
 	structure, err := structureDetector.Detect()
 	if err != nil {
 		return nil, fmt.Errorf("failed to detect structure: %w", err)
@@ -81,49 +59,16 @@ func (a *Analyzer) Analyze(ctx context.Context) (*types.Analysis, error) {
 	// Detect key files
 	analysis.KeyFiles = structureDetector.DetectKeyFiles()
 
-	// Detect commands
-	analysis.Commands = detector.DetectCommands(absPath)
+	analysis.Commands = p.commands()
 
-	// Detect additional commands from pyproject.toml (Python)
-	pyprojectDetector := detector.NewPyProjectDetector(absPath)
-	if pyInfo := pyprojectDetector.Detect(); pyInfo != nil && pyInfo.HasPyProject {
-		analysis.Commands = append(analysis.Commands, detectPyProjectCommands(pyInfo)...)
+	// Conventions, patterns (branch naming, comments, logging, error
+	// handling, architecture) and framework patterns
+	if analysis.Conventions, err = p.conventions(); err != nil {
+		return nil, err
 	}
-
-	// Detect additional commands from Cargo.toml (Rust)
-	cargoDetector := detector.NewCargoDetector(absPath)
-	if cargoInfo := cargoDetector.Detect(); cargoInfo != nil && cargoInfo.HasCargo {
-		// Replace basic cargo commands with enhanced ones
-		analysis.Commands = filterNonCargoCommands(analysis.Commands)
-		analysis.Commands = append(analysis.Commands, cargoDetector.DetectCargoCommands()...)
-	}
-
-	// Detect conventions
-	conventionDetector := detector.NewConventionDetector(absPath, files)
-	conventions, err := conventionDetector.Detect()
-	if err != nil {
-		return nil, fmt.Errorf("failed to detect conventions: %w", err)
-	}
-	analysis.Conventions = conventions
-
-	// Detect patterns (branch naming, comments, logging, error handling, architecture)
-	patternDetector := detector.NewPatternDetector(absPath, files)
-	patterns, err := patternDetector.Detect()
-	if err != nil {
-		return nil, fmt.Errorf("failed to detect patterns: %w", err)
-	}
-	analysis.Conventions = append(analysis.Conventions, patterns...)
-
-	// Detect framework-specific patterns
-	frameworkDetector := detector.NewFrameworkDetector(absPath, files)
-	frameworkPatterns, err := frameworkDetector.Detect()
-	if err != nil {
-		return nil, fmt.Errorf("failed to detect framework patterns: %w", err)
-	}
-	analysis.Conventions = append(analysis.Conventions, frameworkPatterns...)
 
 	// Detect API endpoints
-	endpointDetector := detector.NewEndpointDetector(absPath, files)
+	endpointDetector := detector.NewEndpointDetector(root, files)
 	endpoints, err := endpointDetector.Detect()
 	if err != nil {
 		return nil, fmt.Errorf("failed to detect endpoints: %w", err)
@@ -131,53 +76,36 @@ func (a *Analyzer) Analyze(ctx context.Context) (*types.Analysis, error) {
 	analysis.Endpoints = endpoints
 
 	// Parse README for project overview
-	readmeDetector := detector.NewReadmeDetector(absPath)
+	readmeDetector := detector.NewReadmeDetector(root)
 	analysis.ReadmeContent = readmeDetector.Detect()
 
 	// Detect monorepo structure
-	monorepoDetector := detector.NewMonorepoDetector(absPath, files)
+	monorepoDetector := detector.NewMonorepoDetector(root, files)
 	analysis.MonorepoInfo = monorepoDetector.Detect()
 
-	// Deep code pattern analysis
-	codePatternDetector := detector.NewCodePatternDetector(absPath, files)
-	analysis.CodePatterns = codePatternDetector.Detect()
-
-	// ML-specific pattern detection
-	mlDetector := detector.NewMLDetector(absPath, files)
-	if mlPatterns := mlDetector.GetMLPatterns(); len(mlPatterns) > 0 {
-		analysis.CodePatterns.MLPatterns = mlPatterns
-	}
+	analysis.CodePatterns = p.codePatterns()
 
 	// Detect git conventions (commit messages, branch naming) - using go-git library
-	gitDetector := detector.NewGitDetectorGoGit(absPath)
+	gitDetector := detector.NewGitDetectorGoGit(root)
 	analysis.GitConventions = gitDetector.Detect()
 
 	// Detect architecture patterns
-	archDetector := detector.NewArchitectureDetector(absPath, files)
+	archDetector := detector.NewArchitectureDetector(root, files)
 	analysis.ArchitectureInfo = archDetector.Detect()
 
 	// Detect development setup info
-	devDetector := detector.NewDevelopmentDetector(absPath, files)
+	devDetector := detector.NewDevelopmentDetector(root, files)
 	analysis.DevelopmentInfo = devDetector.Detect()
 
 	// Detect config files
-	configDetector := detector.NewConfigDetector(absPath, files)
+	configDetector := detector.NewConfigDetector(root, files)
 	analysis.ConfigFiles = configDetector.Detect()
 
 	// Detect CLI info (if applicable)
-	cliDetector := detector.NewCLIDetector(absPath, files, &analysis.TechStack)
+	cliDetector := detector.NewCLIDetector(root, files, &analysis.TechStack)
 	analysis.CLIInfo = cliDetector.Detect()
 
-	// Detect project-specific tools
-	toolsDetector := detector.NewProjectToolsDetector(
-		absPath,
-		files,
-		analysis.ProjectName,
-		&analysis.TechStack,
-		analysis.ReadmeContent,
-		analysis.CLIInfo,
-	)
-	analysis.ProjectTools = toolsDetector.Detect()
+	analysis.ProjectTools = p.projectTools(analysis)
 
 	normalize(analysis)
 	return analysis, nil
