@@ -160,7 +160,7 @@ func buildSkillContent(cmd types.Command, analysis *types.Analysis, ctx *Generat
 	content.WriteString("allowed-tools: Bash, Read, Glob\n")
 	content.WriteString("---\n\n")
 
-	content.WriteString(fmt.Sprintf("# Build - %s\n\n", ctx.ProjectName))
+	fmt.Fprintf(&content, "# Build - %s\n\n", ctx.ProjectName)
 	content.WriteString("Build the project.\n\n")
 
 	content.WriteString("## Command\n\n")
@@ -175,7 +175,7 @@ func buildSkillContent(cmd types.Command, analysis *types.Analysis, ctx *Generat
 	// Add entry point reference
 	if ctx.EntryPoint != "" {
 		content.WriteString("## Entry Point\n\n")
-		content.WriteString(fmt.Sprintf("Main: `%s`\n\n", ctx.EntryPoint))
+		fmt.Fprintf(&content, "Main: `%s`\n\n", ctx.EntryPoint)
 	}
 
 	content.WriteString("## On Failure\n\n")
@@ -201,7 +201,7 @@ func testSkillContent(cmd types.Command, analysis *types.Analysis, ctx *Generato
 	content.WriteString("allowed-tools: Bash, Read, Glob, Grep\n")
 	content.WriteString("---\n\n")
 
-	content.WriteString(fmt.Sprintf("# Test - %s\n\n", ctx.ProjectName))
+	fmt.Fprintf(&content, "# Test - %s\n\n", ctx.ProjectName)
 	content.WriteString("Run the project test suite.\n\n")
 
 	content.WriteString("## Command\n\n")
@@ -216,7 +216,7 @@ func testSkillContent(cmd types.Command, analysis *types.Analysis, ctx *Generato
 	// Add test configuration reference
 	if testConfig := ctx.GetTestConfig(); testConfig != "" {
 		content.WriteString("## Configuration\n\n")
-		content.WriteString(fmt.Sprintf("Test config: `%s`\n\n", testConfig))
+		fmt.Fprintf(&content, "Test config: `%s`\n\n", testConfig)
 	}
 
 	// Add test file examples
@@ -227,7 +227,7 @@ func testSkillContent(cmd types.Command, analysis *types.Analysis, ctx *Generato
 			if i >= 3 {
 				break
 			}
-			content.WriteString(fmt.Sprintf("- `%s`\n", file))
+			fmt.Fprintf(&content, "- `%s`\n", file)
 		}
 		content.WriteString("\n")
 	}
@@ -239,8 +239,8 @@ func testSkillContent(cmd types.Command, analysis *types.Analysis, ctx *Generato
 	content.WriteString("- Suggest fixes for the failing tests\n\n")
 
 	content.WriteString("## Options\n\n")
-	content.WriteString(fmt.Sprintf("- Add %s to run specific test files\n", getTestFileFlag(analysis)))
-	content.WriteString(fmt.Sprintf("- Add %s for verbose output\n\n", getVerboseFlag(analysis)))
+	fmt.Fprintf(&content, "- Add %s to run specific test files\n", getTestFileFlag(analysis))
+	fmt.Fprintf(&content, "- Add %s for verbose output\n\n", getVerboseFlag(analysis))
 
 	content.WriteString("## Success Criteria\n\n")
 	content.WriteString("- All tests pass\n")
@@ -260,7 +260,7 @@ func lintSkillContent(cmd types.Command, analysis *types.Analysis, ctx *Generato
 	content.WriteString("allowed-tools: Bash, Read, Edit, Glob\n")
 	content.WriteString("---\n\n")
 
-	content.WriteString(fmt.Sprintf("# Lint - %s\n\n", ctx.ProjectName))
+	fmt.Fprintf(&content, "# Lint - %s\n\n", ctx.ProjectName)
 	content.WriteString("Run code linting and static analysis.\n\n")
 
 	content.WriteString("## Command\n\n")
@@ -275,12 +275,12 @@ func lintSkillContent(cmd types.Command, analysis *types.Analysis, ctx *Generato
 	// Add lint configuration reference
 	if lintConfig := ctx.GetLintConfig(); lintConfig != "" {
 		content.WriteString("## Configuration\n\n")
-		content.WriteString(fmt.Sprintf("Lint rules: `%s`\n\n", lintConfig))
+		fmt.Fprintf(&content, "Lint rules: `%s`\n\n", lintConfig)
 	}
 
 	content.WriteString("## On Failure\n\n")
 	content.WriteString("- Review each linting error\n")
-	content.WriteString(fmt.Sprintf("- Auto-fix when possible using %s flag\n", getAutoFixFlag(analysis)))
+	fmt.Fprintf(&content, "- Auto-fix when possible using %s flag\n", getAutoFixFlag(analysis))
 	content.WriteString("- For remaining issues, fix manually\n")
 	content.WriteString("- Don't ignore warnings without good reason\n\n")
 
@@ -302,7 +302,7 @@ func devSkillContent(cmd types.Command, analysis *types.Analysis, ctx *Generator
 	content.WriteString("disable-model-invocation: true\n")
 	content.WriteString("---\n\n")
 
-	content.WriteString(fmt.Sprintf("# Dev - %s\n\n", ctx.ProjectName))
+	fmt.Fprintf(&content, "# Dev - %s\n\n", ctx.ProjectName)
 	content.WriteString("Start the development server.\n\n")
 
 	content.WriteString("## Command\n\n")
@@ -317,7 +317,7 @@ func devSkillContent(cmd types.Command, analysis *types.Analysis, ctx *Generator
 	// Add entry point reference
 	if ctx.EntryPoint != "" {
 		content.WriteString("## Entry Point\n\n")
-		content.WriteString(fmt.Sprintf("Main: `%s`\n\n", ctx.EntryPoint))
+		fmt.Fprintf(&content, "Main: `%s`\n\n", ctx.EntryPoint)
 	}
 
 	content.WriteString("## Usage\n\n")
@@ -343,7 +343,7 @@ func formatSkillContent(cmd types.Command, analysis *types.Analysis, ctx *Genera
 	content.WriteString("allowed-tools: Bash, Read, Edit, Glob\n")
 	content.WriteString("---\n\n")
 
-	content.WriteString(fmt.Sprintf("# Format - %s\n\n", ctx.ProjectName))
+	fmt.Fprintf(&content, "# Format - %s\n\n", ctx.ProjectName)
 	content.WriteString("Format code according to project standards.\n\n")
 
 	content.WriteString("## Command\n\n")
@@ -358,12 +358,12 @@ func formatSkillContent(cmd types.Command, analysis *types.Analysis, ctx *Genera
 	// Add formatter configuration reference
 	if prettier, ok := ctx.ConfigFiles["prettier"]; ok {
 		content.WriteString("## Configuration\n\n")
-		content.WriteString(fmt.Sprintf("Prettier config: `%s`\n\n", prettier))
+		fmt.Fprintf(&content, "Prettier config: `%s`\n\n", prettier)
 	}
 
 	content.WriteString("## Usage\n\n")
 	content.WriteString("- Run before committing changes\n")
-	content.WriteString(fmt.Sprintf("- Use %s to check without modifying files\n", getCheckOnlyFlag(analysis)))
+	fmt.Fprintf(&content, "- Use %s to check without modifying files\n", getCheckOnlyFlag(analysis))
 	content.WriteString("- Format specific files by passing paths as arguments\n\n")
 
 	content.WriteString("## Notes\n\n")
@@ -384,7 +384,7 @@ func dbMigrateSkillContent(cmd types.Command, analysis *types.Analysis, ctx *Gen
 	content.WriteString("disable-model-invocation: true\n")
 	content.WriteString("---\n\n")
 
-	content.WriteString(fmt.Sprintf("# Database Migration - %s\n\n", ctx.ProjectName))
+	fmt.Fprintf(&content, "# Database Migration - %s\n\n", ctx.ProjectName)
 	content.WriteString("Run database migrations.\n\n")
 
 	content.WriteString("## Command\n\n")
@@ -426,7 +426,7 @@ func dockerBuildSkillContent(cmd types.Command, analysis *types.Analysis, ctx *G
 	content.WriteString("disable-model-invocation: true\n")
 	content.WriteString("---\n\n")
 
-	content.WriteString(fmt.Sprintf("# Docker Build - %s\n\n", ctx.ProjectName))
+	fmt.Fprintf(&content, "# Docker Build - %s\n\n", ctx.ProjectName)
 	content.WriteString("Build Docker image for the project.\n\n")
 
 	content.WriteString("## Command\n\n")
@@ -615,12 +615,12 @@ func generateProjectToolSkillFile(tool types.ProjectTool, analysis *types.Analys
 
 	// YAML frontmatter
 	content.WriteString("---\n")
-	content.WriteString(fmt.Sprintf("name: %s\n", tool.Name))
-	content.WriteString(fmt.Sprintf("description: %s\n", tool.Description))
+	fmt.Fprintf(&content, "name: %s\n", tool.Name)
+	fmt.Fprintf(&content, "description: %s\n", tool.Description)
 
 	// Add replacement warning if applicable
 	if tool.ReplacesTool != "" {
-		content.WriteString(fmt.Sprintf("# CRITICAL: This skill replaces the %s tool for this project\n", tool.ReplacesTool))
+		fmt.Fprintf(&content, "# CRITICAL: This skill replaces the %s tool for this project\n", tool.ReplacesTool)
 	}
 
 	content.WriteString("---\n\n")
@@ -630,21 +630,21 @@ func generateProjectToolSkillFile(tool types.ProjectTool, analysis *types.Analys
 	if len(toolTitle) > 0 {
 		toolTitle = strings.ToUpper(toolTitle[:1]) + toolTitle[1:]
 	}
-	content.WriteString(fmt.Sprintf("# %s - Project Tool\n\n", toolTitle))
+	fmt.Fprintf(&content, "# %s - Project Tool\n\n", toolTitle)
 
 	// Description
-	content.WriteString(fmt.Sprintf("%s\n\n", tool.Description))
+	fmt.Fprintf(&content, "%s\n\n", tool.Description)
 
 	// When to use
 	if tool.WhenToUse != "" {
 		content.WriteString("## When to Invoke This Skill\n\n")
-		content.WriteString(fmt.Sprintf("%s\n\n", tool.WhenToUse))
+		fmt.Fprintf(&content, "%s\n\n", tool.WhenToUse)
 	}
 
 	// Setup instructions if needed
 	if tool.RequiresSetup && tool.SetupInstructions != "" {
 		content.WriteString("## Setup Required\n\n")
-		content.WriteString(fmt.Sprintf("%s\n\n", tool.SetupInstructions))
+		fmt.Fprintf(&content, "%s\n\n", tool.SetupInstructions)
 	}
 
 	// Usage examples
@@ -660,7 +660,7 @@ func generateProjectToolSkillFile(tool types.ProjectTool, analysis *types.Analys
 	// Binary path if available
 	if tool.BinaryPath != "" {
 		content.WriteString("## Binary Location\n\n")
-		content.WriteString(fmt.Sprintf("The tool binary is located at: `%s`\n\n", tool.BinaryPath))
+		fmt.Fprintf(&content, "The tool binary is located at: `%s`\n\n", tool.BinaryPath)
 
 		// Check if needs building
 		needsBuild := strings.Contains(tool.BinaryPath, "bin/") || strings.Contains(tool.BinaryPath, "build/")
@@ -682,19 +682,19 @@ func generateProjectToolSkillFile(tool types.ProjectTool, analysis *types.Analys
 
 	// Tool replacement guidance
 	if tool.ReplacesTool != "" {
-		content.WriteString(fmt.Sprintf("## IMPORTANT: Replaces %s\n\n", tool.ReplacesTool))
-		content.WriteString(fmt.Sprintf("**This tool replaces the built-in %s for this project.**\n\n", tool.ReplacesTool))
+		fmt.Fprintf(&content, "## IMPORTANT: Replaces %s\n\n", tool.ReplacesTool)
+		fmt.Fprintf(&content, "**This tool replaces the built-in %s for this project.**\n\n", tool.ReplacesTool)
 		content.WriteString("When working on this codebase:\n")
-		content.WriteString(fmt.Sprintf("- ✅ Use `%s` for project-specific searches\n", tool.Name))
-		content.WriteString(fmt.Sprintf("- ❌ Avoid using built-in %s unless for exact text matching\n\n", tool.ReplacesTool))
+		fmt.Fprintf(&content, "- ✅ Use `%s` for project-specific searches\n", tool.Name)
+		fmt.Fprintf(&content, "- ❌ Avoid using built-in %s unless for exact text matching\n\n", tool.ReplacesTool)
 	}
 
 	// Best practices
 	content.WriteString("## Best Practices\n\n")
-	content.WriteString(fmt.Sprintf("- Use `%s` when working with this codebase\n", tool.Name))
+	fmt.Fprintf(&content, "- Use `%s` when working with this codebase\n", tool.Name)
 	content.WriteString("- Check that the tool is available before use\n")
 	if tool.ReplacesTool != "" {
-		content.WriteString(fmt.Sprintf("- Fall back to %s only if this tool fails\n", tool.ReplacesTool))
+		fmt.Fprintf(&content, "- Fall back to %s only if this tool fails\n", tool.ReplacesTool)
 	}
 	content.WriteString("\n")
 
