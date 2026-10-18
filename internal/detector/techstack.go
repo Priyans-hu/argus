@@ -2,7 +2,6 @@ package detector
 
 import (
 	"cmp"
-	"encoding/json"
 	"maps"
 	"os"
 	"path/filepath"
@@ -17,13 +16,16 @@ import (
 type TechStackDetector struct {
 	rootPath string
 	files    []types.FileInfo
+	deps     DepSet
 }
 
-// NewTechStackDetector creates a new tech stack detector
-func NewTechStackDetector(rootPath string, files []types.FileInfo) *TechStackDetector {
+// NewTechStackDetector creates a new tech stack detector; frameworks come
+// from deps, the declared dependencies
+func NewTechStackDetector(rootPath string, files []types.FileInfo, deps []types.Dependency) *TechStackDetector {
 	return &TechStackDetector{
 		rootPath: rootPath,
 		files:    files,
+		deps:     NewDepSet(deps),
 	}
 }
 
@@ -39,11 +41,13 @@ func (d *TechStackDetector) Detect() (*types.TechStack, error) {
 	// Detect languages from file extensions
 	d.detectLanguages(stack)
 
-	// Detect from package managers
+	// Detect from declared dependencies
 	d.detectFromPackageJSON(stack)
 	d.detectFromGoMod(stack)
 	d.detectFromPython(stack)
 	d.detectFromCargo(stack)
+
+	d.detectFromAppManifests(stack)
 
 	// Detect from config files
 	d.detectFromConfigFiles(stack)
@@ -71,6 +75,8 @@ func (d *TechStackDetector) detectLanguages(stack *types.TechStack) {
 		".c":      "C",
 		".vue":    "Vue",
 		".svelte": "Svelte",
+		".dart":   "Dart",
+		".zig":    "Zig",
 	}
 
 	langCounts := make(map[string]int)
@@ -101,37 +107,8 @@ func (d *TechStackDetector) detectLanguages(stack *types.TechStack) {
 	})
 }
 
-// PackageJSON represents package.json structure
-type PackageJSON struct {
-	Name            string            `json:"name"`
-	Version         string            `json:"version"`
-	Dependencies    map[string]string `json:"dependencies"`
-	DevDependencies map[string]string `json:"devDependencies"`
-	Scripts         map[string]string `json:"scripts"`
-}
-
-// detectFromPackageJSON detects from package.json
+// detectFromPackageJSON detects npm frameworks and databases
 func (d *TechStackDetector) detectFromPackageJSON(stack *types.TechStack) {
-	pkgPath := filepath.Join(d.rootPath, "package.json")
-	data, err := os.ReadFile(pkgPath)
-	if err != nil {
-		return
-	}
-
-	var pkg PackageJSON
-	if err := json.Unmarshal(data, &pkg); err != nil {
-		return
-	}
-
-	// Merge all dependencies
-	allDeps := make(map[string]string)
-	for k, v := range pkg.Dependencies {
-		allDeps[k] = v
-	}
-	for k, v := range pkg.DevDependencies {
-		allDeps[k] = v
-	}
-
 	// Detect frameworks
 	frameworkMap := map[string]struct{ name, category string }{
 		// Frontend frameworks
@@ -140,6 +117,7 @@ func (d *TechStackDetector) detectFromPackageJSON(stack *types.TechStack) {
 		"vue":           {"Vue.js", "frontend"},
 		"nuxt":          {"Nuxt.js", "frontend"},
 		"svelte":        {"Svelte", "frontend"},
+		"@sveltejs/kit": {"SvelteKit", "frontend"},
 		"@angular/core": {"Angular", "frontend"},
 		"solid-js":      {"SolidJS", "frontend"},
 		"astro":         {"Astro", "frontend"},
@@ -152,7 +130,9 @@ func (d *TechStackDetector) detectFromPackageJSON(stack *types.TechStack) {
 		"@nestjs/core": {"NestJS", "backend"},
 
 		// Full-stack
-		"remix": {"Remix", "fullstack"},
+		"remix":           {"Remix", "fullstack"},
+		"@tauri-apps/cli": {"Tauri", "fullstack"},
+		"@tauri-apps/api": {"Tauri", "fullstack"},
 
 		// Styling
 		"tailwindcss":       {"TailwindCSS", "styling"},
@@ -189,11 +169,12 @@ func (d *TechStackDetector) detectFromPackageJSON(stack *types.TechStack) {
 
 	// Sorted, so a framework listed under two packages (prisma, @prisma/client)
 	// always takes its version from the same one
-	for _, dep := range slices.Sorted(maps.Keys(allDeps)) {
-		if fw, ok := frameworkMap[dep]; ok {
+	for _, dep := range slices.Sorted(maps.Keys(frameworkMap)) {
+		if version, ok := d.deps[dep]; ok {
+			fw := frameworkMap[dep]
 			addFramework(stack, types.Framework{
 				Name:     fw.name,
-				Version:  cleanVersion(allDeps[dep]),
+				Version:  cleanVersion(version),
 				Category: fw.category,
 			})
 		}
@@ -210,7 +191,7 @@ func (d *TechStackDetector) detectFromPackageJSON(stack *types.TechStack) {
 	}
 
 	for _, dep := range slices.Sorted(maps.Keys(dbDeps)) {
-		if _, ok := allDeps[dep]; ok && !slices.Contains(stack.Databases, dbDeps[dep]) {
+		if d.deps.Has(dep) && !slices.Contains(stack.Databases, dbDeps[dep]) {
 			stack.Databases = append(stack.Databases, dbDeps[dep])
 		}
 	}
@@ -223,23 +204,16 @@ type GoMod struct {
 	Require []string
 }
 
-// detectFromGoMod detects from go.mod
+// detectFromGoMod detects Go frameworks; the root go.mod gives the Go version
 func (d *TechStackDetector) detectFromGoMod(stack *types.TechStack) {
-	modPath := filepath.Join(d.rootPath, "go.mod")
-	data, err := os.ReadFile(modPath)
-	if err != nil {
-		return
-	}
-
-	content := string(data)
-
-	// Extract Go version
-	goVerRegex := regexp.MustCompile(`go\s+(\d+\.\d+)`)
-	if matches := goVerRegex.FindStringSubmatch(content); len(matches) > 1 {
-		for i, lang := range stack.Languages {
-			if lang.Name == "Go" {
-				stack.Languages[i].Version = matches[1]
-				break
+	if data, err := os.ReadFile(filepath.Join(d.rootPath, "go.mod")); err == nil {
+		goVerRegex := regexp.MustCompile(`go\s+(\d+\.\d+)`)
+		if matches := goVerRegex.FindStringSubmatch(string(data)); len(matches) > 1 {
+			for i, lang := range stack.Languages {
+				if lang.Name == "Go" {
+					stack.Languages[i].Version = matches[1]
+					break
+				}
 			}
 		}
 	}
@@ -259,28 +233,14 @@ func (d *TechStackDetector) detectFromGoMod(stack *types.TechStack) {
 	}
 
 	for _, pkg := range slices.Sorted(maps.Keys(goFrameworks)) {
-		if strings.Contains(content, pkg) {
+		if d.deps.HasModule(pkg) {
 			addFramework(stack, types.Framework{Name: goFrameworks[pkg].name, Category: goFrameworks[pkg].category})
 		}
 	}
 }
 
-// detectFromPython detects from Python files
+// detectFromPython detects Python frameworks
 func (d *TechStackDetector) detectFromPython(stack *types.TechStack) {
-	// Check requirements.txt
-	reqPath := filepath.Join(d.rootPath, "requirements.txt")
-	if data, err := os.ReadFile(reqPath); err == nil {
-		d.parsePythonDeps(string(data), stack)
-	}
-
-	// Check pyproject.toml
-	pyprojectPath := filepath.Join(d.rootPath, "pyproject.toml")
-	if data, err := os.ReadFile(pyprojectPath); err == nil {
-		d.parsePythonDeps(string(data), stack)
-	}
-}
-
-func (d *TechStackDetector) parsePythonDeps(content string, stack *types.TechStack) {
 	pyFrameworks := map[string]struct{ name, category string }{
 		"django":     {"Django", "backend"},
 		"flask":      {"Flask", "backend"},
@@ -295,24 +255,15 @@ func (d *TechStackDetector) parsePythonDeps(content string, stack *types.TechSta
 		"pydantic":   {"Pydantic", "validation"},
 	}
 
-	contentLower := strings.ToLower(content)
 	for _, pkg := range slices.Sorted(maps.Keys(pyFrameworks)) {
-		if strings.Contains(contentLower, pkg) {
+		if d.deps.Has(pkg) {
 			addFramework(stack, types.Framework{Name: pyFrameworks[pkg].name, Category: pyFrameworks[pkg].category})
 		}
 	}
 }
 
-// detectFromCargo detects from Cargo.toml (Rust)
+// detectFromCargo detects Rust frameworks
 func (d *TechStackDetector) detectFromCargo(stack *types.TechStack) {
-	cargoPath := filepath.Join(d.rootPath, "Cargo.toml")
-	data, err := os.ReadFile(cargoPath)
-	if err != nil {
-		return
-	}
-
-	content := string(data)
-
 	rustFrameworks := map[string]struct{ name, category string }{
 		"actix-web": {"Actix Web", "backend"},
 		"axum":      {"Axum", "backend"},
@@ -322,17 +273,40 @@ func (d *TechStackDetector) detectFromCargo(stack *types.TechStack) {
 		"diesel":    {"Diesel", "database"},
 		"sqlx":      {"SQLx", "database"},
 		"clap":      {"Clap", "cli"},
+		"tauri":     {"Tauri", "fullstack"},
 	}
 
 	for _, pkg := range slices.Sorted(maps.Keys(rustFrameworks)) {
-		if strings.Contains(content, pkg) {
+		if d.deps.Has(pkg) {
 			addFramework(stack, types.Framework{Name: rustFrameworks[pkg].name, Category: rustFrameworks[pkg].category})
 		}
 	}
 }
 
+var flutterSDK = regexp.MustCompile(`(?m)^\s*sdk:\s*flutter\b`)
+
+// detectFromAppManifests detects Flutter from a pubspec.yaml that depends on
+// the Flutter SDK and Tauri from a tauri.conf.json, at the root or up to two
+// directories deep in project source.
+func (d *TechStackDetector) detectFromAppManifests(stack *types.TechStack) {
+	for _, f := range d.files {
+		rel := filepath.ToSlash(f.Path)
+		if f.IsDir || strings.Count(rel, "/") > 2 || !IsProjectSource(rel) {
+			continue
+		}
+		switch f.Name {
+		case "pubspec.yaml":
+			if data, err := os.ReadFile(filepath.Join(d.rootPath, f.Path)); err == nil && flutterSDK.Match(data) {
+				addFramework(stack, types.Framework{Name: "Flutter", Category: "frontend"})
+			}
+		case "tauri.conf.json":
+			addFramework(stack, types.Framework{Name: "Tauri", Category: "fullstack"})
+		}
+	}
+}
+
 // addFramework appends fw unless the stack already lists a framework of
-// that name (requirements.txt and pyproject.toml are both parsed, for one).
+// that name (prisma and @prisma/client, for one).
 func addFramework(stack *types.TechStack, fw types.Framework) {
 	if !slices.ContainsFunc(stack.Frameworks, func(f types.Framework) bool { return f.Name == fw.Name }) {
 		stack.Frameworks = append(stack.Frameworks, fw)

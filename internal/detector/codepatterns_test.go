@@ -3,62 +3,122 @@ package detector
 import (
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/Priyans-hu/argus/pkg/types"
 )
 
-func TestFilterOutTestFiles(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    []string
-		expected []string
-	}{
-		{
-			name:     "filter go test files",
-			input:    []string{"main.go", "main_test.go", "handler.go", "handler_test.go"},
-			expected: []string{"main.go", "handler.go"},
-		},
-		{
-			name:     "filter js test files",
-			input:    []string{"app.js", "app.test.js", "utils.js", "utils.spec.js"},
-			expected: []string{"app.js", "utils.js"},
-		},
-		{
-			name:     "filter __tests__ directory",
-			input:    []string{"src/component.tsx", "src/__tests__/component.test.tsx"},
-			expected: []string{"src/component.tsx"},
-		},
-		{
-			name:     "no test files",
-			input:    []string{"main.go", "handler.go", "service.go"},
-			expected: []string{"main.go", "handler.go", "service.go"},
-		},
-		{
-			name:     "all test files",
-			input:    []string{"main_test.go", "handler.test.js"},
-			expected: nil,
-		},
-		{
-			name:     "empty input",
-			input:    []string{},
-			expected: nil,
-		},
-	}
+// detectPatterns writes files and runs the code pattern detector on their
+// project source with their declared dependencies, as the analyzers do.
+func detectPatterns(t *testing.T, files map[string]string) *types.CodePatterns {
+	t.Helper()
+	root, infos := writeProject(t, files)
+	return NewCodePatternDetector(root, ProjectSourceFiles(infos), ReadDependencies(root, infos)).Detect()
+}
 
+// patternExamples returns the example files of the named pattern, nil when
+// it is absent.
+func patternExamples(patterns []types.PatternInfo, name string) []string {
+	for _, p := range patterns {
+		if p.Name == name {
+			return p.Examples
+		}
+	}
+	return nil
+}
+
+func TestContainsKeyword(t *testing.T) {
+	tests := []struct {
+		name, content, kw string
+		want              bool
+	}{
+		{"start of file", `it("x")`, "it(", true},
+		{"after a newline", "x;\nit(\"x\")", "it(", true},
+		{"inside init(", "init()", "it(", false},
+		{"inside submit(", "submit()", "it(", false},
+		{"bare call after .", `foo.it("x")`, "it(", false},
+		{"Object.create(", "Object.create(null)", "create(", false},
+		{"other keyword after .", "React.useState(0)", "useState", true},
+		{"after _", "my_useState(0)", "useState", false},
+		{"after $", `$it("x")`, "it(", false},
+		{"after a digit", "2it(", "it(", false},
+		{"after a non-ASCII letter", "éit(", "it(", false},
+		{"after non-ASCII punctuation", "«it(", "it(", true},
+		{"a later occurrence", `init(); it("x")`, "it(", true},
+		{"cy. inside frecency.", "frecency.value", "cy.", false},
+		{"cy. call", `cy.visit("/")`, "cy.", true},
+		{"<Link after a letter", "a<Link href", "<Link", true},
+		{"@router. after a letter", "x@router.get", "@router.", true},
+		{"end not checked", "useStateful()", "useState", true},
+		{"absent", "nothing here", "it(", false},
+	}
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := filterOutTestFiles(tt.input)
-			if len(result) != len(tt.expected) {
-				t.Errorf("filterOutTestFiles() got %d files, expected %d", len(result), len(tt.expected))
-				return
-			}
-			for i, f := range result {
-				if f != tt.expected[i] {
-					t.Errorf("filterOutTestFiles()[%d] = %s, expected %s", i, f, tt.expected[i])
-				}
-			}
-		})
+		if got := containsKeyword(tt.content, tt.kw); got != tt.want {
+			t.Errorf("%s: containsKeyword(%q, %q) = %v, want %v", tt.name, tt.content, tt.kw, got, tt.want)
+		}
+	}
+}
+
+func TestTestKeywordsCountOnlyInTestFiles(t *testing.T) {
+	got := detectPatterns(t, map[string]string{
+		"package.json":    `{"devDependencies": {"cypress": "13.0.0", "zustand": "4.0.0"}}`,
+		"src/a.ts":        `it("x", () => {});` + "\n",
+		"src/setup.ts":    "export function setup() { init(); submit(); }\n",
+		"src/b.test.ts":   `it("y", () => {});` + "\n",
+		"src/c.test.ts":   `foo.it("z");` + "\n",
+		"src/frecency.ts": "const score = frecency.value;\n",
+		"e2e/home.cy.ts":  `cy.visit("/");` + "\n",
+		"src/store.ts":    "const s = Object.create(proto);\n",
+	})
+	if files := patternExamples(got.Testing, "it("); !reflect.DeepEqual(files, []string{filepath.FromSlash("src/b.test.ts")}) {
+		t.Errorf("it( files = %v, want src/b.test.ts", files)
+	}
+	if files := patternExamples(got.Testing, "cy."); !reflect.DeepEqual(files, []string{filepath.FromSlash("e2e/home.cy.ts")}) {
+		t.Errorf("cy. files = %v, want e2e/home.cy.ts", files)
+	}
+	if files := patternExamples(got.StateManagement, "create("); files != nil {
+		t.Errorf("Object.create( counted as create( in %v", files)
+	}
+}
+
+func TestTestFilesFeedOnlyTesting(t *testing.T) {
+	got := detectPatterns(t, map[string]string{
+		"package.json":       `{"dependencies": {"react": "18.2.0", "axios": "1.0.0"}}`,
+		"src/a.test.ts":      "const [n] = useState(0);\naxios.get(\"/x\");\n",
+		"internal/x_test.go": "package x\n\nfunc f() {\n\tgo func() {}()\n}\n",
+		"tests/test_api.py":  "import requests\n\nrequests.get(\"x\")\n",
+		"tests/it.rs":        "fn a() { x.unwrap(); }\n",
+		"src/lib.rs":         "#[cfg(test)]\nmod t {\n    #[test]\n    fn a() {}\n}\n",
+	})
+	for name, patterns := range map[string][]types.PatternInfo{"state": got.StateManagement, "data fetching": got.DataFetching, "Go": got.GoPatterns} {
+		if len(patterns) > 0 {
+			t.Errorf("%s patterns from test files: %+v", name, patterns)
+		}
+	}
+	if files := patternExamples(got.RustPatterns, ".unwrap()"); files != nil {
+		t.Errorf(".unwrap() counted in test files %v", files)
+	}
+	for _, kw := range []string{"#[test]", "#[cfg(test)]"} {
+		if files := patternExamples(got.RustPatterns, kw); !reflect.DeepEqual(files, []string{filepath.FromSlash("src/lib.rs")}) {
+			t.Errorf("%s files = %v, want src/lib.rs", kw, files)
+		}
+	}
+}
+
+// T3-D17: gen/ is project source and no generated-file marker is read.
+func TestGeneratedLookingSourceCounts(t *testing.T) {
+	got := detectPatterns(t, map[string]string{
+		"gen/worker.go":          "package gen\n\nfunc Start() {\n\tgo func() {}()\n}\n",
+		"internal/api/api.pb.go": "// Code generated by protoc-gen-go. DO NOT EDIT.\n\npackage api\n\nvar c = make(chan int)\n",
+	})
+	if files := patternExamples(got.GoPatterns, "go func"); !reflect.DeepEqual(files, []string{filepath.FromSlash("gen/worker.go")}) {
+		t.Errorf("go func files = %v, want gen/worker.go", files)
+	}
+	if files := patternExamples(got.GoPatterns, "make(chan"); !reflect.DeepEqual(files, []string{filepath.FromSlash("internal/api/api.pb.go")}) {
+		t.Errorf("make(chan files = %v, want internal/api/api.pb.go", files)
 	}
 }
 
@@ -96,7 +156,7 @@ export function Counter() {
 		{Path: "src/Counter.tsx", Name: "Counter.tsx", Extension: ".tsx", IsDir: false},
 	}
 
-	detector := NewCodePatternDetector(tmpDir, files)
+	detector := NewCodePatternDetector(tmpDir, files, []types.Dependency{{Name: "react-redux", Version: "9.0.0", Type: "runtime"}})
 	patterns := detector.detectStateManagement()
 
 	// Should detect Redux patterns
@@ -143,7 +203,7 @@ func getData() {
 		{Path: "fetch.go", Name: "fetch.go", Extension: ".go", IsDir: false},
 	}
 
-	detector := NewCodePatternDetector(tmpDir, files)
+	detector := NewCodePatternDetector(tmpDir, files, nil)
 	patterns := detector.detectDataFetching()
 
 	// Should detect http.Get pattern
@@ -188,7 +248,7 @@ func TestSomething(t *testing.T) {
 		{Path: "main_test.go", Name: "main_test.go", Extension: ".go", IsDir: false},
 	}
 
-	detector := NewCodePatternDetector(tmpDir, files)
+	detector := NewCodePatternDetector(tmpDir, files, nil)
 	patterns := detector.detectTesting()
 
 	// Should detect Go testing patterns
@@ -202,55 +262,6 @@ func TestSomething(t *testing.T) {
 
 	if !hasGoTest {
 		t.Error("expected Go testing patterns to be detected")
-	}
-}
-
-func TestCodePatternDetector_DetectAuthentication(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "auth-pattern-test")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer func() { _ = os.RemoveAll(tmpDir) }()
-
-	// Create a file with JWT handling
-	authContent := `package auth
-
-import (
-	"github.com/golang-jwt/jwt/v5"
-)
-
-func ValidateToken(tokenString string) (*jwt.Token, error) {
-	return jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		return []byte("secret"), nil
-	})
-}
-`
-	authDir := filepath.Join(tmpDir, "internal", "auth")
-	if err := os.MkdirAll(authDir, 0755); err != nil {
-		t.Fatalf("failed to create auth dir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(authDir, "jwt.go"), []byte(authContent), 0644); err != nil {
-		t.Fatalf("failed to create jwt.go: %v", err)
-	}
-
-	files := []types.FileInfo{
-		{Path: "internal/auth/jwt.go", Name: "jwt.go", Extension: ".go", IsDir: false},
-	}
-
-	detector := NewCodePatternDetector(tmpDir, files)
-	patterns := detector.detectAuthentication()
-
-	// Should detect JWT pattern
-	hasJWT := false
-	for _, p := range patterns {
-		if p.Name == "jwt." {
-			hasJWT = true
-			break
-		}
-	}
-
-	if !hasJWT {
-		t.Error("expected JWT authentication pattern to be detected")
 	}
 }
 
@@ -276,6 +287,10 @@ type User struct {
 func NewDB() (*gorm.DB, error) {
 	return gorm.Open(sqlite.Open("test.db"), &gorm.Config{})
 }
+
+func NewSQL() (*sql.DB, error) {
+	return sql.Open("sqlite", "test.db")
+}
 `
 	repoDir := filepath.Join(tmpDir, "internal", "repository")
 	if err := os.MkdirAll(repoDir, 0755); err != nil {
@@ -289,20 +304,16 @@ func NewDB() (*gorm.DB, error) {
 		{Path: "internal/repository/db.go", Name: "db.go", Extension: ".go", IsDir: false},
 	}
 
-	detector := NewCodePatternDetector(tmpDir, files)
+	detector := NewCodePatternDetector(tmpDir, files, nil)
 	patterns := detector.detectDatabasePatterns()
 
-	// Should detect GORM patterns
-	hasGORM := false
+	// GORM comes from the Go AST detector's imports, sql.Open from the keywords
+	var names []string
 	for _, p := range patterns {
-		if p.Name == "gorm.Open" || p.Name == "gorm.Model" {
-			hasGORM = true
-			break
-		}
+		names = append(names, p.Name)
 	}
-
-	if !hasGORM {
-		t.Error("expected GORM database pattern to be detected")
+	if !reflect.DeepEqual(names, []string{"sql.Open"}) {
+		t.Errorf("database patterns = %v, want [sql.Open]", names)
 	}
 }
 
@@ -336,7 +347,7 @@ func NewServer() *grpc.Server {
 		{Path: "internal/api/server.go", Name: "server.go", Extension: ".go", IsDir: false},
 	}
 
-	detector := NewCodePatternDetector(tmpDir, files)
+	detector := NewCodePatternDetector(tmpDir, files, []types.Dependency{{Name: "google.golang.org/grpc", Version: "v1.60.0", Type: "runtime"}})
 	patterns := detector.detectAPIPatterns()
 
 	// Should detect gRPC pattern
@@ -423,5 +434,135 @@ func TestLimitSlice(t *testing.T) {
 				t.Errorf("limitSlice() returned %d items, expected %d", len(result), tt.expected)
 			}
 		})
+	}
+}
+
+// intrinsicRows are the rows reported without a declared dependency.
+var intrinsicRows = map[string]string{
+	// JS
+	"describe(": "framework-agnostic", "it(": "framework-agnostic", "test(": "framework-agnostic", "expect(": "framework-agnostic",
+	"fetch(": "platform", "<form": "platform", "className=": "platform", "module.css": "bundler",
+	// Python
+	"urllib": "stdlib", "def test_": "language", "unittest": "stdlib", "TestCase": "stdlib", "@patch": "stdlib",
+	"from typing import": "import", "Optional[": "stdlib", "List[": "stdlib", "Dict[": "stdlib", "Union[": "stdlib",
+	"Callable[": "stdlib", "TypeVar": "stdlib", "@dataclass": "stdlib", "@dataclasses": "stdlib",
+	"async def": "language", "await ": "language", "asyncio.": "stdlib", "argparse.": "stdlib",
+	"import pandas": "import", "import numpy": "import", "import matplotlib": "import", "import seaborn": "import",
+	"import sklearn": "import", "import torch": "import", "import tensorflow": "import", "import keras": "import",
+	"import transformers": "import", "import langchain": "import", "import openai": "import", "import anthropic": "import",
+	"import logging": "stdlib", "logging.getLogger": "stdlib",
+	"from celery": "import", "import rq": "import", "import dramatiq": "import", "import huey": "import",
+	// Rust
+	"async fn": "language", ".await": "language", "Pin<": "std", "poll(": "std",
+	"Result<": "language", "?;": "language", ".unwrap()": "language", ".expect(": "language", ".unwrap_or(": "language", ".map_err(": "language",
+	"#[test]": "language", "#[cfg(test)]": "language", "assert!": "language", "assert_eq!": "language", "assert_ne!": "language",
+	"std::thread": "std", "Arc<": "std", "Mutex<": "std", "RwLock<": "std", "mpsc::": "std",
+}
+
+var jsTables = []keywordTable{reactStateTable, vueStateTable, jsDataFetchingTable, jsRoutingTable, jsFormsTable,
+	jsTestingTable, jsStylingTable, jsAuthTable, apiTable, jsDatabaseTable, jsUtilitiesTable}
+
+var allTables = slices.Concat(jsTables, []keywordTable{pyDataFetchingTable, pyTestingTable, pyAuthTable, pyDatabaseTable},
+	pythonTables, rustTables)
+
+func allPatterns(cp *types.CodePatterns) []types.PatternInfo {
+	return slices.Concat(cp.StateManagement, cp.DataFetching, cp.Routing, cp.Forms, cp.Testing, cp.Styling,
+		cp.Authentication, cp.APIPatterns, cp.DatabaseORM, cp.Utilities, cp.GoPatterns, cp.RustPatterns, cp.PythonPatterns)
+}
+
+// Every JS, Python and Rust row is reported with one of its packages
+// declared and, unless it is intrinsic, not without.
+func TestEveryRowNeedsItsPackage(t *testing.T) {
+	for _, table := range allTables {
+		for _, row := range table.rows {
+			_, intrinsic := intrinsicRows[row.keyword]
+			if intrinsic != (len(row.packages) == 0) {
+				t.Errorf("%s row %q: packages %v, in intrinsicRows %v", table.category, row.keyword, row.packages, intrinsic)
+				continue
+			}
+			rel := "src/row" + table.exts[0]
+			if !table.include(rel) {
+				rel = "tests/row" + table.exts[0]
+			}
+			root, infos := writeProject(t, map[string]string{rel: row.keyword + "\n"})
+			found := func(deps []types.Dependency) bool {
+				return slices.ContainsFunc(allPatterns(NewCodePatternDetector(root, infos, deps).Detect()), func(p types.PatternInfo) bool {
+					return p.Category == table.category && p.Name == row.keyword
+				})
+			}
+			if got := found(nil); got != intrinsic {
+				t.Errorf("%s row %q without dependencies: found %v, want %v", table.category, row.keyword, got, intrinsic)
+			}
+			for _, pkg := range row.packages {
+				name := pkg
+				if strings.HasSuffix(pkg, "/") {
+					name += "x"
+				}
+				if !found([]types.Dependency{{Name: name, Version: "1.0.0", Type: "runtime"}}) {
+					t.Errorf("%s row %q with %s declared: not found", table.category, row.keyword, name)
+				}
+			}
+		}
+	}
+}
+
+func TestJSPatternEvidence(t *testing.T) {
+	tests := []struct {
+		name, pkg, rel, content, category, keyword string
+		want                                       bool
+	}{
+		{"getSessions without next-auth", `{"dependencies": {"react": "18.2.0"}}`, "src/a.ts", "export const s = getSessions();\n", "auth", "getSession", false},
+		{"getSession with next-auth", `{"dependencies": {"next-auth": "4.0.0"}}`, "src/a.ts", "const s = await getSession();\n", "auth", "getSession", true},
+		{"uuid only in a test title", `{"dependencies": {"uuid": "9.0.0"}}`, "src/a.test.ts", `it("generates a uuid", () => {});` + "\n", "utilities", "uuid", false},
+		{"frecency. without cypress", `{"name": "x"}`, "src/frecency.ts", "const score = frecency.value;\n", "testing", "cy.", false},
+		{"cy.visit( without cypress", `{"name": "x"}`, "e2e/a.cy.ts", `cy.visit("/");` + "\n", "testing", "cy.", false},
+		{"cy.visit( with cypress", `{"devDependencies": {"cypress": "13.0.0"}}`, "e2e/a.cy.ts", `cy.visit("/");` + "\n", "testing", "cy.", true},
+		{"useState with a peer react", `{"peerDependencies": {"react": ">=18"}}`, "src/a.tsx", "const [a] = useState(0);\n", "state", "useState", true},
+		{"useState without react", `{"name": "x"}`, "src/a.tsx", "const [a] = useState(0);\n", "state", "useState", false},
+	}
+	for _, tt := range tests {
+		got := slices.ContainsFunc(allPatterns(detectPatterns(t, map[string]string{"package.json": tt.pkg, tt.rel: tt.content})), func(p types.PatternInfo) bool {
+			return p.Category == tt.category && p.Name == tt.keyword
+		})
+		if got != tt.want {
+			t.Errorf("%s: %s found %v, want %v", tt.name, tt.keyword, got, tt.want)
+		}
+	}
+}
+
+func TestGenericWordsReportNothing(t *testing.T) {
+	words := "middleware Authorization Bearer REST swagger websocket protobuf onSubmit handleSubmit"
+	got := detectPatterns(t, map[string]string{
+		"package.json": `{"dependencies": {"react": "18.2.0"}}`,
+		"src/a.ts":     "// " + words + "\n",
+		"srv/a.go":     "package a // " + words + "\n",
+		"app/a.py":     "# " + words + "\n",
+	})
+	if all := allPatterns(got); len(all) > 0 {
+		t.Errorf("patterns from generic words: %+v", all)
+	}
+}
+
+func TestPythonEvidence(t *testing.T) {
+	content := "import requests\nimport pandas\n\nrequests.get(\"x\")\n"
+	for _, tt := range []struct {
+		pkg  string
+		want []string
+	}{
+		{"requirements.txt", []string{"import pandas"}},
+		{"requirements.txt=requests", []string{"import pandas", "requests."}},
+	} {
+		files := map[string]string{"app/a.py": content}
+		if name, deps, ok := strings.Cut(tt.pkg, "="); ok {
+			files[name] = deps + "\n"
+		}
+		var got []string
+		for _, p := range allPatterns(detectPatterns(t, files)) {
+			got = append(got, p.Name)
+		}
+		slices.Sort(got)
+		if !reflect.DeepEqual(got, tt.want) {
+			t.Errorf("%s: patterns %v, want %v", tt.pkg, got, tt.want)
+		}
 	}
 }
