@@ -623,6 +623,42 @@ func TestMergeFileWithCRLFIsNotRewritten(t *testing.T) {
 	}
 }
 
+func TestMergeKeepsCRLFFilesCRLF(t *testing.T) {
+	resetFlags(t)
+	out, errOut := captureOutput(t)
+	ref := t.TempDir()
+	generate(t, ref, "claude")
+	block := strings.TrimSuffix(readFile(t, ref, "CLAUDE.md"), "\n")
+
+	const (
+		top   = "# Team rules\r\nKEEP-TOP\r\n\r\n"
+		stale = merger.AutoStartMarker + "\r\nstale\r\n" + merger.AutoEndMarker
+	)
+	tests := []struct {
+		name, bottom, block string
+	}{
+		{"all CRLF", "\r\n\r\nKEEP-BOTTOM\r\n", strings.ReplaceAll(block, "\n", "\r\n")},
+		{"one LF line", "\r\n\r\nKEEP-BOTTOM\n", block},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			writeFiles(t, root, map[string]string{"CLAUDE.md": top + stale + tt.bottom})
+			want := top + tt.block + tt.bottom
+			for run := 1; run <= 2; run++ {
+				out.Reset()
+				generate(t, root, "claude")
+				if got := readFile(t, root, "CLAUDE.md"); got != want {
+					t.Errorf("run %d wrote %q, want %q", run, got, want)
+				}
+			}
+			if out.String() != "✅ CLAUDE.md is up to date\n" || errOut.Len() != 0 {
+				t.Errorf("run 2 printed %q / %q", out, errOut)
+			}
+		})
+	}
+}
+
 func TestDryRunWritesNothing(t *testing.T) {
 	resetFlags(t)
 	out, _ := captureOutput(t)

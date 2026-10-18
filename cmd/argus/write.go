@@ -81,6 +81,11 @@ func writeMerged(root, label, rel string, generated []byte, dryRun bool) error {
 		content = []byte(merger.AddCustomSectionPlaceholder(string(content)))
 	}
 	content = append(bytes.TrimRight(content, "\r\n"), '\n')
+	// A file whose newlines are all CRLF stays CRLF; others keep an LF block.
+	crlf, lf := []byte("\r\n"), []byte("\n")
+	if n := bytes.Count(existing, lf); n > 0 && n == bytes.Count(existing, crlf) {
+		content = bytes.ReplaceAll(bytes.ReplaceAll(content, crlf, lf), lf, crlf)
+	}
 
 	if sameText(existing, content) {
 		reportFile(shown, fileUnchanged, dryRun)
