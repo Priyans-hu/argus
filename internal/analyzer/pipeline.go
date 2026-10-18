@@ -1,6 +1,7 @@
 package analyzer
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"path/filepath"
@@ -22,8 +23,9 @@ type pipeline struct {
 }
 
 // newPipeline resolves the root, walks it and reads the declared
-// dependencies, which detectors take as evidence.
-func newPipeline(ctx context.Context, rootPath string, cfg *types.Config) (*pipeline, error) {
+// dependencies, which detectors take as evidence; a monorepo workspace also
+// gets rootDeps, the root's, which it does not declare itself.
+func newPipeline(ctx context.Context, rootPath string, cfg *types.Config, rootDeps []types.Dependency) (*pipeline, error) {
 	root, err := filepath.Abs(rootPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get absolute path: %w", err)
@@ -32,7 +34,16 @@ func newPipeline(ctx context.Context, rootPath string, cfg *types.Config) (*pipe
 	if err != nil {
 		return nil, fmt.Errorf("failed to walk directory: %w", err)
 	}
-	return &pipeline{root: root, cfg: cfg, files: files, src: detector.ProjectSourceFiles(files), deps: detector.ReadDependencies(root, files)}, nil
+	deps := detector.ReadDependencies(root, files)
+	for _, d := range rootDeps {
+		if !slices.ContainsFunc(deps, func(x types.Dependency) bool { return x.Type == d.Type && x.Name == d.Name }) {
+			deps = append(deps, d)
+		}
+	}
+	slices.SortFunc(deps, func(a, b types.Dependency) int {
+		return cmp.Or(cmp.Compare(a.Type, b.Type), cmp.Compare(a.Name, b.Name))
+	})
+	return &pipeline{root: root, cfg: cfg, files: files, src: detector.ProjectSourceFiles(files), deps: deps}, nil
 }
 
 // newAnalysis returns the fields known before any detector runs.

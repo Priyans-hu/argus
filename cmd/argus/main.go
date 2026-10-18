@@ -403,7 +403,7 @@ func runMonorepoScan(ctx context.Context, absPath string, cfg *config.Config, fo
 		maxConcurrent = cfg.Monorepo.MaxConcurrent
 	}
 
-	ma := analyzer.NewMonorepoAnalyzer(absPath, analyzerConfig(cfg), parallel, maxConcurrent)
+	ma := analyzer.NewMonorepoAnalyzer(absPath, analyzerConfig(cfg), parallel, maxConcurrent, rootAnalysis.Dependencies)
 	wsResults := ma.AnalyzeWorkspaces(ctx, rootAnalysis.MonorepoInfo)
 
 	if len(wsResults) == 0 {

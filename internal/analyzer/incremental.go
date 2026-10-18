@@ -79,7 +79,7 @@ func (ia *IncrementalAnalyzer) AnalyzeIncremental(ctx context.Context, changedFi
 	}
 
 	// Fresh file list and dependencies
-	p, err := newPipeline(ctx, ia.rootPath, ia.config)
+	p, err := newPipeline(ctx, ia.rootPath, ia.config, nil)
 	if err != nil {
 		return nil, nil, err
 	}
