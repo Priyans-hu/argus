@@ -145,7 +145,9 @@ func DetermineImpact(changedFile string) []string {
 		"pom.xml": true, "build.gradle": true,
 		"Gemfile": true, "Gemfile.lock": true,
 	}
-	if depFiles[name] || (strings.HasPrefix(name, "requirements") && ext == ".txt") {
+	requirements := strings.HasPrefix(name, "requirements") && ext == ".txt" ||
+		filepath.Base(dir) == "requirements" && (ext == ".txt" || ext == ".in")
+	if depFiles[name] || requirements {
 		return []string{ImpactAll}
 	}
 

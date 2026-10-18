@@ -27,6 +27,8 @@ func TestDetermineImpact_PackageManager(t *testing.T) {
 		{"pyproject.toml", []string{ImpactAll}},
 		{"requirements.txt", []string{ImpactAll}},
 		{"requirements-dev.txt", []string{ImpactAll}},
+		{"requirements/base.txt", []string{ImpactAll}},
+		{"requirements/dev.in", []string{ImpactAll}},
 		{"yarn.lock", []string{ImpactAll}},
 	}
 
