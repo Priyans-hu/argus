@@ -10,7 +10,7 @@
 
 **The all-seeing code analyzer. Help AI grok your codebase.**
 
-Argus scans your codebase and generates optimized context files for AI coding assistants — no more manually writing `CLAUDE.md` or `.cursorrules`.
+Argus scans your codebase and generates optimized context files for AI coding assistants — no more manually writing `AGENTS.md` or `CLAUDE.md`.
 
 > If you find this useful, consider giving it a [⭐ star on GitHub](https://github.com/Priyans-hu/argus) — it helps others discover the project!
 
@@ -30,10 +30,9 @@ You: *repeat*
 argus scan
 
 # Argus analyzes your codebase and generates:
-# ✓ CLAUDE.md (for Claude Code)
-# ✓ .cursorrules (for Cursor)
-# ✓ .github/copilot-instructions.md (for Copilot)
-# ✓ .continue/config.yaml (for Continue)
+# ✓ AGENTS.md (for Codex, Cursor, Copilot, Gemini CLI and other agents)
+# ✓ CLAUDE.md (for Claude Code, imports AGENTS.md)
+# and with --format: .claude/, .cursor/rules/argus.mdc, .github/copilot-instructions.md
 ```
 
 ## Installation
@@ -87,8 +86,8 @@ argus sync
 
 Run `argus scan` or `argus sync` as often as you like:
 
-- `CLAUDE.md`, `.cursorrules` and `.github/copilot-instructions.md` hold the generated content between `<!-- ARGUS:AUTO -->` markers. A rescan replaces only that block; anything you write above or below it is kept.
-- A file without markers (hand-written, or from an older argus) keeps its text below a new generated block, and argus tells you once.
+- `AGENTS.md`, `CLAUDE.md`, `.cursor/rules/argus.mdc` and `.github/copilot-instructions.md` hold the generated content between `<!-- ARGUS:AUTO -->` markers. A rescan replaces only that block; anything you write above or below it is kept.
+- A file without markers (hand-written, or from an older argus) keeps its text below a new generated block, and argus tells you once. The exception is an `AGENTS.md` without markers: argus leaves it unchanged and warns; add an empty `ARGUS:AUTO` pair to opt in, or use `--force`.
 - `.claude/**` and `.continue/config.yaml` are written once. If you edit them, later runs leave them alone and report them; `--force` overwrites them.
 - A file whose content would not change is not rewritten.
 
@@ -102,6 +101,7 @@ Run `argus scan` or `argus sync` as often as you like:
 - **Patterns** — API shapes, error handling, state management
 
 ## Output Example
+<!-- verify -->
 
 ```markdown
 # your-project
@@ -134,10 +134,14 @@ src/
 
 | Format | File | AI Tool |
 |--------|------|---------|
-| Claude | `CLAUDE.md` | Claude Code |
-| Cursor | `.cursorrules` | Cursor |
+| Agents | `AGENTS.md` | Codex, Cursor, Copilot, Gemini CLI and other agents |
+| Claude | `CLAUDE.md` (imports `AGENTS.md`) | Claude Code |
+| Claude Code | `.claude/` (agents, rules, skills, hooks) | Claude Code |
+| Cursor | `.cursor/rules/argus.mdc` | Cursor |
 | Copilot | `.github/copilot-instructions.md` | GitHub Copilot |
-| Continue | `.continue/config.yaml` | Continue.dev |
+| Continue (deprecated) | `.continue/config.yaml` | Continue.dev |
+
+`argus scan` writes `AGENTS.md` and `CLAUDE.md`. Choose formats with `--format` or `output:` in `.argus.yaml`; `--format all` writes every format except Continue. Claude Code only creates missing files, its formatter hooks need `jq`, and argus writes no MCP config.
 
 ## Commands
 
@@ -145,9 +149,14 @@ src/
 argus init      # Initialize config (optional)
 argus scan      # Analyze and generate files
 argus sync      # Update files with changes
-argus scan --force   # Also overwrite edited .claude/ and .continue/ files
+argus scan --full    # Detailed AGENTS.md (structure, key files, patterns)
+argus scan --force   # Also overwrite files argus would skip (edited .claude/ files, an AGENTS.md without markers)
 argus --version # Print version (same as argus version)
 ```
+
+`--compact` (lean output is now the default) and `-o`/`--output` (no effect) are deprecated.
+
+`argus check` exits 1 when a generated file is out of date, for CI. <!-- verify -->
 
 ## Configuration (Optional)
 
@@ -155,9 +164,9 @@ Create `.argus.yaml` to customize:
 
 ```yaml
 output:
+  - agents
   - claude
   - cursor
-  - copilot
 
 ignore:
   - node_modules
