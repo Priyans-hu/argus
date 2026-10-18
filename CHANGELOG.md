@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Repo dev skills in `.claude/skills/` are marked `metadata.internal: true`, so the skills CLI no longer offers them
 - Existing .claude/** and .continue/config.yaml files that differ from the generated output are skipped and reported instead of overwritten
 - The first write of CLAUDE.md, .cursorrules and the Copilot file carries ARGUS:AUTO markers, so rescans no longer append a Previous Content copy; an existing file without markers gets the generated block on top and its text kept below; --add-custom applies to these files only
+- `--monorepo` reads `claude_code:` from the root `.argus.yaml` for every workspace; a `claude_code:` section in a workspace's own `.argus.yaml` is no longer read
 
 ### Deprecated
 - `-o`/`--output` has no effect; it is hidden and will be removed in a future release
