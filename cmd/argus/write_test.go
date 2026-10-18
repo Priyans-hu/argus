@@ -655,3 +655,64 @@ func TestMergeWritesThroughSymlink(t *testing.T) {
 		t.Errorf("target lost its text:\n%s", got)
 	}
 }
+
+func TestMergeReplacesFileThroughTempFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bits and inodes work differently on Windows")
+	}
+	const stale = merger.AutoStartMarker + "\nstale\n" + merger.AutoEndMarker + "\n"
+	tests := []struct {
+		name              string
+		fileMode, dirMode os.FileMode
+		renamed, wantErr  bool
+	}{
+		{"writable file", 0640, 0755, true, false},
+		{"read-only directory", 0640, 0555, false, false},
+		{"read-only file", 0444, 0755, false, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if !tt.renamed && os.Geteuid() == 0 {
+				t.Skip("root ignores permission bits")
+			}
+			resetFlags(t)
+			captureOutput(t)
+			root := t.TempDir()
+			target := filepath.Join(root, "CLAUDE.md")
+			writeFiles(t, root, map[string]string{"CLAUDE.md": stale})
+			if err := os.Chmod(target, tt.fileMode); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Chmod(root, tt.dirMode); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = os.Chmod(root, 0755) })
+			before, err := os.Stat(target)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			err = generateOutput(root, "", "claude", goAnalysis(), config.DefaultConfig(), false, false)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("err = %v, want an error: %v", err, tt.wantErr)
+			}
+			after, err := os.Stat(target)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if after.Mode().Perm() != tt.fileMode {
+				t.Errorf("mode = %v, want %v", after.Mode().Perm(), tt.fileMode)
+			}
+			if renamed := !os.SameFile(before, after); renamed != tt.renamed {
+				t.Errorf("replaced by a rename = %v, want %v", renamed, tt.renamed)
+			}
+			got := readFile(t, root, "CLAUDE.md")
+			if updated := got != stale; updated == tt.wantErr {
+				t.Errorf("file updated = %v, want %v:\n%s", updated, !tt.wantErr, got)
+			}
+			if entries, err := os.ReadDir(root); err != nil || len(entries) != 1 {
+				t.Errorf("directory holds %v (err %v), want only CLAUDE.md", entries, err)
+			}
+		})
+	}
+}

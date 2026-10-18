@@ -116,8 +116,8 @@ func writeCreateOnly(root, label, rel string, content []byte, dryRun bool) (file
 	return fileWritten, writeOutput(target, shown, content, dryRun)
 }
 
-// writeOutput previews content in dry-run mode and otherwise writes it in
-// place, which keeps a symlinked output a symlink.
+// writeOutput previews content in dry-run mode and otherwise writes it with
+// writeFile.
 func writeOutput(target, shown string, content []byte, dryRun bool) error {
 	if dryRun {
 		outf("\n📄 Would write to %s:\n---\n%s\n---\n", target, content)
@@ -126,8 +126,35 @@ func writeOutput(target, shown string, content []byte, dryRun bool) error {
 	if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 		return fmt.Errorf("failed to create directory for %s: %w", shown, err)
 	}
-	if err := os.WriteFile(target, content, 0644); err != nil {
+	if err := writeFile(target, content); err != nil {
 		return fmt.Errorf("failed to write %s: %w", shown, err)
+	}
+	return nil
+}
+
+// writeFile replaces an existing regular file the owner can write through a
+// temp file and a rename, so a failed write cannot truncate it. A missing
+// file, a symlink (it stays one), a read-only file and a file whose temp copy
+// cannot be created, chmodded or renamed are written in place.
+func writeFile(target string, content []byte) error {
+	fi, err := os.Lstat(target)
+	if err != nil || !fi.Mode().IsRegular() || fi.Mode().Perm()&0200 == 0 {
+		return os.WriteFile(target, content, 0644)
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(target), ".argus-*")
+	if err != nil {
+		return os.WriteFile(target, content, 0644)
+	}
+	defer func() { _ = os.Remove(tmp.Name()) }()
+	_, err = tmp.Write(content)
+	if cerr := tmp.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return err
+	}
+	if os.Chmod(tmp.Name(), fi.Mode().Perm()) != nil || os.Rename(tmp.Name(), target) != nil {
+		return os.WriteFile(target, content, 0644)
 	}
 	return nil
 }

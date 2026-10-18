@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Errors print once; usage is shown only for argument and flag errors
 - `argus upgrade` compares versions with semver and times out stalled requests
 - `argus upgrade` replaces the running binary atomically instead of overwriting it in place
+- Existing output files are replaced through a temp file and a rename, so a full disk or an interrupted run cannot truncate them
 
 ### Security
 - The Repository line no longer leaks credentials or SSH host aliases; only github.com, gitlab.com and bitbucket.org are linked, other hosts show owner/name, local remotes are omitted
