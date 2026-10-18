@@ -42,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Ignore rules match entry names instead of substrings: .github, .gitignore, build.gradle.kts and directories such as internal/binder are no longer hidden from analysis; `ignore` in .argus.yaml now takes effect in every mode (a name at any depth, a glob, or a path anchored at the project root)
 - Tech stack detection compares exact dependency names instead of searching manifest text, and finds frameworks declared in sub-directories or only as peer dependencies
 - scan, scan --parallel=false and watch produce the same analysis; project tools and AST detectors run in every mode
+- Code pattern detection reads project source only: docs, examples, fixtures, vendored and generated code are skipped, test files count only for testing patterns, and keywords no longer match inside identifiers (`it(` in `init(`, `cy.` in `frecency.`)
 
 ### Security
 - The Repository line no longer leaks credentials or SSH host aliases; only github.com, gitlab.com and bitbucket.org are linked, other hosts show owner/name, local remotes are omitted

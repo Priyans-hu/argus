@@ -17,6 +17,7 @@ type pipeline struct {
 	root  string // absolute
 	cfg   *types.Config
 	files []types.FileInfo
+	src   []types.FileInfo // project source: the files pattern detectors read
 	deps  []types.Dependency
 }
 
@@ -31,7 +32,7 @@ func newPipeline(ctx context.Context, rootPath string, cfg *types.Config) (*pipe
 	if err != nil {
 		return nil, fmt.Errorf("failed to walk directory: %w", err)
 	}
-	return &pipeline{root: root, cfg: cfg, files: files, deps: detector.ReadDependencies(root, files)}, nil
+	return &pipeline{root: root, cfg: cfg, files: files, src: detector.ProjectSourceFiles(files), deps: detector.ReadDependencies(root, files)}, nil
 }
 
 // newAnalysis returns the fields known before any detector runs.
@@ -54,29 +55,32 @@ func (p *pipeline) techStack() (types.TechStack, error) {
 // conventions returns the conventions, then the patterns, then the
 // framework patterns.
 func (p *pipeline) conventions() ([]types.Convention, error) {
-	conventions, err := detector.NewConventionDetector(p.root, p.files).Detect()
+	conventions, err := detector.NewConventionDetector(p.root, p.src).Detect()
 	if err != nil {
 		return nil, fmt.Errorf("failed to detect conventions: %w", err)
 	}
-	patterns, err := detector.NewPatternDetector(p.root, p.files).Detect()
+	patterns, err := detector.NewPatternDetector(p.root, p.src).Detect()
 	if err != nil {
 		return nil, fmt.Errorf("failed to detect patterns: %w", err)
 	}
-	framework, err := detector.NewFrameworkDetector(p.root, p.files).Detect()
+	framework, err := detector.NewFrameworkDetector(p.root, p.src).Detect()
 	if err != nil {
 		return nil, fmt.Errorf("failed to detect framework patterns: %w", err)
 	}
 	return slices.Concat(conventions, patterns, framework), nil
 }
 
-// codePatterns runs the keyword, ML and AST detectors; React hooks and the
-// Python AST results join the keyword results by name.
+// codePatterns runs the keyword, ML and AST detectors on project source;
+// React hooks and the Python AST results join the keyword results by name.
+// The JS and Python AST detectors skip test files, which feed only testing
+// patterns.
 func (p *pipeline) codePatterns() *types.CodePatterns {
-	patterns := detector.NewCodePatternDetector(p.root, p.files).Detect()
-	patterns.MLPatterns = detector.NewMLDetector(p.root, p.files).GetMLPatterns()
-	hooks := filterByCategory(detector.NewJSASTDetector(p.root, p.files).Detect(), "React Hooks")
+	patterns := detector.NewCodePatternDetector(p.root, p.src).Detect()
+	patterns.MLPatterns = detector.NewMLDetector(p.root, p.src).GetMLPatterns()
+	nonTest := slices.DeleteFunc(slices.Clone(p.src), func(f types.FileInfo) bool { return detector.IsTestFile(f.Path) })
+	hooks := filterByCategory(detector.NewJSASTDetector(p.root, nonTest).Detect(), "React Hooks")
 	patterns.StateManagement = mergePatterns(patterns.StateManagement, hooks)
-	patterns.PythonPatterns = mergePatterns(patterns.PythonPatterns, detector.NewPythonASTDetector(p.root, p.files).Detect())
+	patterns.PythonPatterns = mergePatterns(patterns.PythonPatterns, detector.NewPythonASTDetector(p.root, nonTest).Detect())
 	return patterns
 }
 

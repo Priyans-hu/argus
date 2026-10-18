@@ -1,6 +1,10 @@
 package detector
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/Priyans-hu/argus/pkg/types"
+)
 
 // nonSourceDirs hold vendored, documentation, example, fixture and generated
 // code, which is not the project's own source.
@@ -22,4 +26,31 @@ func IsProjectSource(rel string) bool {
 		}
 	}
 	return true
+}
+
+var testDirs = map[string]bool{"test": true, "tests": true, "__tests__": true, "spec": true, "e2e": true}
+
+// IsTestFile reports whether rel, a path relative to the scan root, is a test
+// file by its name or by a test directory above it.
+func IsTestFile(rel string) bool {
+	parts := strings.Split(strings.ReplaceAll(rel, `\`, "/"), "/")
+	for _, dir := range parts[:len(parts)-1] {
+		if testDirs[strings.ToLower(dir)] {
+			return true
+		}
+	}
+	name := parts[len(parts)-1]
+	return strings.HasSuffix(name, "_test.go") || strings.Contains(name, ".test.") || strings.Contains(name, ".spec.") ||
+		name == "conftest.py" || strings.HasSuffix(name, "_test.py") || strings.HasPrefix(name, "test_") && strings.HasSuffix(name, ".py")
+}
+
+// ProjectSourceFiles returns the files IsProjectSource keeps.
+func ProjectSourceFiles(files []types.FileInfo) []types.FileInfo {
+	var src []types.FileInfo
+	for _, f := range files {
+		if IsProjectSource(f.Path) {
+			src = append(src, f)
+		}
+	}
+	return src
 }

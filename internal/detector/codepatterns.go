@@ -4,7 +4,10 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/Priyans-hu/argus/pkg/types"
 )
@@ -60,77 +63,88 @@ func (d *CodePatternDetector) Detect() *types.CodePatterns {
 	return patterns
 }
 
-// scanForKeywords scans files for specific keywords
-func (d *CodePatternDetector) scanForKeywords(keywords []string, extensions []string) map[string][]string {
-	results := make(map[string][]string)
+// bareCalls are keywords that also must not follow '.', so that method calls
+// such as Object.create( or foo.it( do not count.
+var bareCalls = map[string]bool{
+	"it(": true, "test(": true, "describe(": true, "expect(": true, "render(": true, "ref(": true, "watch(": true,
+	"atom(": true, "create(": true, "path(": true, "include(": true, "register(": true, "cn(": true, "cva(": true,
+}
 
+func isIdentRune(r rune) bool {
+	return r == '_' || r == '$' || unicode.IsLetter(r) || unicode.IsDigit(r)
+}
+
+// containsKeyword reports whether content holds kw where it is not the tail
+// of a longer identifier: a keyword starting with a letter, digit, '_' or '$'
+// must not follow one of those, and a bare call must not follow '.' either.
+// The end of the keyword is not checked.
+func containsKeyword(content, kw string) bool {
+	first, _ := utf8.DecodeRuneInString(kw)
+	for from := 0; ; {
+		i := strings.Index(content[from:], kw)
+		if i < 0 {
+			return false
+		}
+		i += from
+		prev, _ := utf8.DecodeLastRuneInString(content[:i])
+		if !isIdentRune(first) || !isIdentRune(prev) && (prev != '.' || !bareCalls[kw]) {
+			return true
+		}
+		from = i + 1
+	}
+}
+
+func nonTestFile(rel string) bool { return !IsTestFile(rel) }
+
+func anyFile(string) bool { return true }
+
+// eachFile calls fn with the content of every file that has one of
+// extensions and that include accepts. Test files feed only testing
+// patterns, so most scans pass nonTestFile.
+func (d *CodePatternDetector) eachFile(extensions []string, include func(rel string) bool, fn func(rel, content string)) {
 	for _, f := range d.files {
-		if f.IsDir {
+		hasExt := slices.ContainsFunc(extensions, func(ext string) bool { return strings.HasSuffix(f.Name, ext) })
+		if f.IsDir || !hasExt || !include(f.Path) {
 			continue
 		}
-
-		// Check file extension
-		hasExt := false
-		for _, ext := range extensions {
-			if strings.HasSuffix(f.Name, ext) {
-				hasExt = true
-				break
-			}
-		}
-		if !hasExt {
-			continue
-		}
-
-		// Read file content
-		fullPath := filepath.Join(d.rootPath, f.Path)
-		content, err := os.ReadFile(fullPath)
-		if err != nil {
-			continue
-		}
-
-		contentStr := string(content)
-		for _, kw := range keywords {
-			if strings.Contains(contentStr, kw) {
-				results[kw] = append(results[kw], f.Path)
-			}
+		if content, err := os.ReadFile(filepath.Join(d.rootPath, f.Path)); err == nil {
+			fn(f.Path, string(content))
 		}
 	}
+}
 
+// scanKeywords returns, per keyword, the files include accepts that contain it.
+func (d *CodePatternDetector) scanKeywords(keywords, extensions []string, include func(rel string) bool) map[string][]string {
+	results := make(map[string][]string)
+	d.eachFile(extensions, include, func(rel, content string) {
+		for _, kw := range keywords {
+			if containsKeyword(content, kw) {
+				results[kw] = append(results[kw], rel)
+			}
+		}
+	})
 	return results
 }
 
-// scanForRegex scans files for regex patterns
+// scanForKeywords scans non-test files for keywords.
+func (d *CodePatternDetector) scanForKeywords(keywords, extensions []string) map[string][]string {
+	return d.scanKeywords(keywords, extensions, nonTestFile)
+}
+
+// scanTestKeywords scans test files only.
+func (d *CodePatternDetector) scanTestKeywords(keywords, extensions []string) map[string][]string {
+	return d.scanKeywords(keywords, extensions, IsTestFile)
+}
+
+// scanForRegex returns the non-test files that match pattern.
 func (d *CodePatternDetector) scanForRegex(pattern string, extensions []string) []string {
 	var matches []string
 	re := regexp.MustCompile(pattern)
-
-	for _, f := range d.files {
-		if f.IsDir {
-			continue
+	d.eachFile(extensions, nonTestFile, func(rel, content string) {
+		if re.MatchString(content) {
+			matches = append(matches, rel)
 		}
-
-		hasExt := false
-		for _, ext := range extensions {
-			if strings.HasSuffix(f.Name, ext) {
-				hasExt = true
-				break
-			}
-		}
-		if !hasExt {
-			continue
-		}
-
-		fullPath := filepath.Join(d.rootPath, f.Path)
-		content, err := os.ReadFile(fullPath)
-		if err != nil {
-			continue
-		}
-
-		if re.Match(content) {
-			matches = append(matches, f.Path)
-		}
-	}
-
+	})
 	return matches
 }
 
@@ -141,65 +155,19 @@ type PatternWithImport struct {
 	Imports     []string // Required imports (any of these must be present)
 }
 
-// scanForKeywordsWithImports scans for keywords only in files that have required imports
-// This reduces false positives by ensuring framework-specific patterns only match
-// when the framework is actually imported
+// scanForKeywordsWithImports scans non-test files for keywords, counting a
+// file only when it also contains one of the pattern's imports, so that
+// framework-specific keywords match only where the framework is imported.
 func (d *CodePatternDetector) scanForKeywordsWithImports(patterns []PatternWithImport, extensions []string) map[string][]string {
 	results := make(map[string][]string)
-
-	for _, f := range d.files {
-		if f.IsDir {
-			continue
-		}
-
-		// Check file extension
-		hasExt := false
-		for _, ext := range extensions {
-			if strings.HasSuffix(f.Name, ext) {
-				hasExt = true
-				break
-			}
-		}
-		if !hasExt {
-			continue
-		}
-
-		// Read file content
-		fullPath := filepath.Join(d.rootPath, f.Path)
-		content, err := os.ReadFile(fullPath)
-		if err != nil {
-			continue
-		}
-
-		contentStr := string(content)
-
+	d.eachFile(extensions, nonTestFile, func(rel, content string) {
 		for _, p := range patterns {
-			// First check if the keyword exists
-			if !strings.Contains(contentStr, p.Keyword) {
-				continue
-			}
-
-			// If no imports required, add directly
-			if len(p.Imports) == 0 {
-				results[p.Keyword] = append(results[p.Keyword], f.Path)
-				continue
-			}
-
-			// Check if any required import is present
-			hasImport := false
-			for _, imp := range p.Imports {
-				if strings.Contains(contentStr, imp) {
-					hasImport = true
-					break
-				}
-			}
-
-			if hasImport {
-				results[p.Keyword] = append(results[p.Keyword], f.Path)
+			hasImport := len(p.Imports) == 0 || slices.ContainsFunc(p.Imports, func(imp string) bool { return strings.Contains(content, imp) })
+			if hasImport && containsKeyword(content, p.Keyword) {
+				results[p.Keyword] = append(results[p.Keyword], rel)
 			}
 		}
-	}
-
+	})
 	return results
 }
 
@@ -446,7 +414,7 @@ func (d *CodePatternDetector) detectRouting() []types.PatternInfo {
 		}
 	}
 
-	// Go routing - exclude test files to avoid false positives
+	// Go routing
 	goKeywords := map[string]string{
 		"gin.Context":     "Gin framework context",
 		"gin.Default":     "Gin default router",
@@ -463,34 +431,18 @@ func (d *CodePatternDetector) detectRouting() []types.PatternInfo {
 
 	goResults := d.scanForKeywords(keys(goKeywords), goExts)
 	for kw, files := range goResults {
-		// Filter out test files for routing patterns
-		nonTestFiles := filterOutTestFiles(files)
-		if len(nonTestFiles) > 0 {
+		if len(files) > 0 {
 			patterns = append(patterns, types.PatternInfo{
 				Name:        kw,
 				Category:    "routing",
 				Description: goKeywords[kw],
-				FileCount:   len(nonTestFiles),
-				Examples:    limitSlice(nonTestFiles, 3),
+				FileCount:   len(files),
+				Examples:    limitSlice(files, 3),
 			})
 		}
 	}
 
 	return patterns
-}
-
-// filterOutTestFiles removes test files from the list
-func filterOutTestFiles(files []string) []string {
-	var result []string
-	for _, f := range files {
-		if !strings.HasSuffix(f, "_test.go") &&
-			!strings.Contains(f, ".test.") &&
-			!strings.Contains(f, ".spec.") &&
-			!strings.Contains(f, "__tests__") {
-			result = append(result, f)
-		}
-	}
-	return result
 }
 
 // detectForms detects form handling patterns
@@ -533,12 +485,12 @@ func (d *CodePatternDetector) detectForms() []types.PatternInfo {
 // detectTesting detects testing patterns
 func (d *CodePatternDetector) detectTesting() []types.PatternInfo {
 	var patterns []types.PatternInfo
-	jsExts := []string{".js", ".jsx", ".ts", ".tsx", ".test.js", ".test.ts", ".spec.js", ".spec.ts"}
+	jsExts := []string{".js", ".jsx", ".ts", ".tsx"}
 	pyExts := []string{".py"}
-	goTestExts := []string{"_test.go"} // Only scan test files for Go testing patterns
+	goTestExts := []string{"_test.go"}
 	goExts := []string{".go"}
 
-	// JS testing
+	// JS testing, in test files only
 	jsKeywords := map[string]string{
 		"describe(":        "Test suite definition (Jest/Vitest/Mocha)",
 		"it(":              "Test case (Jest/Vitest/Mocha)",
@@ -555,7 +507,7 @@ func (d *CodePatternDetector) detectTesting() []types.PatternInfo {
 		"playwright":       "Playwright testing",
 	}
 
-	jsResults := d.scanForKeywords(keys(jsKeywords), jsExts)
+	jsResults := d.scanTestKeywords(keys(jsKeywords), jsExts)
 	for kw, files := range jsResults {
 		if len(files) > 0 {
 			patterns = append(patterns, types.PatternInfo{
@@ -568,7 +520,7 @@ func (d *CodePatternDetector) detectTesting() []types.PatternInfo {
 		}
 	}
 
-	// Python testing
+	// Python testing, in test files only
 	pyKeywords := map[string]string{
 		"pytest":          "Pytest framework",
 		"def test_":       "Pytest test function",
@@ -579,7 +531,7 @@ func (d *CodePatternDetector) detectTesting() []types.PatternInfo {
 		"@patch":          "unittest mock patch",
 	}
 
-	pyResults := d.scanForKeywords(keys(pyKeywords), pyExts)
+	pyResults := d.scanTestKeywords(keys(pyKeywords), pyExts)
 	for kw, files := range pyResults {
 		if len(files) > 0 {
 			patterns = append(patterns, types.PatternInfo{
@@ -594,7 +546,7 @@ func (d *CodePatternDetector) detectTesting() []types.PatternInfo {
 
 	// Go testing - scan only _test.go files, consolidate similar patterns
 	goTestKeywords := []string{"func Test", "t.Run(", "t.Error", "t.Fatal"}
-	goTestResults := d.scanForKeywords(goTestKeywords, goTestExts)
+	goTestResults := d.scanTestKeywords(goTestKeywords, goTestExts)
 
 	// Consolidate t.Error and t.Errorf, t.Fatal and t.Fatalf
 	consolidatedResults := make(map[string][]string)
@@ -655,7 +607,7 @@ func (d *CodePatternDetector) detectTesting() []types.PatternInfo {
 		"httptest.": "Go HTTP testing",
 	}
 
-	goHelperResults := d.scanForKeywords(keys(goHelperKeywords), goExts)
+	goHelperResults := d.scanKeywords(keys(goHelperKeywords), goExts, anyFile)
 	for kw, files := range goHelperResults {
 		if len(files) > 0 {
 			displayName := strings.TrimSuffix(kw, ".")
@@ -1027,19 +979,13 @@ func (d *CodePatternDetector) detectGoPatterns() []types.PatternInfo {
 
 	concurrencyResults := d.scanForKeywords(keys(concurrencyKeywords), goExts)
 	for kw, files := range concurrencyResults {
-		// Filter out test files for some patterns to reduce noise
-		filteredFiles := files
-		if strings.Contains(kw, "context.") {
-			filteredFiles = filterOutTestFiles(files)
-		}
-
-		if len(filteredFiles) > 0 {
+		if len(files) > 0 {
 			patterns = append(patterns, types.PatternInfo{
 				Name:        kw,
 				Category:    "go-concurrency",
 				Description: concurrencyKeywords[kw],
-				FileCount:   len(filteredFiles),
-				Examples:    limitSlice(filteredFiles, 3),
+				FileCount:   len(files),
+				Examples:    limitSlice(files, 3),
 			})
 		}
 	}
@@ -1285,7 +1231,7 @@ func (d *CodePatternDetector) detectRustPatterns() []types.PatternInfo {
 		}
 	}
 
-	// Testing
+	// Testing, in any file: unit tests live in #[cfg(test)] modules beside the code
 	testKeywords := map[string]string{
 		"#[test]":      "Rust unit test",
 		"#[cfg(test)]": "Test module configuration",
@@ -1297,7 +1243,7 @@ func (d *CodePatternDetector) detectRustPatterns() []types.PatternInfo {
 		"proptest::":   "Property-based testing",
 	}
 
-	testResults := d.scanForKeywords(keys(testKeywords), rsExts)
+	testResults := d.scanKeywords(keys(testKeywords), rsExts, anyFile)
 	for kw, files := range testResults {
 		if len(files) > 0 {
 			patterns = append(patterns, types.PatternInfo{

@@ -3,62 +3,118 @@ package detector
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/Priyans-hu/argus/pkg/types"
 )
 
-func TestFilterOutTestFiles(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    []string
-		expected []string
-	}{
-		{
-			name:     "filter go test files",
-			input:    []string{"main.go", "main_test.go", "handler.go", "handler_test.go"},
-			expected: []string{"main.go", "handler.go"},
-		},
-		{
-			name:     "filter js test files",
-			input:    []string{"app.js", "app.test.js", "utils.js", "utils.spec.js"},
-			expected: []string{"app.js", "utils.js"},
-		},
-		{
-			name:     "filter __tests__ directory",
-			input:    []string{"src/component.tsx", "src/__tests__/component.test.tsx"},
-			expected: []string{"src/component.tsx"},
-		},
-		{
-			name:     "no test files",
-			input:    []string{"main.go", "handler.go", "service.go"},
-			expected: []string{"main.go", "handler.go", "service.go"},
-		},
-		{
-			name:     "all test files",
-			input:    []string{"main_test.go", "handler.test.js"},
-			expected: nil,
-		},
-		{
-			name:     "empty input",
-			input:    []string{},
-			expected: nil,
-		},
-	}
+// detectPatterns writes files and runs the code pattern detector on their
+// project source, as the analyzers do.
+func detectPatterns(t *testing.T, files map[string]string) *types.CodePatterns {
+	t.Helper()
+	root, infos := writeProject(t, files)
+	return NewCodePatternDetector(root, ProjectSourceFiles(infos)).Detect()
+}
 
+// patternExamples returns the example files of the named pattern, nil when
+// it is absent.
+func patternExamples(patterns []types.PatternInfo, name string) []string {
+	for _, p := range patterns {
+		if p.Name == name {
+			return p.Examples
+		}
+	}
+	return nil
+}
+
+func TestContainsKeyword(t *testing.T) {
+	tests := []struct {
+		name, content, kw string
+		want              bool
+	}{
+		{"start of file", `it("x")`, "it(", true},
+		{"after a newline", "x;\nit(\"x\")", "it(", true},
+		{"inside init(", "init()", "it(", false},
+		{"inside submit(", "submit()", "it(", false},
+		{"bare call after .", `foo.it("x")`, "it(", false},
+		{"Object.create(", "Object.create(null)", "create(", false},
+		{"other keyword after .", "React.useState(0)", "useState", true},
+		{"after _", "my_useState(0)", "useState", false},
+		{"after $", `$it("x")`, "it(", false},
+		{"after a digit", "2it(", "it(", false},
+		{"after a non-ASCII letter", "éit(", "it(", false},
+		{"after non-ASCII punctuation", "«it(", "it(", true},
+		{"a later occurrence", `init(); it("x")`, "it(", true},
+		{"cy. inside frecency.", "frecency.value", "cy.", false},
+		{"cy. call", `cy.visit("/")`, "cy.", true},
+		{"<Link after a letter", "a<Link href", "<Link", true},
+		{"@router. after a letter", "x@router.get", "@router.", true},
+		{"end not checked", "useStateful()", "useState", true},
+		{"absent", "nothing here", "it(", false},
+	}
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := filterOutTestFiles(tt.input)
-			if len(result) != len(tt.expected) {
-				t.Errorf("filterOutTestFiles() got %d files, expected %d", len(result), len(tt.expected))
-				return
-			}
-			for i, f := range result {
-				if f != tt.expected[i] {
-					t.Errorf("filterOutTestFiles()[%d] = %s, expected %s", i, f, tt.expected[i])
-				}
-			}
-		})
+		if got := containsKeyword(tt.content, tt.kw); got != tt.want {
+			t.Errorf("%s: containsKeyword(%q, %q) = %v, want %v", tt.name, tt.content, tt.kw, got, tt.want)
+		}
+	}
+}
+
+func TestTestKeywordsCountOnlyInTestFiles(t *testing.T) {
+	got := detectPatterns(t, map[string]string{
+		"src/a.ts":        `it("x", () => {});` + "\n",
+		"src/setup.ts":    "export function setup() { init(); submit(); }\n",
+		"src/b.test.ts":   `it("y", () => {});` + "\n",
+		"src/c.test.ts":   `foo.it("z");` + "\n",
+		"src/frecency.ts": "const score = frecency.value;\n",
+		"e2e/home.cy.ts":  `cy.visit("/");` + "\n",
+		"src/store.ts":    "const s = Object.create(proto);\n",
+	})
+	if files := patternExamples(got.Testing, "it("); !reflect.DeepEqual(files, []string{filepath.FromSlash("src/b.test.ts")}) {
+		t.Errorf("it( files = %v, want src/b.test.ts", files)
+	}
+	if files := patternExamples(got.Testing, "cy."); !reflect.DeepEqual(files, []string{filepath.FromSlash("e2e/home.cy.ts")}) {
+		t.Errorf("cy. files = %v, want e2e/home.cy.ts", files)
+	}
+	if files := patternExamples(got.StateManagement, "create("); files != nil {
+		t.Errorf("Object.create( counted as create( in %v", files)
+	}
+}
+
+func TestTestFilesFeedOnlyTesting(t *testing.T) {
+	got := detectPatterns(t, map[string]string{
+		"src/a.test.ts":      "const [n] = useState(0);\naxios.get(\"/x\");\n",
+		"internal/x_test.go": "package x\n\nfunc f() {\n\tgo func() {}()\n}\n",
+		"tests/test_api.py":  "import requests\n\nrequests.get(\"x\")\n",
+		"tests/it.rs":        "fn a() { x.unwrap(); }\n",
+		"src/lib.rs":         "#[cfg(test)]\nmod t {\n    #[test]\n    fn a() {}\n}\n",
+	})
+	for name, patterns := range map[string][]types.PatternInfo{"state": got.StateManagement, "data fetching": got.DataFetching, "Go": got.GoPatterns} {
+		if len(patterns) > 0 {
+			t.Errorf("%s patterns from test files: %+v", name, patterns)
+		}
+	}
+	if files := patternExamples(got.RustPatterns, ".unwrap()"); files != nil {
+		t.Errorf(".unwrap() counted in test files %v", files)
+	}
+	for _, kw := range []string{"#[test]", "#[cfg(test)]"} {
+		if files := patternExamples(got.RustPatterns, kw); !reflect.DeepEqual(files, []string{filepath.FromSlash("src/lib.rs")}) {
+			t.Errorf("%s files = %v, want src/lib.rs", kw, files)
+		}
+	}
+}
+
+// T3-D17: gen/ is project source and no generated-file marker is read.
+func TestGeneratedLookingSourceCounts(t *testing.T) {
+	got := detectPatterns(t, map[string]string{
+		"gen/worker.go":          "package gen\n\nfunc Start() {\n\tgo func() {}()\n}\n",
+		"internal/api/api.pb.go": "// Code generated by protoc-gen-go. DO NOT EDIT.\n\npackage api\n\nvar c = make(chan int)\n",
+	})
+	if files := patternExamples(got.GoPatterns, "go func"); !reflect.DeepEqual(files, []string{filepath.FromSlash("gen/worker.go")}) {
+		t.Errorf("go func files = %v, want gen/worker.go", files)
+	}
+	if files := patternExamples(got.GoPatterns, "make(chan"); !reflect.DeepEqual(files, []string{filepath.FromSlash("internal/api/api.pb.go")}) {
+		t.Errorf("make(chan files = %v, want internal/api/api.pb.go", files)
 	}
 }
 
