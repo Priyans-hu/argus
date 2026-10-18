@@ -40,6 +40,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The Repository line no longer leaks credentials or SSH host aliases; only github.com, gitlab.com and bitbucket.org are linked, other hosts show owner/name, local remotes are omitted
 - A remote whose owner or name has characters other than letters, digits, '.', '_' and '-' is omitted from the Repository line
 
+## [0.4.0] - 2026-01-29
+
+### Added
+- `--ai` on scan and sync: optional enrichment through a local Ollama model
+- `argus insights` and `--usage` on scan and sync: hot files, pain points and cost from Claude Code session logs
+- `--monorepo`: context files per workspace plus a root overview
+- VS Code extension (`editors/vscode`) for scan, watch, init and insights
+- JavaScript/TypeScript (goja) and Python (gpython) AST pattern detection
+- Documentation site (Docusaurus)
+
 ## [0.3.0] - 2026-01-25
 
 ### Added
