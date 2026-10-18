@@ -10,14 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Agent Skill (`skills/argus/SKILL.md`), installable with `npx skills add Priyans-hu/argus`
 - Claude Code plugin marketplace manifest (`.claude-plugin/marketplace.json`)
+- `--force` on scan and sync overwrites files argus would otherwise skip
 
 ### Changed
 - Repo dev skills in `.claude/skills/` are marked `metadata.internal: true`, so the skills CLI no longer offers them
+- Existing .claude/** and .continue/config.yaml files that differ from the generated output are skipped and reported instead of overwritten
 
 ### Fixed
 - Agent Skill: first writes use `--add-custom`, so a later plain scan no longer doubles CLAUDE.md
 - Rescans are stable: argus no longer counts its own outputs (CLAUDE.md, AGENTS.md, .cursorrules, .claude/, .continue/, the Copilot file) as project files, and watch no longer re-triggers on .continue/config.yaml
 - Regeneration keeps all text outside the ARGUS:AUTO block; the block is replaced in place instead of everything but CUSTOM blocks being dropped
+- The Continue config stays valid YAML on repeated runs; claude_code settings in the root .argus.yaml apply to monorepo workspaces; Claude Code config write errors are reported
 
 ## [0.3.0] - 2026-01-25
 

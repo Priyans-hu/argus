@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -161,6 +162,7 @@ func init() {
 	scanCmd.Flags().BoolVar(&usageMode, "usage", false, "Include AI usage insights from Claude Code session logs")
 	scanCmd.Flags().BoolVar(&aiMode, "ai", false, "Enrich output with AI-generated insights via local Ollama")
 	scanCmd.Flags().BoolVar(&monorepoMode, "monorepo", false, "Generate output per workspace in monorepo projects")
+	scanCmd.Flags().BoolVar(&force, "force", false, "Overwrite files argus would otherwise skip")
 
 	// Sync command flags
 	syncCmd.Flags().BoolVarP(&dryRun, "dry-run", "n", false, "Show what would be generated without writing files")
@@ -171,6 +173,7 @@ func init() {
 	syncCmd.Flags().BoolVarP(&parallel, "parallel", "p", true, "Run detectors in parallel for faster analysis (default: true)")
 	syncCmd.Flags().BoolVar(&usageMode, "usage", false, "Include AI usage insights from Claude Code session logs")
 	syncCmd.Flags().BoolVar(&aiMode, "ai", false, "Enrich output with AI-generated insights via local Ollama")
+	syncCmd.Flags().BoolVar(&force, "force", false, "Overwrite files argus would otherwise skip")
 
 	// Insights command flags
 	insightsCmd.Flags().StringVarP(&insightsSince, "since", "s", "", "Date filter (e.g., 7d, 30d, 2025-01-01)")
@@ -234,6 +237,8 @@ func runInit(cmd *cobra.Command, args []string) error {
 }
 
 func runScan(cmd *cobra.Command, args []string) error {
+	defer reportSkipped()
+
 	// Determine target path
 	targetPath := "."
 	if len(args) > 0 {
@@ -346,7 +351,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 	// Generate output for each format
 	for _, format := range formats {
-		if err := generateOutput(absPath, format, analysis, dryRun, compactMode); err != nil {
+		if err := generateOutput(absPath, "", format, analysis, cfg, dryRun, compactMode); err != nil {
 			return err
 		}
 	}
@@ -366,7 +371,7 @@ func runMonorepoScan(ctx context.Context, absPath string, cfg *config.Config, fo
 	if len(wsResults) == 0 {
 		fmt.Println("No workspaces found to analyze, falling back to single-project mode")
 		for _, format := range formats {
-			if err := generateOutput(absPath, format, rootAnalysis, dryRun, compactMode); err != nil {
+			if err := generateOutput(absPath, "", format, rootAnalysis, cfg, dryRun, compactMode); err != nil {
 				return err
 			}
 		}
@@ -400,12 +405,16 @@ func runMonorepoScan(ctx context.Context, absPath string, cfg *config.Config, fo
 		}
 
 		wsAbsPath := filepath.Join(absPath, ws.Path)
+		ok := true
 		for _, format := range wsFormats {
-			if err := generateOutput(wsAbsPath, format, ws.Analysis, dryRun, compactMode); err != nil {
-				fmt.Printf("   [warn] %s (%s): %v\n", ws.Path, format, err)
+			if err := generateOutput(wsAbsPath, ws.Path, format, ws.Analysis, cfg, dryRun, compactMode); err != nil {
+				outf("   [warn] %s (%s): %v\n", ws.Path, format, err)
+				ok = false
 			}
 		}
-		successCount++
+		if ok {
+			successCount++
+		}
 	}
 
 	// Generate root overview
@@ -451,13 +460,15 @@ func runMonorepoScan(ctx context.Context, absPath string, cfg *config.Config, fo
 	}
 
 	if !dryRun {
-		fmt.Printf("✅ Generated context files for %d/%d workspaces\n", successCount, len(wsResults))
+		outf("✅ Generated context files for %d/%d workspaces\n", successCount, len(wsResults))
 	}
 
 	return nil
 }
 
 func runSync(cmd *cobra.Command, args []string) error {
+	defer reportSkipped()
+
 	// Determine target path
 	targetPath := "."
 	if len(args) > 0 {
@@ -543,7 +554,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 
 	// Generate output for each format in config
 	for _, format := range cfg.Output {
-		if err := generateOutput(absPath, format, analysis, dryRun, compactMode); err != nil {
+		if err := generateOutput(absPath, "", format, analysis, cfg, dryRun, compactMode); err != nil {
 			return err
 		}
 	}
@@ -557,10 +568,12 @@ type contextGenerator interface {
 	OutputFile() string
 }
 
-func generateOutput(absPath, format string, analysis *types.Analysis, dryRun, compact bool) error {
+// generateOutput renders one format into absPath. label is the workspace
+// path shown in messages ("" for the scanned directory itself).
+func generateOutput(absPath, label, format string, analysis *types.Analysis, cfg *config.Config, dryRun, compact bool) error {
 	// Handle claude-code format separately (multi-file generator)
 	if format == "claude-code" {
-		return generateClaudeCodeOutput(absPath, analysis, dryRun)
+		return generateClaudeCodeOutput(absPath, label, analysis, cfg.ClaudeCode, dryRun)
 	}
 
 	var gen contextGenerator
@@ -591,6 +604,15 @@ func generateOutput(absPath, format string, analysis *types.Analysis, dryRun, co
 	content, err := gen.Generate(analysis)
 	if err != nil {
 		return fmt.Errorf("generation failed: %w", err)
+	}
+
+	if format == "continue" {
+		status, err := writeCreateOnly(absPath, label, outputFile, content, dryRun)
+		if err != nil {
+			return err
+		}
+		reportFile(displayPath(label, outputFile), status, dryRun)
+		return nil
 	}
 
 	outPath := filepath.Join(absPath, outputFile)
@@ -638,52 +660,41 @@ func generateOutput(absPath, format string, analysis *types.Analysis, dryRun, co
 	return nil
 }
 
-// generateClaudeCodeOutput handles the multi-file claude-code format
-func generateClaudeCodeOutput(absPath string, analysis *types.Analysis, dryRun bool) error {
-	// Load config to get ClaudeCode settings
-	cfg, err := config.Load(absPath)
-	if err != nil {
-		cfg = config.DefaultConfig()
-	}
-
-	g := generator.NewClaudeCodeGenerator(cfg.ClaudeCode)
-	files, err := g.Generate(analysis)
+// generateClaudeCodeOutput writes the multi-file claude-code format. Every
+// file is create-only, so hand-edited configs are skipped and reported.
+func generateClaudeCodeOutput(absPath, label string, analysis *types.Analysis, cfg *config.ClaudeCodeConfig, dryRun bool) error {
+	files, err := generator.NewClaudeCodeGenerator(cfg).Generate(analysis)
 	if err != nil {
 		return fmt.Errorf("claude-code generation failed: %w", err)
 	}
 
 	if len(files) == 0 {
-		fmt.Println("ℹ️  No Claude Code configs generated (check claude_code settings)")
+		outf("ℹ️  No Claude Code configs generated (check claude_code settings)\n")
 		return nil
 	}
 
+	written, skippedFiles := 0, 0
 	for _, file := range files {
-		outPath := filepath.Join(absPath, file.Path)
-
-		if dryRun {
-			fmt.Printf("\n📄 Would write to %s:\n", outPath)
-			fmt.Println("---")
-			fmt.Println(string(file.Content))
-			fmt.Println("---")
-			continue
+		status, err := writeCreateOnly(absPath, label, file.Path, file.Content, dryRun)
+		if err != nil {
+			return err
 		}
-
-		// Create parent directories
-		if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
-			return fmt.Errorf("failed to create directory for %s: %w", file.Path, err)
+		switch status {
+		case fileWritten:
+			written++
+		case fileSkipped:
+			skippedFiles++
 		}
-
-		if err := os.WriteFile(outPath, file.Content, 0644); err != nil {
-			return fmt.Errorf("failed to write %s: %w", file.Path, err)
-		}
-
 		if verbose {
-			fmt.Printf("✅ Generated %s\n", outPath)
+			reportFile(displayPath(label, file.Path), status, dryRun)
 		}
 	}
 
-	if !dryRun {
-		fmt.Printf("✅ Generated %d Claude Code configs in .claude/\n", len(files))
+	switch {
+	case written > 0 && !dryRun:
+		outf("✅ Generated %d Claude Code configs in .claude/\n", written)
+	case written == 0 && skippedFiles == 0:
+		outf("✅ Claude Code configs are up to date\n")
 	}
 
 	return nil
@@ -756,11 +767,15 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	// Create incremental analyzer
 	incAnalyzer := analyzer.NewIncrementalAnalyzer(absPath)
 
+	// Skip notices print once per path for the whole session
+	watchNotified = map[string]bool{}
+
 	// Do initial full generation
 	fmt.Println("🔍 Running initial full analysis...")
 	if err := regenerateWithAnalyzer(ctx, absPath, cfg, incAnalyzer, "", true); err != nil {
 		fmt.Printf("⚠️  Initial generation failed: %v\n", err)
 	}
+	reportSkipped()
 
 	// Setup signal handling for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
@@ -770,6 +785,9 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	var debounceTimer *time.Timer
 	var lastChangedFile string
 	debounceDelay := 500 * time.Millisecond
+
+	// Timer callbacks run on their own goroutines; one regeneration at a time
+	var regenMu sync.Mutex
 
 	for {
 		select {
@@ -798,9 +816,12 @@ func runWatch(cmd *cobra.Command, args []string) error {
 
 			changedFile := lastChangedFile // Capture for closure
 			debounceTimer = time.AfterFunc(debounceDelay, func() {
+				regenMu.Lock()
+				defer regenMu.Unlock()
 				if err := regenerateWithAnalyzer(ctx, absPath, cfg, incAnalyzer, changedFile, false); err != nil {
 					fmt.Printf("⚠️  Regeneration failed: %v\n", err)
 				}
+				reportSkipped()
 			})
 
 		case err, ok := <-watcher.Errors:
@@ -846,7 +867,7 @@ func regenerateWithAnalyzer(ctx context.Context, absPath string, cfg *config.Con
 
 	// Generate output for each format
 	for _, format := range cfg.Output {
-		if err := generateOutput(absPath, format, analysis, false, compactMode); err != nil {
+		if err := generateOutput(absPath, "", format, analysis, cfg, false, compactMode); err != nil {
 			return err
 		}
 	}
