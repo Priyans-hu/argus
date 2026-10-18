@@ -48,6 +48,17 @@ var (
 	watchNotified map[string]bool
 )
 
+// checked is set only by check: it maps each output's display path to its
+// state, and writeOutput records instead of writing.
+var checked map[string]string
+
+// record notes an output's state for check.
+func record(shown, state string) {
+	if checked != nil {
+		checked[shown] = state
+	}
+}
+
 // fileStatus is what a write helper did with one output file.
 type fileStatus int
 
@@ -75,6 +86,7 @@ func writeMerged(root, label, rel string, generated []byte, dryRun bool) error {
 		!bytes.Contains(existing, []byte(merger.AutoEndMarker))
 	switch {
 	case rel == agentsFile && unmarked && !force:
+		record(shown, "skipped")
 		if notifyOnce(shown) {
 			errf("⚠️  %s exists without argus markers, left unchanged (add an empty ARGUS:AUTO pair where the generated block should go, or use --force to overwrite)\n", shown)
 		}
@@ -91,6 +103,7 @@ func writeMerged(root, label, rel string, generated []byte, dryRun bool) error {
 	}
 	if outcome == merger.Malformed {
 		if !force {
+			record(shown, "skipped")
 			if notifyOnce(shown) {
 				errf("⚠️  %s: unbalanced or repeated ARGUS:AUTO markers, left unchanged (fix them or use --force to overwrite)\n", shown)
 			}
@@ -163,12 +176,14 @@ func skipLinked(root, shown, rel string, dryRun bool) bool {
 	agents, claude := filepath.Join(root, agentsFile), filepath.Join(root, claudeFile)
 	switch {
 	case isSymlink(agents) && linksTo(agents, claude):
+		record(shown, "skipped")
 		if rel == agentsFile && notifyOnce(shown) {
 			errf("⚠️  %s is a symlink to CLAUDE.md, both left unchanged (remove the symlink: argus then writes AGENTS.md and makes CLAUDE.md import it)\n", shown)
 		}
 	case rel == claudeFile && isSymlink(claude) && linksTo(claude, agents):
 		reportFile(shown, fileUnchanged, dryRun)
 	case isSymlink(filepath.Join(root, rel)):
+		record(shown, "skipped")
 		if notifyOnce(shown) {
 			errf("⚠️  %s is a symlink, left unchanged (replace it with a regular file to let argus write it)\n", shown)
 		}
@@ -224,8 +239,10 @@ func writeCreateOnly(root, label, rel string, content []byte, dryRun bool) (file
 	case err != nil:
 		return 0, fmt.Errorf("failed to read %s: %w", shown, err)
 	case sameText(existing, content):
+		record(shown, "up to date")
 		return fileUnchanged, nil
 	case !force:
+		record(shown, "skipped")
 		skipped = append(skipped, shown)
 		return fileSkipped, nil
 	}
@@ -235,6 +252,14 @@ func writeCreateOnly(root, label, rel string, content []byte, dryRun bool) (file
 // writeOutput previews content in dry-run mode and otherwise writes it with
 // writeFile.
 func writeOutput(target, shown string, content []byte, dryRun bool) error {
+	if checked != nil {
+		state := "out of date"
+		if _, err := os.Lstat(target); err != nil {
+			state = "missing"
+		}
+		record(shown, state)
+		return nil
+	}
 	if dryRun {
 		outf("\n📄 Would write to %s:\n---\n%s\n---\n", target, content)
 		return nil
@@ -279,6 +304,7 @@ func writeFile(target string, content []byte) error {
 func reportFile(shown string, status fileStatus, dryRun bool) {
 	switch {
 	case status == fileUnchanged:
+		record(shown, "up to date")
 		outf("✅ %s is up to date\n", shown)
 	case status == fileWritten && !dryRun:
 		outf("✅ Generated %s\n", shown)

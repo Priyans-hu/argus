@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -213,6 +214,10 @@ func init() {
 	insightsCmd.Flags().StringVarP(&insightsFormat, "format", "f", "text", "Output format: text, json")
 	insightsCmd.Flags().BoolVar(&insightsSubagents, "subagents", true, "Include subagent data")
 
+	// Check command flags
+	checkCmd.Flags().StringVarP(&outputFormat, "format", "f", "", "Output format to check, as for scan (default: output in .argus.yaml)")
+	checkCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed output")
+
 	// Watch command flags
 	watchCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed output")
 	watchCmd.Flags().BoolVarP(&mergeMode, "merge", "m", true, "Preserve custom sections when regenerating (default: true)")
@@ -226,6 +231,7 @@ func init() {
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(scanCmd)
 	rootCmd.AddCommand(syncCmd)
+	rootCmd.AddCommand(checkCmd)
 	rootCmd.AddCommand(watchCmd)
 	rootCmd.AddCommand(insightsCmd)
 	rootCmd.AddCommand(versionCmd)
@@ -376,23 +382,21 @@ func runScan(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Check for monorepo mode
-	isMonorepo := monorepoMode
-	if !isMonorepo && cfg.Monorepo != nil && cfg.Monorepo.PerWorkspace {
-		isMonorepo = true
-	}
+	return writeOutputs(ctx, absPath, cfg, formats, analysis)
+}
 
+// writeOutputs renders formats into absPath as scan does: per workspace in
+// monorepo mode, else once for the whole directory.
+func writeOutputs(ctx context.Context, absPath string, cfg *config.Config, formats []string, analysis *types.Analysis) error {
+	isMonorepo := monorepoMode || (cfg.Monorepo != nil && cfg.Monorepo.PerWorkspace)
 	if isMonorepo && analysis.MonorepoInfo != nil && analysis.MonorepoInfo.IsMonorepo {
 		return runMonorepoScan(ctx, absPath, cfg, formats, analysis)
 	}
-
-	// Generate output for each format
 	for _, format := range formats {
 		if err := generateOutput(absPath, "", format, analysis, cfg, dryRun, fullMode); err != nil {
 			return err
 		}
 	}
-
 	return nil
 }
 
@@ -406,7 +410,7 @@ func runMonorepoScan(ctx context.Context, absPath string, cfg *config.Config, fo
 	wsResults := ma.AnalyzeWorkspaces(ctx, rootAnalysis.MonorepoInfo)
 
 	if len(wsResults) == 0 {
-		fmt.Println("No workspaces found to analyze, falling back to single-project mode")
+		outf("No workspaces found to analyze, falling back to single-project mode\n")
 		for _, format := range formats {
 			if err := generateOutput(absPath, "", format, rootAnalysis, cfg, dryRun, fullMode); err != nil {
 				return err
@@ -415,13 +419,13 @@ func runMonorepoScan(ctx context.Context, absPath string, cfg *config.Config, fo
 		return nil
 	}
 
-	fmt.Printf("   Found %d workspaces\n", len(wsResults))
+	outf("   Found %d workspaces\n", len(wsResults))
 
 	// Generate per-workspace output
 	successCount := 0
 	for _, ws := range wsResults {
 		if ws.Error != nil {
-			fmt.Printf("   [skip] %s: %v\n", ws.Path, ws.Error)
+			outf("   [skip] %s: %v\n", ws.Path, ws.Error)
 			continue
 		}
 
@@ -1247,11 +1251,18 @@ func main() {
 // execute runs the command line, reports a failure once on w and returns the
 // exit code.
 func execute(w io.Writer) int {
-	if err := rootCmd.Execute(); err != nil {
-		_, _ = fmt.Fprintf(w, "Error: %v\n", err)
+	cmd, err := rootCmd.ExecuteC()
+	switch {
+	case err == nil:
+		return 0
+	case errors.Is(err, errDrift):
 		return 1
 	}
-	return 0
+	_, _ = fmt.Fprintf(w, "Error: %v\n", err)
+	if cmd == checkCmd {
+		return 2
+	}
+	return 1
 }
 
 // releaseURL is the GitHub API endpoint for the latest release.
