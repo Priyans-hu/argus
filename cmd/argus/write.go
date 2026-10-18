@@ -90,8 +90,11 @@ func writeMerged(root, label, rel string, generated []byte, dryRun bool) error {
 		return err
 	}
 	reportFile(shown, fileWritten, dryRun)
-	if outcome == merger.Adopted {
+	switch outcome {
+	case merger.Adopted:
 		errf("ℹ️  %s had no argus markers: generated block added on top, your text kept below it (remove any part an older argus run wrote)\n", shown)
+	case merger.Malformed:
+		errf("⚠️  %s: unbalanced or repeated ARGUS:AUTO markers, replaced with a fresh generated file (--force); the old text was not kept\n", shown)
 	}
 	return nil
 }

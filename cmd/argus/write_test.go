@@ -525,13 +525,28 @@ func TestMergeLeavesMalformedMarkersAlone(t *testing.T) {
 		t.Errorf("printed %q / %q, want only the warning", out, errOut)
 	}
 
-	force = true
+	const replaced = "⚠️  CLAUDE.md: unbalanced or repeated ARGUS:AUTO markers, replaced with a fresh generated file (--force); the old text was not kept\n"
+	force, dryRun = true, true
+	errOut.Reset()
+	generate(t, root, "claude")
+	if got := readFile(t, root, "CLAUDE.md"); got != malformed || errOut.String() != replaced || !strings.Contains(out.String(), "Would write to") {
+		t.Errorf("dry-run --force: file %q, printed %q / %q", got, out, errOut)
+	}
+
+	dryRun = false
 	errOut.Reset()
 	generate(t, root, "claude")
 	got := readFile(t, root, "CLAUDE.md")
 	checkMarked(t, got)
-	if strings.Contains(got, "only a start") || errOut.Len() != 0 {
+	if strings.Contains(got, "only a start") || errOut.String() != replaced {
 		t.Errorf("--force did not write a clean file:\n%s\nstderr %q", got, errOut)
+	}
+
+	writeFiles(t, root, map[string]string{"CLAUDE.md": merger.AutoStartMarker + "\nstale\n" + merger.AutoEndMarker + "\n"})
+	errOut.Reset()
+	generate(t, root, "claude")
+	if got := readFile(t, root, "CLAUDE.md"); strings.Contains(got, "stale") || errOut.Len() != 0 {
+		t.Errorf("--force on a healthy file: file %q, stderr %q", got, errOut)
 	}
 }
 
