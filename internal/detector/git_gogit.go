@@ -53,83 +53,35 @@ func (d *GitDetectorGoGit) Detect() *types.GitConventions {
 	return conventions
 }
 
-// detectRepository extracts git repository information
+// detectRepository extracts git repository information from the origin
+// remote, or the first remote by name when there is no origin
 func (d *GitDetectorGoGit) detectRepository() *types.GitRepository {
 	if d.repo == nil {
 		return nil
 	}
 
-	// Get remote URL
 	remotes, err := d.repo.Remotes()
 	if err != nil || len(remotes) == 0 {
 		return nil
 	}
 
-	// Use origin remote, or first available
-	var remoteURL string
-	for _, remote := range remotes {
-		if remote.Config().Name == "origin" {
-			if len(remote.Config().URLs) > 0 {
-				remoteURL = remote.Config().URLs[0]
-			}
+	// Remotes come from a map, so pick by name rather than position
+	slices.SortFunc(remotes, func(a, b *git.Remote) int {
+		return cmp.Compare(a.Config().Name, b.Config().Name)
+	})
+	remote := remotes[0]
+	for _, r := range remotes {
+		if r.Config().Name == "origin" {
+			remote = r
 			break
 		}
 	}
 
-	// Fallback to first remote if origin not found
-	if remoteURL == "" && len(remotes) > 0 {
-		if len(remotes[0].Config().URLs) > 0 {
-			remoteURL = remotes[0].Config().URLs[0]
-		}
-	}
-
-	if remoteURL == "" {
+	urls := remote.Config().URLs
+	if len(urls) == 0 {
 		return nil
 	}
-
-	repo := &types.GitRepository{
-		RemoteURL: remoteURL,
-	}
-
-	// Parse URL to extract owner, name, and platform
-	var owner, name, platform string
-
-	// Remove .git suffix
-	remoteURL = strings.TrimSuffix(remoteURL, ".git")
-
-	// Detect platform
-	if strings.Contains(remoteURL, "github") {
-		platform = "github"
-	} else if strings.Contains(remoteURL, "gitlab") {
-		platform = "gitlab"
-	} else if strings.Contains(remoteURL, "bitbucket") {
-		platform = "bitbucket"
-	}
-
-	// Parse HTTPS URL
-	if strings.HasPrefix(remoteURL, "http") {
-		parts := strings.Split(remoteURL, "/")
-		if len(parts) >= 2 {
-			name = parts[len(parts)-1]
-			owner = parts[len(parts)-2]
-		}
-	} else if strings.Contains(remoteURL, "@") {
-		// Parse SSH URL (git@host:owner/repo)
-		parts := strings.Split(remoteURL, ":")
-		if len(parts) >= 2 {
-			pathParts := strings.Split(parts[1], "/")
-			if len(pathParts) >= 2 {
-				owner = pathParts[0]
-				name = pathParts[1]
-			}
-		}
-	}
-
-	repo.Owner = owner
-	repo.Name = name
-	repo.Platform = platform
-
-	return repo
+	return repositoryFromRemote(urls[0])
 }
 
 // getRecentCommits retrieves recent commit history

@@ -2,10 +2,14 @@ package generator
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 
+	"github.com/Priyans-hu/argus/internal/detector"
 	"github.com/Priyans-hu/argus/pkg/types"
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
 )
 
 func TestClaudeGenerator_Name(t *testing.T) {
@@ -602,4 +606,96 @@ func TestCursorPrimaryLanguageTieGoesToName(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertInOrder(t, string(content), "- Primary Language: Go 1.22\n", "- Other Languages: TypeScript, Python\n")
+}
+
+func TestClaudeRepositoryLine(t *testing.T) {
+	commit := &types.CommitConvention{Style: "conventional", Format: "<type>(<scope>): <description>"}
+	tests := []struct {
+		name   string
+		git    *types.GitConventions
+		want   string // the Repository line, "" for none
+		header bool   // whether a Git heading is written
+	}{
+		{
+			name: "known host is linked",
+			git: &types.GitConventions{Repository: &types.GitRepository{
+				RemoteURL: "https://gitlab.com/g/sub/n", Owner: "g/sub", Name: "n", Platform: "gitlab"}},
+			want:   "- Repository: [g/sub/n](https://gitlab.com/g/sub/n)\n",
+			header: true,
+		},
+		{
+			name:   "other host is plain",
+			git:    &types.GitConventions{Repository: &types.GitRepository{Owner: "o", Name: "n"}},
+			want:   "- Repository: o/n\n",
+			header: true,
+		},
+		{
+			name: "no owner and name, no line and no heading",
+			git:  &types.GitConventions{Repository: &types.GitRepository{}},
+		},
+		{
+			name:   "commit conventions without a repository",
+			git:    &types.GitConventions{CommitConvention: commit},
+			header: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			content, err := NewClaudeGenerator().Generate(&types.Analysis{ProjectName: "n", GitConventions: tt.git})
+			if err != nil {
+				t.Fatal(err)
+			}
+			out := string(content)
+			if tt.want != "" && !strings.Contains(out, "### Git\n\n"+tt.want) {
+				t.Errorf("missing %q under the Git heading in:\n%s", tt.want, out)
+			}
+			if tt.want == "" && strings.Contains(out, "Repository:") {
+				t.Errorf("unexpected Repository line in:\n%s", out)
+			}
+			if got := strings.Contains(out, "### Git\n"); got != tt.header {
+				t.Errorf("Git heading written = %v, want %v:\n%s", got, tt.header, out)
+			}
+		})
+	}
+}
+
+func TestClaudeRemoteCredentialsNeverReachOutput(t *testing.T) {
+	secret := strings.Repeat("k4", 4)
+	remotes := []struct {
+		url, want string
+	}{
+		{"https://" + "deploy:" + secret + "@" + "github.com/o/n.git", "- Repository: [o/n](https://github.com/o/n)\n"},
+		{"git@github-personal:o/n.git", "- Repository: o/n\n"},
+	}
+	for _, remote := range remotes {
+		dir := t.TempDir()
+		repo, err := git.PlainInit(dir, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := repo.CreateRemote(&config.RemoteConfig{Name: "origin", URLs: []string{remote.url}}); err != nil {
+			t.Fatal(err)
+		}
+
+		analysis := &types.Analysis{ProjectName: "n", GitConventions: detector.NewGitDetectorGoGit(dir).Detect()}
+		data, err := json.Marshal(analysis.GitConventions)
+		if err != nil {
+			t.Fatal(err)
+		}
+		content, err := NewClaudeGenerator().Generate(analysis)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if !strings.Contains(string(content), remote.want) {
+			t.Errorf("CLAUDE.md lacks %q:\n%s", remote.want, content)
+		}
+		for name, text := range map[string]string{"JSON": string(data), "CLAUDE.md": string(content)} {
+			for _, leak := range []string{secret, "deploy:", "git@", "github-personal"} {
+				if strings.Contains(text, leak) {
+					t.Errorf("%s contains %q from the remote:\n%s", name, leak, text)
+				}
+			}
+		}
+	}
 }

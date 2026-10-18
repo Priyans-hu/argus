@@ -702,7 +702,8 @@ var conventionCategoryOrder = []string{
 // writeConventions writes the conventions section
 func (g *ClaudeGenerator) writeConventions(buf *bytes.Buffer, conventions []types.Convention, gitConventions *types.GitConventions) {
 	hasConventions := len(conventions) > 0
-	hasGitConventions := gitConventions != nil && (gitConventions.CommitConvention != nil || gitConventions.BranchConvention != nil)
+	hasGitConventions := gitConventions != nil && (gitConventions.CommitConvention != nil ||
+		gitConventions.BranchConvention != nil || repositoryLine(gitConventions.Repository) != "")
 
 	if !hasConventions && !hasGitConventions {
 		return
@@ -736,35 +737,38 @@ func (g *ClaudeGenerator) writeConventions(buf *bytes.Buffer, conventions []type
 	g.writeGitConventions(buf, gitConventions)
 }
 
-// writeGitConventions writes git commit and branch conventions
+// repositoryLine renders the Repository bullet: a link for the hosts the
+// detector links (RemoteURL set), plain owner/name for any other host, and
+// nothing when the owner or name is unknown.
+func repositoryLine(repo *types.GitRepository) string {
+	switch {
+	case repo == nil || repo.Owner == "" || repo.Name == "":
+		return ""
+	case repo.RemoteURL != "":
+		return fmt.Sprintf("- Repository: [%s/%s](%s)\n", repo.Owner, repo.Name, repo.RemoteURL)
+	default:
+		return fmt.Sprintf("- Repository: %s/%s\n", repo.Owner, repo.Name)
+	}
+}
+
+// writeGitConventions writes the repository and the commit and branch
+// conventions, under a Git heading only when there is something to show
 func (g *ClaudeGenerator) writeGitConventions(buf *bytes.Buffer, git *types.GitConventions) {
 	if git == nil {
 		return
 	}
 
-	hasContent := false
-
-	// Repository information
-	if git.Repository != nil && git.Repository.RemoteURL != "" {
-		buf.WriteString("### Git\n\n")
-		hasContent = true
-
-		repo := git.Repository
-		if repo.Platform != "" && repo.Owner != "" && repo.Name != "" {
-			fmt.Fprintf(buf, "- Repository: [%s/%s](%s)\n", repo.Owner, repo.Name, repo.RemoteURL)
-		} else {
-			fmt.Fprintf(buf, "- Repository: %s\n", repo.RemoteURL)
-		}
+	repoLine := repositoryLine(git.Repository)
+	if repoLine == "" && git.CommitConvention == nil && git.BranchConvention == nil {
+		return
 	}
+
+	buf.WriteString("### Git\n\n")
+	buf.WriteString(repoLine)
 
 	// Commit conventions
 	if git.CommitConvention != nil {
 		cc := git.CommitConvention
-
-		if !hasContent {
-			buf.WriteString("### Git\n\n")
-			hasContent = true
-		}
 
 		// Commit message format
 		if cc.Style != "" {
@@ -803,11 +807,6 @@ func (g *ClaudeGenerator) writeGitConventions(buf *bytes.Buffer, git *types.GitC
 	if git.BranchConvention != nil {
 		bc := git.BranchConvention
 
-		// If no content was written yet, add Git header
-		if !hasContent {
-			buf.WriteString("### Git\n\n")
-		}
-
 		if len(bc.Prefixes) > 0 {
 			fmt.Fprintf(buf, "- Branch naming uses prefixes: %s\n", strings.Join(bc.Prefixes, ", "))
 			if len(bc.Examples) > 0 {
@@ -816,9 +815,7 @@ func (g *ClaudeGenerator) writeGitConventions(buf *bytes.Buffer, git *types.GitC
 		}
 	}
 
-	if hasContent {
-		buf.WriteString("\n")
-	}
+	buf.WriteString("\n")
 }
 
 // writeGuidelines writes actionable coding guidelines based on tech stack

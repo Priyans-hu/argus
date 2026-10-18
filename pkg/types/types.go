@@ -207,12 +207,13 @@ type FileInfo struct {
 	IsDir     bool
 }
 
-// GitRepository represents git repository information
+// GitRepository represents git repository information. It never holds the
+// raw remote URL, which can carry credentials or SSH host aliases.
 type GitRepository struct {
-	RemoteURL string `json:"remote_url,omitempty"` // e.g., https://github.com/user/repo.git
-	Owner     string `json:"owner,omitempty"`      // e.g., user or organization
+	RemoteURL string `json:"remote_url,omitempty"` // https://host/owner/name, only for github.com, gitlab.com and bitbucket.org
+	Owner     string `json:"owner,omitempty"`      // e.g., user, organization or GitLab group/subgroup
 	Name      string `json:"name,omitempty"`       // e.g., repo name
-	Platform  string `json:"platform,omitempty"`   // e.g., github, gitlab, bitbucket
+	Platform  string `json:"platform,omitempty"`   // github, gitlab or bitbucket; empty for other hosts
 }
 
 // GitCommit represents a git commit

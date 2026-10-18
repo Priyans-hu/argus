@@ -1,13 +1,17 @@
 package detector
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/Priyans-hu/argus/pkg/types"
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
 )
 
 func TestGitDetector_DetectCommitConvention(t *testing.T) {
@@ -350,6 +354,61 @@ func TestAnalyzeBranchPatterns(t *testing.T) {
 		if got := analyzeBranchPatterns(branches); !reflect.DeepEqual(got, want) {
 			t.Fatalf("analyzeBranchPatterns() = %+v, want %+v", got, want)
 		}
+	}
+}
+
+func TestDetectRepositoryPicksOriginThenFirstByName(t *testing.T) {
+	tests := []struct {
+		name    string
+		remotes map[string]string
+		want    string
+	}{
+		{"origin wins", map[string]string{"upstream": "https://github.com/up/stream", "origin": "https://github.com/or/igin"}, "or/igin"},
+		{"first by name", map[string]string{"zeta": "https://github.com/z/z", "alpha": "https://github.com/a/a"}, "a/a"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			repo, err := git.PlainInit(dir, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for name, url := range tt.remotes {
+				if _, err := repo.CreateRemote(&config.RemoteConfig{Name: name, URLs: []string{url}}); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			for range 20 {
+				got := NewGitDetectorGoGit(dir).Detect().Repository
+				if got == nil || got.Owner+"/"+got.Name != tt.want {
+					t.Fatalf("Repository = %+v, want %s", got, tt.want)
+				}
+			}
+		})
+	}
+}
+
+func TestDetectRepositoryDropsCredentials(t *testing.T) {
+	secret := strings.Repeat("x9", 4)
+	dir := t.TempDir()
+	repo, err := git.PlainInit(dir, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.CreateRemote(&config.RemoteConfig{Name: "origin", URLs: []string{credentialedRemote(secret)}}); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := json.Marshal(NewGitDetectorGoGit(dir).Detect())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), secret) || strings.Contains(string(data), "deploy") {
+		t.Errorf("git conventions keep the remote's userinfo: %s", data)
+	}
+	if !strings.Contains(string(data), `"remote_url":"https://github.com/o/n"`) {
+		t.Errorf("git conventions lack the sanitized remote: %s", data)
 	}
 }
 
