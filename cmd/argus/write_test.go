@@ -277,7 +277,7 @@ func TestMonorepoAppliesRootClaudeCodeConfig(t *testing.T) {
 
 func TestMonorepoDoesNotCountFailedWorkspaces(t *testing.T) {
 	resetFlags(t)
-	out, _ := captureOutput(t)
+	out, errOut := captureOutput(t)
 	root := monorepoFixture(t)
 	writeFiles(t, root, map[string]string{"packages/api/.claude": "a file, not a directory\n"})
 
@@ -285,6 +285,10 @@ func TestMonorepoDoesNotCountFailedWorkspaces(t *testing.T) {
 
 	if !strings.Contains(out.String(), "Generated context files for 1/2 workspaces") {
 		t.Errorf("unexpected output:\n%s", out)
+	}
+	const warn = "[warn] packages/api (claude-code)"
+	if !strings.Contains(errOut.String(), warn) || strings.Contains(out.String(), warn) {
+		t.Errorf("want the warning on stderr only, got stdout:\n%s\nstderr:\n%s", out, errOut)
 	}
 }
 

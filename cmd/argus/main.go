@@ -436,7 +436,7 @@ func runMonorepoScan(ctx context.Context, absPath string, cfg *config.Config, fo
 		ok := true
 		for _, format := range wsFormats {
 			if err := generateOutput(wsAbsPath, ws.Path, format, ws.Analysis, cfg, dryRun, compactMode); err != nil {
-				outf("   [warn] %s (%s): %v\n", ws.Path, format, err)
+				errf("   [warn] %s (%s): %v\n", ws.Path, format, err)
 				ok = false
 			}
 		}
