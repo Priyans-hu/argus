@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Repo dev skills in `.claude/skills/` are marked `metadata.internal: true`, so the skills CLI no longer offers them
 
+### Fixed
+- Agent Skill: first writes use `--add-custom`, so a later plain scan no longer doubles CLAUDE.md
+
 ## [0.3.0] - 2026-01-25
 
 ### Added
