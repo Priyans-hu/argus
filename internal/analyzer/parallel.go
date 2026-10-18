@@ -74,6 +74,7 @@ func (pa *ParallelAnalyzer) Analyze(ctx context.Context) (*types.Analysis, error
 	}
 	slog.Debug("phase2 complete", "duration", time.Since(phase2Start))
 
+	normalize(analysis)
 	slog.Debug("parallel analysis complete", "totalDuration", time.Since(startTime))
 	return analysis, nil
 }

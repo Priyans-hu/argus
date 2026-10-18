@@ -184,6 +184,7 @@ func (a *Analyzer) Analyze(ctx context.Context) (*types.Analysis, error) {
 	)
 	analysis.ProjectTools = toolsDetector.Detect()
 
+	normalize(analysis)
 	return analysis, nil
 }
 

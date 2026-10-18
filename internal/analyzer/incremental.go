@@ -100,6 +100,7 @@ func (ia *IncrementalAnalyzer) AnalyzeIncremental(ctx context.Context, changedFi
 			return fullAnalysis, []string{ImpactAll}, fullErr
 		}
 	}
+	normalize(analysis)
 
 	// Update cache
 	ia.cacheMu.Lock()
