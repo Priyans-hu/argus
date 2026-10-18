@@ -28,24 +28,26 @@ const (
 // IncrementalAnalyzer performs incremental analysis by only running affected detectors
 type IncrementalAnalyzer struct {
 	rootPath    string
+	config      *types.Config
 	cache       *types.Analysis
 	cacheMu     sync.RWMutex
 	lastUpdated time.Time
 	walker      *Walker
 }
 
-// NewIncrementalAnalyzer creates a new incremental analyzer
-func NewIncrementalAnalyzer(rootPath string) *IncrementalAnalyzer {
+// NewIncrementalAnalyzer creates a new incremental analyzer; cfg may be nil
+func NewIncrementalAnalyzer(rootPath string, cfg *types.Config) *IncrementalAnalyzer {
 	absPath, _ := filepath.Abs(rootPath)
 	return &IncrementalAnalyzer{
 		rootPath: absPath,
-		walker:   NewWalker(absPath),
+		config:   cfg,
+		walker:   NewWalker(absPath, cfg),
 	}
 }
 
 // AnalyzeFull performs a full analysis and caches the result
 func (ia *IncrementalAnalyzer) AnalyzeFull(ctx context.Context) (*types.Analysis, error) {
-	a := NewAnalyzer(ia.rootPath, nil)
+	a := NewAnalyzer(ia.rootPath, ia.config)
 	analysis, err := a.Analyze(ctx)
 	if err != nil {
 		return nil, err

@@ -216,7 +216,7 @@ func main() {
 	}
 
 	// Test full analysis
-	ia := NewIncrementalAnalyzer(tmpDir)
+	ia := NewIncrementalAnalyzer(tmpDir, nil)
 	analysis, err := ia.AnalyzeFull(context.Background())
 
 	if err != nil {
@@ -266,7 +266,7 @@ func main() {
 	}
 
 	// Do initial full analysis
-	ia := NewIncrementalAnalyzer(tmpDir)
+	ia := NewIncrementalAnalyzer(tmpDir, nil)
 	_, err = ia.AnalyzeFull(context.Background())
 	if err != nil {
 		t.Fatalf("initial analysis failed: %v", err)
@@ -308,7 +308,7 @@ func TestIncrementalAnalyzer_NoCacheFallsBackToFull(t *testing.T) {
 	}
 
 	// Create new analyzer without running full analysis first
-	ia := NewIncrementalAnalyzer(tmpDir)
+	ia := NewIncrementalAnalyzer(tmpDir, nil)
 
 	// Incremental analysis should fall back to full when no cache
 	analysis, impacts, err := ia.AnalyzeIncremental(context.Background(), filepath.Join(tmpDir, "main.go"))

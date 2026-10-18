@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Deprecated
 - `-o`/`--output` has no effect; it is hidden and will be removed in a future release
 
+### Removed
+- The unused godirwalk dependency
+
 ### Fixed
 - Agent Skill: first writes use `--add-custom`, so a later plain scan no longer doubles CLAUDE.md
 - Rescans are stable: argus no longer counts its own outputs (CLAUDE.md, AGENTS.md, .cursorrules, .claude/, .continue/, the Copilot file) as project files, and watch no longer re-triggers on .continue/config.yaml
@@ -35,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `argus upgrade` compares versions with semver and times out stalled requests
 - `argus upgrade` replaces the running binary atomically instead of overwriting it in place
 - Existing output files are replaced through a temp file and a rename, so a full disk or an interrupted run cannot truncate them
+- Ignore rules match entry names instead of substrings: .github, .gitignore, build.gradle.kts and directories such as internal/binder are no longer hidden from analysis; `ignore` in .argus.yaml now takes effect in every mode (a name at any depth, a glob, or a path anchored at the project root)
 
 ### Security
 - The Repository line no longer leaks credentials or SSH host aliases; only github.com, gitlab.com and bitbucket.org are linked, other hosts show owner/name, local remotes are omitted

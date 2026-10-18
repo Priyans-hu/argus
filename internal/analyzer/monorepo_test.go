@@ -32,7 +32,7 @@ func TestResolveWorkspaces_GlobPatterns(t *testing.T) {
 	mkdirAll(t, filepath.Join(root, "apps", "web"))
 	mkdirAll(t, filepath.Join(root, "apps", "api"))
 
-	ma := NewMonorepoAnalyzer(root, false, 4)
+	ma := NewMonorepoAnalyzer(root, nil, false, 4)
 
 	info := &types.MonorepoInfo{
 		IsMonorepo:     true,
@@ -65,7 +65,7 @@ func TestResolveWorkspaces_FromPackages(t *testing.T) {
 	mkdirAll(t, filepath.Join(root, "apps", "web"))
 	mkdirAll(t, filepath.Join(root, "apps", "api"))
 
-	ma := NewMonorepoAnalyzer(root, false, 4)
+	ma := NewMonorepoAnalyzer(root, nil, false, 4)
 
 	info := &types.MonorepoInfo{
 		IsMonorepo: true,
@@ -88,7 +88,7 @@ func TestResolveWorkspaces_Deduplication(t *testing.T) {
 	root := t.TempDir()
 	mkdirAll(t, filepath.Join(root, "packages", "shared"))
 
-	ma := NewMonorepoAnalyzer(root, false, 4)
+	ma := NewMonorepoAnalyzer(root, nil, false, 4)
 
 	info := &types.MonorepoInfo{
 		IsMonorepo:     true,
@@ -110,7 +110,7 @@ func TestResolveWorkspaces_Deduplication(t *testing.T) {
 
 func TestResolveWorkspaces_Empty(t *testing.T) {
 	root := t.TempDir()
-	ma := NewMonorepoAnalyzer(root, false, 4)
+	ma := NewMonorepoAnalyzer(root, nil, false, 4)
 
 	info := &types.MonorepoInfo{
 		IsMonorepo: true,
@@ -129,7 +129,7 @@ func TestAnalyzeWorkspaces_Sequential(t *testing.T) {
 	mkdirAll(t, wsDir)
 	writeFile(t, filepath.Join(wsDir, "main.go"), []byte("package main\n"))
 
-	ma := NewMonorepoAnalyzer(root, false, 4)
+	ma := NewMonorepoAnalyzer(root, nil, false, 4)
 
 	info := &types.MonorepoInfo{
 		IsMonorepo:     true,
@@ -163,7 +163,7 @@ func TestAnalyzeWorkspaces_Parallel(t *testing.T) {
 		writeFile(t, filepath.Join(wsDir, "index.js"), []byte("console.log('hello');\n"))
 	}
 
-	ma := NewMonorepoAnalyzer(root, true, 2)
+	ma := NewMonorepoAnalyzer(root, nil, true, 2)
 
 	info := &types.MonorepoInfo{
 		IsMonorepo:     true,
@@ -193,7 +193,7 @@ func TestAnalyzeWorkspaces_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	ma := NewMonorepoAnalyzer(root, false, 4)
+	ma := NewMonorepoAnalyzer(root, nil, false, 4)
 
 	info := &types.MonorepoInfo{
 		IsMonorepo:     true,

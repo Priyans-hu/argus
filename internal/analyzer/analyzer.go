@@ -50,7 +50,7 @@ func (a *Analyzer) Analyze(ctx context.Context) (*types.Analysis, error) {
 	projectName := filepath.Base(absPath)
 
 	// Walk the file tree
-	walker := NewWalker(absPath)
+	walker := NewWalker(absPath, a.config)
 	files, err := walker.Walk(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to walk directory: %w", err)

@@ -45,7 +45,7 @@ func (pa *ParallelAnalyzer) Analyze(ctx context.Context) (*types.Analysis, error
 	slog.Debug("starting parallel analysis", "rootPath", pa.rootPath)
 
 	// Get absolute path and walk file tree first (required by all detectors)
-	walker := NewWalker(pa.rootPath)
+	walker := NewWalker(pa.rootPath, pa.config)
 	files, err := walker.Walk(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to walk directory: %w", err)

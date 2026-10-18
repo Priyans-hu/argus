@@ -264,6 +264,16 @@ func runInit(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// analyzerConfig is the part of .argus.yaml the analyzers read.
+func analyzerConfig(cfg *config.Config) *types.Config {
+	return &types.Config{
+		Output:            cfg.Output,
+		Ignore:            cfg.Ignore,
+		CustomConventions: cfg.CustomConventions,
+		Overrides:         cfg.Overrides,
+	}
+}
+
 func runScan(cmd *cobra.Command, args []string) error {
 	defer reportSkipped()
 
@@ -324,10 +334,10 @@ func runScan(cmd *cobra.Command, args []string) error {
 	// Run analysis (parallel or sequential)
 	var analysis *types.Analysis
 	if parallel {
-		pa := analyzer.NewParallelAnalyzer(absPath, nil)
+		pa := analyzer.NewParallelAnalyzer(absPath, analyzerConfig(cfg))
 		analysis, err = pa.Analyze(ctx)
 	} else {
-		a := analyzer.NewAnalyzer(absPath, nil)
+		a := analyzer.NewAnalyzer(absPath, analyzerConfig(cfg))
 		analysis, err = a.Analyze(ctx)
 	}
 	if err != nil {
@@ -393,7 +403,7 @@ func runMonorepoScan(ctx context.Context, absPath string, cfg *config.Config, fo
 		maxConcurrent = cfg.Monorepo.MaxConcurrent
 	}
 
-	ma := analyzer.NewMonorepoAnalyzer(absPath, parallel, maxConcurrent)
+	ma := analyzer.NewMonorepoAnalyzer(absPath, analyzerConfig(cfg), parallel, maxConcurrent)
 	wsResults := ma.AnalyzeWorkspaces(ctx, rootAnalysis.MonorepoInfo)
 
 	if len(wsResults) == 0 {
@@ -534,10 +544,10 @@ func runSync(cmd *cobra.Command, args []string) error {
 	// Run analysis (parallel or sequential)
 	var analysis *types.Analysis
 	if parallel {
-		pa := analyzer.NewParallelAnalyzer(absPath, nil)
+		pa := analyzer.NewParallelAnalyzer(absPath, analyzerConfig(cfg))
 		analysis, err = pa.Analyze(ctx)
 	} else {
-		a := analyzer.NewAnalyzer(absPath, nil)
+		a := analyzer.NewAnalyzer(absPath, analyzerConfig(cfg))
 		analysis, err = a.Analyze(ctx)
 	}
 	if err != nil {
@@ -744,7 +754,7 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	defer cancel()
 
 	// Create incremental analyzer
-	incAnalyzer := analyzer.NewIncrementalAnalyzer(absPath)
+	incAnalyzer := analyzer.NewIncrementalAnalyzer(absPath, analyzerConfig(cfg))
 
 	// Skip notices print once per path for the whole session
 	watchNotified = map[string]bool{}

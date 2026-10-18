@@ -164,7 +164,7 @@ func TestParallelAnalyzerMergesConventionsInOrder(t *testing.T) {
 	writeTree(t, root, files)
 
 	// The three groups Analyzer.Analyze concatenates, in its order.
-	walked, err := NewWalker(root).Walk(context.Background())
+	walked, err := NewWalker(root, nil).Walk(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
