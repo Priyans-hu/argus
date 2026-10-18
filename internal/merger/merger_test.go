@@ -107,6 +107,47 @@ func TestMerge_Malformed(t *testing.T) {
 	}
 }
 
+func TestMerge_DefusesMarkerText(t *testing.T) {
+	const (
+		text = "- Replaces " + AutoStartMarker + " and " + AutoEndMarker + ", keeps " + CustomStartMarker + " and " + CustomEndMarker + "\n" +
+			AutoStartMarker + "\n" + AutoEndMarker + "\n" + CustomStartMarker + "\n" + CustomEndMarker + "\n"
+		wrapped = AutoStartMarker + "\n" +
+			"- Replaces <!--ARGUS:AUTO --> and <!--/ARGUS:AUTO -->, keeps <!--ARGUS:CUSTOM --> and <!--/ARGUS:CUSTOM -->\n" +
+			"<!--ARGUS:AUTO -->\n<!--/ARGUS:AUTO -->\n<!--ARGUS:CUSTOM -->\n<!--/ARGUS:CUSTOM -->\n" +
+			AutoEndMarker
+	)
+	if got := WrapContent(text); got != wrapped {
+		t.Errorf("WrapContent() = %q, want %q", got, wrapped)
+	}
+
+	tests := []struct {
+		name     string
+		existing []byte
+		want     string
+		outcome  Outcome
+	}{
+		{"nil", nil, wrapped, Created},
+		{"unmarked", []byte("# Team rules\nKEEP\n"), wrapped + "\n\n# Team rules\nKEEP\n", Adopted},
+		{"marked with custom", []byte(oldBlock + "\n\n" + custom + "\n"), wrapped + "\n\n" + custom + "\n", Replaced},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, outcome := NewMerger(true).Merge(tt.existing, []byte(text))
+			if string(got) != tt.want || outcome != tt.outcome {
+				t.Errorf("Merge() = %q (%v), want %q (%v)", got, outcome, tt.want, tt.outcome)
+			}
+			if strings.Count(string(got), AutoStartMarker) != 1 || strings.Count(string(got), AutoEndMarker) != 1 {
+				t.Errorf("want exactly one AUTO pair:\n%s", got)
+			}
+
+			again, outcome := NewMerger(true).Merge(got, []byte(text))
+			if string(again) != string(got) || outcome != Replaced {
+				t.Errorf("merging the result again = %q (%v), want it unchanged (Replaced)", again, outcome)
+			}
+		})
+	}
+}
+
 func TestMerge_KeepsCRLFOutsideBlock(t *testing.T) {
 	existing := "# Team rules\r\nKEEP-TOP\r\n\r\n" + strings.ReplaceAll(oldBlock, "\n", "\r\n") + "\r\n\r\nKEEP-BOTTOM\r\n"
 	want := "# Team rules\r\nKEEP-TOP\r\n\r\n" + block + "\r\n\r\nKEEP-BOTTOM\r\n"

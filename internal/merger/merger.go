@@ -90,12 +90,16 @@ func WrapContent(content string) string {
 	return wrapWithMarkers(content)
 }
 
+// defuse drops the space from marker text inside generated content (a README
+// bullet that quotes a marker, say), so it stays readable but is no marker.
+var defuse = strings.NewReplacer("<!-- ARGUS:", "<!--ARGUS:", "<!-- /ARGUS:", "<!--/ARGUS:")
+
 // wrapWithMarkers wraps content with auto-generated markers
 func wrapWithMarkers(content string) string {
 	// Remove trailing whitespace from content
 	content = strings.TrimRight(content, "\n\t ")
 
-	return AutoStartMarker + "\n" + content + "\n" + AutoEndMarker
+	return AutoStartMarker + "\n" + defuse.Replace(content) + "\n" + AutoEndMarker
 }
 
 // extractCustomSections extracts all custom sections from content

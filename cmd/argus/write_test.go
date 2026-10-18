@@ -14,6 +14,7 @@ import (
 	"github.com/Priyans-hu/argus/internal/analyzer"
 	"github.com/Priyans-hu/argus/internal/config"
 	"github.com/Priyans-hu/argus/internal/merger"
+	"github.com/Priyans-hu/argus/pkg/types"
 	"gopkg.in/yaml.v3"
 )
 
@@ -413,6 +414,32 @@ func TestMergeFilesAreMarkedAndStable(t *testing.T) {
 				t.Errorf("unexpected notices: %q", errOut)
 			}
 		})
+	}
+}
+
+func TestMergeDefusesMarkerTextFromReadme(t *testing.T) {
+	resetFlags(t)
+	out, errOut := captureOutput(t)
+	root := t.TempDir()
+	analysis := goAnalysis()
+	analysis.ReadmeContent = &types.ReadmeContent{Features: []string{"Replaces the " + merger.AutoStartMarker + " block"}}
+
+	for run := 1; run <= 3; run++ {
+		out.Reset()
+		if err := generateOutput(root, "", "claude", analysis, config.DefaultConfig(), false, false); err != nil {
+			t.Fatal(err)
+		}
+		got := readFile(t, root, "CLAUDE.md")
+		checkMarked(t, got)
+		if !strings.Contains(got, "\n- Replaces the <!--ARGUS:AUTO --> block\n") {
+			t.Errorf("run %d: defused bullet missing:\n%s", run, got)
+		}
+		if run > 1 && out.String() != "✅ CLAUDE.md is up to date\n" {
+			t.Errorf("run %d printed %q", run, out)
+		}
+	}
+	if errOut.Len() != 0 {
+		t.Errorf("unexpected notices: %q", errOut)
 	}
 }
 
