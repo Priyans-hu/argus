@@ -10,11 +10,11 @@
     {
       "name": "argus",
       "source": "./",
-      "description": "Generate and refresh CLAUDE.md, .cursorrules and Copilot instructions from a static scan of your codebase with the argus CLI",
+      "description": "Generate and refresh AGENTS.md, CLAUDE.md, Cursor rules and Copilot instructions from a static scan of your codebase with the argus CLI",
       "homepage": "https://priyans-hu.github.io/argus/",
       "repository": "https://github.com/Priyans-hu/argus",
       "license": "MIT",
-      "keywords": ["claude-md", "context", "cursorrules", "copilot", "codebase-analysis"],
+      "keywords": ["agents-md", "claude-md", "context", "cursorrules", "copilot", "codebase-analysis"],
       "strict": false,
       "skills": ["./skills/argus"]
     }
