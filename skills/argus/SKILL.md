@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires the argus CLI on PATH (Homebrew, go install, or release binaries for macOS, Linux and Windows). Installing needs network access; scans run locally.
 metadata:
   author: Priyans-hu
-  version: "1.0.0"
+  version: "1.0.1"
 ---
 
 # argus
@@ -16,7 +16,7 @@ argus statically scans a repository (manifests, layout, ASTs, git history) and w
 
 1. `argus version` checks the CLI. If it is missing, ask the user, then install it (see below).
 2. `argus scan --dry-run` previews the output. Nothing is written.
-3. `argus scan` writes `CLAUDE.md` in the current directory. To scan elsewhere: `argus scan path/to/repo`.
+3. `argus scan --add-custom` writes `CLAUDE.md` in the current directory. Use `--add-custom` on every first write of a Markdown format (see "Rescans"). To scan elsewhere: `argus scan --add-custom path/to/repo`.
 4. Review the result (see "Review"), then tell the user what was generated and what you changed.
 
 ## Install
@@ -38,7 +38,7 @@ There is no `--version` flag; use `argus version`.
 | Continue | `argus scan --format continue` | `.continue/config.yaml` |
 
 - One `--format` per run. With a `.argus.yaml`, a plain `argus scan` writes every format under `output:`.
-- AGENTS.md (Codex, Gemini CLI, Amp): there is no native format. Generate `CLAUDE.md`, then offer `ln -s CLAUDE.md AGENTS.md` or a copy. Ask before replacing an existing AGENTS.md.
+- AGENTS.md (Codex, Gemini CLI, Amp): there is no native format. Either generate `CLAUDE.md` and symlink it (`ln -s CLAUDE.md AGENTS.md`, refreshed by every rescan), or save the reviewed `--dry-run` output as `AGENTS.md` (a one-off argus will not refresh). Ask before replacing an existing AGENTS.md.
 - `--compact` shrinks `CLAUDE.md` by about 45%. `--verbose` prints what was detected.
 
 ## Guardrails
@@ -51,8 +51,8 @@ There is no `--version` flag; use `argus version`.
 ## Rescans
 
 - Generated text sits between `<!-- ARGUS:AUTO -->` and `<!-- /ARGUS:AUTO -->` and is replaced on every scan.
-- Text between `<!-- ARGUS:CUSTOM -->` and `<!-- /ARGUS:CUSTOM -->` is kept. Put hand-written guidance there; `--add-custom` adds an empty block.
-- The first scan over a hand-written file keeps it in a CUSTOM block titled "Previous Content". Merge it with the user, dropping what argus now duplicates.
+- Text between `<!-- ARGUS:CUSTOM -->` and `<!-- /ARGUS:CUSTOM -->` is kept. Put hand-written guidance there.
+- A file without markers is treated as hand-written: the next scan keeps all of it in a CUSTOM block titled "Previous Content". argus's own first write has no markers unless it used `--add-custom`, so a plain rescan doubles the file. Merge a hand-written "Previous Content" with the user, and delete one that only repeats generated text.
 - `--merge=false` overwrites the file, CUSTOM blocks included. Use it to re-run `--format continue`, since merging inserts the markers into YAML.
 
 ## Review
