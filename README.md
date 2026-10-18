@@ -33,7 +33,7 @@ argus scan
 # ✓ CLAUDE.md (for Claude Code)
 # ✓ .cursorrules (for Cursor)
 # ✓ .github/copilot-instructions.md (for Copilot)
-# ✓ .continue/config.json (for Continue)
+# ✓ .continue/config.yaml (for Continue)
 ```
 
 ## Installation
@@ -59,6 +59,16 @@ brew install Priyans-hu/tap/argus
 ### Binary
 
 Download from [Releases](https://github.com/Priyans-hu/argus/releases).
+
+## Use as an Agent Skill
+
+Let your coding agent run argus for you (Claude Code, Codex, Cursor, Copilot, Gemini CLI and more):
+
+```bash
+npx skills add Priyans-hu/argus --skill argus   # add -g for all projects
+```
+
+In Claude Code you can also run `/plugin install argus --marketplace Priyans-hu/argus` (older versions: `/plugin marketplace add Priyans-hu/argus`, then `/plugin install argus@argus`). The skill drives the CLI, so install argus as well.
 
 ## Quick Start
 
@@ -118,7 +128,7 @@ src/
 | Claude | `CLAUDE.md` | Claude Code |
 | Cursor | `.cursorrules` | Cursor |
 | Copilot | `.github/copilot-instructions.md` | GitHub Copilot |
-| Continue | `.continue/config.json` | Continue.dev |
+| Continue | `.continue/config.yaml` | Continue.dev |
 
 ## Commands
 

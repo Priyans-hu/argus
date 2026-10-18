@@ -11,7 +11,7 @@ Argus is a CLI tool that scans codebases and automatically generates context fil
   - CLAUDE.md (Claude Code)
   - .cursorrules (Cursor)
   - .github/copilot-instructions.md (GitHub Copilot)
-  - .continue/config.json (Continue.dev)
+  - .continue/config.yaml (Continue.dev)
 
 ## Commands
 
@@ -19,6 +19,10 @@ Argus is a CLI tool that scans codebases and automatically generates context fil
 - `argus scan` - Analyze codebase and generate files
 - `argus sync` - Update files with changes
 - `argus version` - Print version
+
+## Agent Skill
+
+- `npx skills add Priyans-hu/argus` installs the argus skill (skills/argus/SKILL.md) for coding agents
 
 ## Tech Stack
 

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Agent Skill (`skills/argus/SKILL.md`), installable with `npx skills add Priyans-hu/argus`
+- Claude Code plugin marketplace manifest (`.claude-plugin/marketplace.json`)
+
+### Changed
+- Repo dev skills in `.claude/skills/` are marked `metadata.internal: true`, so the skills CLI no longer offers them
+
 ## [0.3.0] - 2026-01-25
 
 ### Added

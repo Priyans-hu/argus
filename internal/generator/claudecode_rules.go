@@ -58,21 +58,21 @@ func (g *ClaudeCodeGenerator) generateGitWorkflowRule(analysis *types.Analysis, 
 	}
 
 	var content strings.Builder
-	content.WriteString(fmt.Sprintf("# Git Workflow Rules for %s\n\n", ctx.ProjectName))
+	fmt.Fprintf(&content, "# Git Workflow Rules for %s\n\n", ctx.ProjectName)
 	content.WriteString("Follow these git conventions for this project.\n\n")
 
 	// Commit conventions
 	if cc := analysis.GitConventions.CommitConvention; cc != nil {
 		content.WriteString("## Commit Messages\n\n")
-		content.WriteString(fmt.Sprintf("- **Style**: %s\n", cc.Style))
+		fmt.Fprintf(&content, "- **Style**: %s\n", cc.Style)
 		if cc.Format != "" {
-			content.WriteString(fmt.Sprintf("- **Format**: `%s`\n", cc.Format))
+			fmt.Fprintf(&content, "- **Format**: `%s`\n", cc.Format)
 		}
 		if len(cc.Types) > 0 {
-			content.WriteString(fmt.Sprintf("- **Types**: %s\n", strings.Join(cc.Types, ", ")))
+			fmt.Fprintf(&content, "- **Types**: %s\n", strings.Join(cc.Types, ", "))
 		}
 		if cc.Example != "" {
-			content.WriteString(fmt.Sprintf("- **Example**: `%s`\n", cc.Example))
+			fmt.Fprintf(&content, "- **Example**: `%s`\n", cc.Example)
 		}
 		content.WriteString("\n")
 
@@ -96,15 +96,15 @@ func (g *ClaudeCodeGenerator) generateGitWorkflowRule(analysis *types.Analysis, 
 	if bc := analysis.GitConventions.BranchConvention; bc != nil {
 		content.WriteString("## Branch Naming\n\n")
 		if bc.Format != "" {
-			content.WriteString(fmt.Sprintf("- **Format**: `%s`\n", bc.Format))
+			fmt.Fprintf(&content, "- **Format**: `%s`\n", bc.Format)
 		}
 		if len(bc.Prefixes) > 0 {
-			content.WriteString(fmt.Sprintf("- **Prefixes**: %s\n", strings.Join(bc.Prefixes, ", ")))
+			fmt.Fprintf(&content, "- **Prefixes**: %s\n", strings.Join(bc.Prefixes, ", "))
 		}
 		if len(bc.Examples) > 0 {
 			content.WriteString("- **Examples**:\n")
 			for _, ex := range bc.Examples {
-				content.WriteString(fmt.Sprintf("  - `%s`\n", ex))
+				fmt.Fprintf(&content, "  - `%s`\n", ex)
 			}
 		}
 		content.WriteString("\n")
@@ -138,25 +138,25 @@ func (g *ClaudeCodeGenerator) generateTestingRule(analysis *types.Analysis, ctx 
 		content.WriteString("---\n")
 		content.WriteString("paths:\n")
 		for _, pattern := range testPatterns {
-			content.WriteString(fmt.Sprintf("  - \"%s\"\n", pattern))
+			fmt.Fprintf(&content, "  - \"%s\"\n", pattern)
 		}
 		content.WriteString("---\n\n")
 	}
 
-	content.WriteString(fmt.Sprintf("# Testing Rules for %s\n\n", ctx.ProjectName))
+	fmt.Fprintf(&content, "# Testing Rules for %s\n\n", ctx.ProjectName)
 	content.WriteString("Follow these testing conventions for this project.\n\n")
 
 	// Detected testing patterns with file examples
 	content.WriteString("## Detected Testing Patterns\n\n")
 	for _, pattern := range analysis.CodePatterns.Testing {
-		content.WriteString(fmt.Sprintf("- **%s**: %s", pattern.Name, pattern.Description))
+		fmt.Fprintf(&content, "- **%s**: %s", pattern.Name, pattern.Description)
 		if pattern.FileCount > 0 {
-			content.WriteString(fmt.Sprintf(" (%d files)", pattern.FileCount))
+			fmt.Fprintf(&content, " (%d files)", pattern.FileCount)
 		}
 		content.WriteString("\n")
 		// Add example file if available
 		if len(pattern.Examples) > 0 {
-			content.WriteString(fmt.Sprintf("  - See: `%s`\n", pattern.Examples[0]))
+			fmt.Fprintf(&content, "  - See: `%s`\n", pattern.Examples[0])
 		}
 	}
 	content.WriteString("\n")
@@ -166,7 +166,7 @@ func (g *ClaudeCodeGenerator) generateTestingRule(analysis *types.Analysis, ctx 
 		content.WriteString("## Test File Examples\n\n")
 		content.WriteString("Reference these files for test patterns:\n")
 		for _, file := range ctx.TestFiles {
-			content.WriteString(fmt.Sprintf("- `%s`\n", file))
+			fmt.Fprintf(&content, "- `%s`\n", file)
 		}
 		content.WriteString("\n")
 	}
@@ -182,7 +182,7 @@ func (g *ClaudeCodeGenerator) generateTestingRule(analysis *types.Analysis, ctx 
 	// Test configuration
 	if testConfig := ctx.GetTestConfig(); testConfig != "" {
 		content.WriteString("## Test Configuration\n\n")
-		content.WriteString(fmt.Sprintf("Config file: `%s`\n\n", testConfig))
+		fmt.Fprintf(&content, "Config file: `%s`\n\n", testConfig)
 	}
 
 	// Language-specific testing guidelines
@@ -235,26 +235,26 @@ func (g *ClaudeCodeGenerator) generateTestingRule(analysis *types.Analysis, ctx 
 // generateCodingStyleRule creates coding style rules from detected conventions
 func (g *ClaudeCodeGenerator) generateCodingStyleRule(analysis *types.Analysis, ctx *GeneratorContext) *types.GeneratedFile {
 	var content strings.Builder
-	content.WriteString(fmt.Sprintf("# Coding Style Rules for %s\n\n", ctx.ProjectName))
+	fmt.Fprintf(&content, "# Coding Style Rules for %s\n\n", ctx.ProjectName)
 	content.WriteString("Follow these coding conventions for this project.\n\n")
 
 	// Configuration files section
 	if len(ctx.ConfigFiles) > 0 {
 		content.WriteString("## Configuration Files\n\n")
 		if eslint, ok := ctx.ConfigFiles["eslint"]; ok {
-			content.WriteString(fmt.Sprintf("- **ESLint**: `%s`\n", eslint))
+			fmt.Fprintf(&content, "- **ESLint**: `%s`\n", eslint)
 		}
 		if prettier, ok := ctx.ConfigFiles["prettier"]; ok {
-			content.WriteString(fmt.Sprintf("- **Prettier**: `%s`\n", prettier))
+			fmt.Fprintf(&content, "- **Prettier**: `%s`\n", prettier)
 		}
 		if golangci, ok := ctx.ConfigFiles["golangci"]; ok {
-			content.WriteString(fmt.Sprintf("- **golangci-lint**: `%s`\n", golangci))
+			fmt.Fprintf(&content, "- **golangci-lint**: `%s`\n", golangci)
 		}
 		if tsconfig, ok := ctx.ConfigFiles["tsconfig"]; ok {
-			content.WriteString(fmt.Sprintf("- **TypeScript**: `%s`\n", tsconfig))
+			fmt.Fprintf(&content, "- **TypeScript**: `%s`\n", tsconfig)
 		}
 		if pyproject, ok := ctx.ConfigFiles["pyproject"]; ok {
-			content.WriteString(fmt.Sprintf("- **Python**: `%s`\n", pyproject))
+			fmt.Fprintf(&content, "- **Python**: `%s`\n", pyproject)
 		}
 		content.WriteString("\n")
 	}
@@ -263,10 +263,10 @@ func (g *ClaudeCodeGenerator) generateCodingStyleRule(analysis *types.Analysis, 
 	if ctx.LintCommand != "" || ctx.FormatCommand != "" {
 		content.WriteString("## Commands\n\n")
 		if ctx.LintCommand != "" {
-			content.WriteString(fmt.Sprintf("- Lint: `%s`\n", ctx.LintCommand))
+			fmt.Fprintf(&content, "- Lint: `%s`\n", ctx.LintCommand)
 		}
 		if ctx.FormatCommand != "" {
-			content.WriteString(fmt.Sprintf("- Format: `%s`\n", ctx.FormatCommand))
+			fmt.Fprintf(&content, "- Format: `%s`\n", ctx.FormatCommand)
 		}
 		content.WriteString("\n")
 	}
@@ -281,11 +281,11 @@ func (g *ClaudeCodeGenerator) generateCodingStyleRule(analysis *types.Analysis, 
 	categoryOrder := []string{"code-style", "naming", "imports", "structure", "error-handling", "custom"}
 	for _, cat := range categoryOrder {
 		if convs, ok := categories[cat]; ok && len(convs) > 0 {
-			content.WriteString(fmt.Sprintf("## %s\n\n", formatCategoryName(cat)))
+			fmt.Fprintf(&content, "## %s\n\n", formatCategoryName(cat))
 			for _, conv := range convs {
-				content.WriteString(fmt.Sprintf("- %s\n", conv.Description))
+				fmt.Fprintf(&content, "- %s\n", conv.Description)
 				if conv.Example != "" {
-					content.WriteString(fmt.Sprintf("  ```\n  %s\n  ```\n", conv.Example))
+					fmt.Fprintf(&content, "  ```\n  %s\n  ```\n", conv.Example)
 				}
 			}
 			content.WriteString("\n")
@@ -336,13 +336,13 @@ func (g *ClaudeCodeGenerator) generateArchitectureRule(analysis *types.Analysis,
 		styleName = arch.Style
 	}
 
-	content.WriteString(fmt.Sprintf("# Architecture Rules for %s\n\n", ctx.ProjectName))
-	content.WriteString(fmt.Sprintf("This project follows a **%s** architecture.\n\n", styleName))
+	fmt.Fprintf(&content, "# Architecture Rules for %s\n\n", ctx.ProjectName)
+	fmt.Fprintf(&content, "This project follows a **%s** architecture.\n\n", styleName)
 
 	// Entry point
 	if ctx.EntryPoint != "" {
 		content.WriteString("## Entry Point\n\n")
-		content.WriteString(fmt.Sprintf("Main entry: `%s`\n\n", ctx.EntryPoint))
+		fmt.Fprintf(&content, "Main entry: `%s`\n\n", ctx.EntryPoint)
 	}
 
 	// Layer structure
@@ -351,9 +351,9 @@ func (g *ClaudeCodeGenerator) generateArchitectureRule(analysis *types.Analysis,
 		content.WriteString("Follow the dependency rules between layers:\n\n")
 
 		for _, layer := range ctx.Layers {
-			content.WriteString(fmt.Sprintf("### %s\n\n", layer.Name))
+			fmt.Fprintf(&content, "### %s\n\n", layer.Name)
 			if layer.Purpose != "" {
-				content.WriteString(fmt.Sprintf("%s\n\n", layer.Purpose))
+				fmt.Fprintf(&content, "%s\n\n", layer.Purpose)
 			}
 			if len(layer.Packages) > 0 {
 				content.WriteString("**Packages**: ")
@@ -375,7 +375,7 @@ func (g *ClaudeCodeGenerator) generateArchitectureRule(analysis *types.Analysis,
 				break
 			}
 			if dir.Purpose != "" {
-				content.WriteString(fmt.Sprintf("- `%s/` - %s\n", dir.Path, dir.Purpose))
+				fmt.Fprintf(&content, "- `%s/` - %s\n", dir.Path, dir.Purpose)
 				count++
 			}
 		}
@@ -415,12 +415,12 @@ func (g *ClaudeCodeGenerator) securityRuleContent(analysis *types.Analysis, ctx 
 		content.WriteString("---\n")
 		content.WriteString("paths:\n")
 		for _, pattern := range securityPatterns {
-			content.WriteString(fmt.Sprintf("  - \"%s\"\n", pattern))
+			fmt.Fprintf(&content, "  - \"%s\"\n", pattern)
 		}
 		content.WriteString("---\n\n")
 	}
 
-	content.WriteString(fmt.Sprintf("# Security Rules for %s\n\n", ctx.ProjectName))
+	fmt.Fprintf(&content, "# Security Rules for %s\n\n", ctx.ProjectName)
 	content.WriteString("Follow these security practices for all code changes.\n\n")
 
 	// Project-specific auth patterns
@@ -428,9 +428,9 @@ func (g *ClaudeCodeGenerator) securityRuleContent(analysis *types.Analysis, ctx 
 		content.WriteString("## Authentication in This Project\n\n")
 		content.WriteString("Detected patterns:\n")
 		for pattern, files := range ctx.AuthPatterns {
-			content.WriteString(fmt.Sprintf("- **%s**", pattern))
+			fmt.Fprintf(&content, "- **%s**", pattern)
 			if len(files) > 0 {
-				content.WriteString(fmt.Sprintf(" - see `%s`", files[0]))
+				fmt.Fprintf(&content, " - see `%s`", files[0])
 			}
 			content.WriteString("\n")
 		}

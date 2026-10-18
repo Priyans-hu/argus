@@ -12,14 +12,14 @@ func buildProjectSummaryPrompt(analysis *types.Analysis) string {
 	var sb strings.Builder
 
 	sb.WriteString("You are a technical writer. Based on the following codebase analysis, write a concise 2-3 sentence project summary.\n\n")
-	sb.WriteString(fmt.Sprintf("Project: %s\n", analysis.ProjectName))
+	fmt.Fprintf(&sb, "Project: %s\n", analysis.ProjectName)
 
 	if len(analysis.TechStack.Languages) > 0 {
 		var langs []string
 		for _, l := range analysis.TechStack.Languages {
 			langs = append(langs, l.Name)
 		}
-		sb.WriteString(fmt.Sprintf("Languages: %s\n", strings.Join(langs, ", ")))
+		fmt.Fprintf(&sb, "Languages: %s\n", strings.Join(langs, ", "))
 	}
 
 	if len(analysis.TechStack.Frameworks) > 0 {
@@ -27,11 +27,11 @@ func buildProjectSummaryPrompt(analysis *types.Analysis) string {
 		for _, f := range analysis.TechStack.Frameworks {
 			fws = append(fws, f.Name)
 		}
-		sb.WriteString(fmt.Sprintf("Frameworks: %s\n", strings.Join(fws, ", ")))
+		fmt.Fprintf(&sb, "Frameworks: %s\n", strings.Join(fws, ", "))
 	}
 
 	if analysis.ReadmeContent != nil && analysis.ReadmeContent.Description != "" {
-		sb.WriteString(fmt.Sprintf("README description: %s\n", analysis.ReadmeContent.Description))
+		fmt.Fprintf(&sb, "README description: %s\n", analysis.ReadmeContent.Description)
 	}
 
 	if len(analysis.Structure.Directories) > 0 {
@@ -42,7 +42,7 @@ func buildProjectSummaryPrompt(analysis *types.Analysis) string {
 			}
 		}
 		if len(dirs) > 0 {
-			sb.WriteString(fmt.Sprintf("Key directories: %s\n", strings.Join(dirs, ", ")))
+			fmt.Fprintf(&sb, "Key directories: %s\n", strings.Join(dirs, ", "))
 		}
 	}
 
@@ -55,17 +55,17 @@ func buildConventionsPrompt(analysis *types.Analysis) string {
 	var sb strings.Builder
 
 	sb.WriteString("You are a senior developer. Based on this codebase analysis, suggest 3-5 additional coding conventions that would benefit this project.\n\n")
-	sb.WriteString(fmt.Sprintf("Project: %s\n", analysis.ProjectName))
+	fmt.Fprintf(&sb, "Project: %s\n", analysis.ProjectName)
 
 	if len(analysis.TechStack.Languages) > 0 {
-		sb.WriteString(fmt.Sprintf("Primary language: %s\n", analysis.TechStack.Languages[0].Name))
+		fmt.Fprintf(&sb, "Primary language: %s\n", analysis.TechStack.Languages[0].Name)
 	}
 
 	if len(analysis.Conventions) > 0 {
 		sb.WriteString("Already detected conventions:\n")
 		limit := min(len(analysis.Conventions), 10)
 		for _, c := range analysis.Conventions[:limit] {
-			sb.WriteString(fmt.Sprintf("- [%s] %s\n", c.Category, c.Description))
+			fmt.Fprintf(&sb, "- [%s] %s\n", c.Category, c.Description)
 		}
 	}
 
@@ -80,16 +80,16 @@ func buildArchitecturePrompt(analysis *types.Analysis) string {
 	var sb strings.Builder
 
 	sb.WriteString("You are a software architect. Based on this codebase analysis, provide 2-4 architectural insights or recommendations.\n\n")
-	sb.WriteString(fmt.Sprintf("Project: %s\n", analysis.ProjectName))
+	fmt.Fprintf(&sb, "Project: %s\n", analysis.ProjectName)
 
 	if analysis.ArchitectureInfo != nil {
 		if analysis.ArchitectureInfo.Style != "" {
-			sb.WriteString(fmt.Sprintf("Architecture style: %s\n", analysis.ArchitectureInfo.Style))
+			fmt.Fprintf(&sb, "Architecture style: %s\n", analysis.ArchitectureInfo.Style)
 		}
 		if len(analysis.ArchitectureInfo.Layers) > 0 {
 			sb.WriteString("Layers:\n")
 			for _, l := range analysis.ArchitectureInfo.Layers {
-				sb.WriteString(fmt.Sprintf("- %s: %s\n", l.Name, l.Purpose))
+				fmt.Fprintf(&sb, "- %s: %s\n", l.Name, l.Purpose)
 			}
 		}
 	}
@@ -98,7 +98,7 @@ func buildArchitecturePrompt(analysis *types.Analysis) string {
 		sb.WriteString("Directory structure:\n")
 		for _, d := range analysis.Structure.Directories {
 			if d.Purpose != "" {
-				sb.WriteString(fmt.Sprintf("- %s: %s\n", d.Path, d.Purpose))
+				fmt.Fprintf(&sb, "- %s: %s\n", d.Path, d.Purpose)
 			}
 		}
 	}
@@ -113,14 +113,14 @@ func buildBestPracticesPrompt(analysis *types.Analysis) string {
 	var sb strings.Builder
 
 	sb.WriteString("You are a senior developer. Based on this project's tech stack, suggest 3-5 best practices specific to this project.\n\n")
-	sb.WriteString(fmt.Sprintf("Project: %s\n", analysis.ProjectName))
+	fmt.Fprintf(&sb, "Project: %s\n", analysis.ProjectName)
 
 	if len(analysis.TechStack.Languages) > 0 {
 		var langs []string
 		for _, l := range analysis.TechStack.Languages {
 			langs = append(langs, l.Name)
 		}
-		sb.WriteString(fmt.Sprintf("Languages: %s\n", strings.Join(langs, ", ")))
+		fmt.Fprintf(&sb, "Languages: %s\n", strings.Join(langs, ", "))
 	}
 
 	if len(analysis.TechStack.Frameworks) > 0 {
@@ -128,11 +128,11 @@ func buildBestPracticesPrompt(analysis *types.Analysis) string {
 		for _, f := range analysis.TechStack.Frameworks {
 			fws = append(fws, f.Name)
 		}
-		sb.WriteString(fmt.Sprintf("Frameworks: %s\n", strings.Join(fws, ", ")))
+		fmt.Fprintf(&sb, "Frameworks: %s\n", strings.Join(fws, ", "))
 	}
 
 	if len(analysis.TechStack.Databases) > 0 {
-		sb.WriteString(fmt.Sprintf("Databases: %s\n", strings.Join(analysis.TechStack.Databases, ", ")))
+		fmt.Fprintf(&sb, "Databases: %s\n", strings.Join(analysis.TechStack.Databases, ", "))
 	}
 
 	sb.WriteString("\nRespond with a JSON array of objects, each with \"title\" and \"description\" fields.\n")
@@ -145,7 +145,7 @@ func buildPatternsPrompt(analysis *types.Analysis) string {
 	var sb strings.Builder
 
 	sb.WriteString("You are a code reviewer. Based on the detected code patterns, suggest 2-4 insights about how this project uses patterns.\n\n")
-	sb.WriteString(fmt.Sprintf("Project: %s\n", analysis.ProjectName))
+	fmt.Fprintf(&sb, "Project: %s\n", analysis.ProjectName)
 
 	if analysis.CodePatterns != nil {
 		writePatternSummary := func(name string, patterns []types.PatternInfo) {
@@ -156,7 +156,7 @@ func buildPatternsPrompt(analysis *types.Analysis) string {
 			for _, p := range patterns {
 				names = append(names, p.Name)
 			}
-			sb.WriteString(fmt.Sprintf("%s: %s\n", name, strings.Join(names, ", ")))
+			fmt.Fprintf(&sb, "%s: %s\n", name, strings.Join(names, ", "))
 		}
 
 		writePatternSummary("Testing", analysis.CodePatterns.Testing)

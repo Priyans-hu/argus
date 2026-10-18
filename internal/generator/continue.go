@@ -378,11 +378,11 @@ func (g *ContinueMultiFileGenerator) generateRulesFile(analysis *types.Analysis)
 		buf.WriteString("**Languages:**\n")
 		for _, l := range analysis.TechStack.Languages {
 			if l.Percentage > 5 {
-				buf.WriteString(fmt.Sprintf("- %s", l.Name))
+				fmt.Fprintf(&buf, "- %s", l.Name)
 				if l.Version != "" {
-					buf.WriteString(fmt.Sprintf(" %s", l.Version))
+					fmt.Fprintf(&buf, " %s", l.Version)
 				}
-				buf.WriteString(fmt.Sprintf(" (%.1f%%)\n", l.Percentage))
+				fmt.Fprintf(&buf, " (%.1f%%)\n", l.Percentage)
 			}
 		}
 		buf.WriteString("\n")
@@ -391,9 +391,9 @@ func (g *ContinueMultiFileGenerator) generateRulesFile(analysis *types.Analysis)
 	if len(analysis.TechStack.Frameworks) > 0 {
 		buf.WriteString("**Frameworks:**\n")
 		for _, fw := range analysis.TechStack.Frameworks {
-			buf.WriteString(fmt.Sprintf("- %s", fw.Name))
+			fmt.Fprintf(&buf, "- %s", fw.Name)
 			if fw.Version != "" {
-				buf.WriteString(fmt.Sprintf(" %s", fw.Version))
+				fmt.Fprintf(&buf, " %s", fw.Version)
 			}
 			buf.WriteString("\n")
 		}
@@ -410,7 +410,7 @@ func (g *ContinueMultiFileGenerator) generateRulesFile(analysis *types.Analysis)
 		})
 		for _, dir := range dirs {
 			if dir.Purpose != "" {
-				buf.WriteString(fmt.Sprintf("- `%s/` - %s\n", dir.Path, dir.Purpose))
+				fmt.Fprintf(&buf, "- `%s/` - %s\n", dir.Path, dir.Purpose)
 			}
 		}
 		buf.WriteString("\n")
@@ -421,7 +421,7 @@ func (g *ContinueMultiFileGenerator) generateRulesFile(analysis *types.Analysis)
 		buf.WriteString("## Coding Conventions\n\n")
 		for _, conv := range analysis.Conventions {
 			if conv.Description != "" {
-				buf.WriteString(fmt.Sprintf("- %s\n", conv.Description))
+				fmt.Fprintf(&buf, "- %s\n", conv.Description)
 			}
 		}
 		buf.WriteString("\n")
@@ -431,9 +431,9 @@ func (g *ContinueMultiFileGenerator) generateRulesFile(analysis *types.Analysis)
 	if len(analysis.KeyFiles) > 0 {
 		buf.WriteString("## Key Files\n\n")
 		for _, kf := range analysis.KeyFiles {
-			buf.WriteString(fmt.Sprintf("- `%s`", kf.Path))
+			fmt.Fprintf(&buf, "- `%s`", kf.Path)
 			if kf.Purpose != "" {
-				buf.WriteString(fmt.Sprintf(" - %s", kf.Purpose))
+				fmt.Fprintf(&buf, " - %s", kf.Purpose)
 			}
 			buf.WriteString("\n")
 		}

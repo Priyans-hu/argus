@@ -2,6 +2,8 @@
 name: test
 description: Run the test suite. Use when running tests, checking test coverage, or validating code changes.
 allowed-tools: Bash, Read, Glob, Grep
+metadata:
+  internal: true
 ---
 
 # Test - argus

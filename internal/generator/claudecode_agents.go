@@ -95,7 +95,7 @@ func goReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string {
 	content.WriteString("model: haiku\n")
 	content.WriteString("---\n\n")
 
-	content.WriteString(fmt.Sprintf("# Go Code Reviewer for %s\n\n", ctx.ProjectName))
+	fmt.Fprintf(&content, "# Go Code Reviewer for %s\n\n", ctx.ProjectName)
 	content.WriteString("You are an expert Go code reviewer for this project. When reviewing Go code, focus on:\n\n")
 
 	// Project-specific error handling section
@@ -107,7 +107,7 @@ func goReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string {
 			if i >= 3 {
 				break
 			}
-			content.WriteString(fmt.Sprintf("- `%s`\n", file))
+			fmt.Fprintf(&content, "- `%s`\n", file)
 		}
 		content.WriteString("\n")
 	}
@@ -121,9 +121,9 @@ func goReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string {
 		if len(ctx.TestingPatterns) > 0 {
 			content.WriteString("Detected testing patterns:\n")
 			for pattern, files := range ctx.TestingPatterns {
-				content.WriteString(fmt.Sprintf("- **%s**", pattern))
+				fmt.Fprintf(&content, "- **%s**", pattern)
 				if len(files) > 0 {
-					content.WriteString(fmt.Sprintf(" - see `%s`", files[0]))
+					fmt.Fprintf(&content, " - see `%s`", files[0])
 				}
 				content.WriteString("\n")
 			}
@@ -135,12 +135,12 @@ func goReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string {
 				if i >= 3 {
 					break
 				}
-				content.WriteString(fmt.Sprintf("- `%s`\n", file))
+				fmt.Fprintf(&content, "- `%s`\n", file)
 			}
 			content.WriteString("\n")
 		}
 		if ctx.TestCommand != "" {
-			content.WriteString(fmt.Sprintf("Run tests: `%s`\n\n", ctx.TestCommand))
+			fmt.Fprintf(&content, "Run tests: `%s`\n\n", ctx.TestCommand)
 		}
 	} else {
 		content.WriteString("## Testing\n\n")
@@ -153,10 +153,10 @@ func goReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string {
 	if ctx.HasLintingContext() {
 		content.WriteString("## Linting\n\n")
 		if lintConfig := ctx.GetLintConfig(); lintConfig != "" {
-			content.WriteString(fmt.Sprintf("Config: `%s`\n", lintConfig))
+			fmt.Fprintf(&content, "Config: `%s`\n", lintConfig)
 		}
 		if ctx.LintCommand != "" {
-			content.WriteString(fmt.Sprintf("Run: `%s`\n", ctx.LintCommand))
+			fmt.Fprintf(&content, "Run: `%s`\n", ctx.LintCommand)
 		}
 		content.WriteString("\n")
 	}
@@ -194,7 +194,7 @@ func tsReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string {
 	content.WriteString("model: haiku\n")
 	content.WriteString("---\n\n")
 
-	content.WriteString(fmt.Sprintf("# TypeScript/JavaScript Code Reviewer for %s\n\n", ctx.ProjectName))
+	fmt.Fprintf(&content, "# TypeScript/JavaScript Code Reviewer for %s\n\n", ctx.ProjectName)
 	content.WriteString("You are an expert TypeScript/JavaScript code reviewer for this project. When reviewing code, focus on:\n\n")
 
 	// Project-specific state management
@@ -202,9 +202,9 @@ func tsReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string {
 		content.WriteString("## State Management\n\n")
 		content.WriteString("This project uses:\n")
 		for _, pattern := range analysis.CodePatterns.StateManagement {
-			content.WriteString(fmt.Sprintf("- **%s**", pattern.Name))
+			fmt.Fprintf(&content, "- **%s**", pattern.Name)
 			if len(pattern.Examples) > 0 {
-				content.WriteString(fmt.Sprintf(" - see `%s`", pattern.Examples[0]))
+				fmt.Fprintf(&content, " - see `%s`", pattern.Examples[0])
 			}
 			content.WriteString("\n")
 		}
@@ -216,9 +216,9 @@ func tsReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string {
 		content.WriteString("## Data Fetching\n\n")
 		content.WriteString("Detected patterns:\n")
 		for _, pattern := range analysis.CodePatterns.DataFetching {
-			content.WriteString(fmt.Sprintf("- **%s**", pattern.Name))
+			fmt.Fprintf(&content, "- **%s**", pattern.Name)
 			if len(pattern.Examples) > 0 {
-				content.WriteString(fmt.Sprintf(" - see `%s`", pattern.Examples[0]))
+				fmt.Fprintf(&content, " - see `%s`", pattern.Examples[0])
 			}
 			content.WriteString("\n")
 		}
@@ -231,19 +231,19 @@ func tsReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string {
 		if len(ctx.TestingPatterns) > 0 {
 			content.WriteString("Detected testing patterns:\n")
 			for pattern, files := range ctx.TestingPatterns {
-				content.WriteString(fmt.Sprintf("- **%s**", pattern))
+				fmt.Fprintf(&content, "- **%s**", pattern)
 				if len(files) > 0 {
-					content.WriteString(fmt.Sprintf(" - see `%s`", files[0]))
+					fmt.Fprintf(&content, " - see `%s`", files[0])
 				}
 				content.WriteString("\n")
 			}
 			content.WriteString("\n")
 		}
 		if testConfig := ctx.GetTestConfig(); testConfig != "" {
-			content.WriteString(fmt.Sprintf("Test config: `%s`\n", testConfig))
+			fmt.Fprintf(&content, "Test config: `%s`\n", testConfig)
 		}
 		if ctx.TestCommand != "" {
-			content.WriteString(fmt.Sprintf("Run tests: `%s`\n", ctx.TestCommand))
+			fmt.Fprintf(&content, "Run tests: `%s`\n", ctx.TestCommand)
 		}
 		content.WriteString("\n")
 	}
@@ -252,13 +252,13 @@ func tsReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string {
 	if ctx.HasLintingContext() {
 		content.WriteString("## Linting & Formatting\n\n")
 		if eslint, ok := ctx.ConfigFiles["eslint"]; ok {
-			content.WriteString(fmt.Sprintf("ESLint config: `%s`\n", eslint))
+			fmt.Fprintf(&content, "ESLint config: `%s`\n", eslint)
 		}
 		if prettier, ok := ctx.ConfigFiles["prettier"]; ok {
-			content.WriteString(fmt.Sprintf("Prettier config: `%s`\n", prettier))
+			fmt.Fprintf(&content, "Prettier config: `%s`\n", prettier)
 		}
 		if ctx.LintCommand != "" {
-			content.WriteString(fmt.Sprintf("Run lint: `%s`\n", ctx.LintCommand))
+			fmt.Fprintf(&content, "Run lint: `%s`\n", ctx.LintCommand)
 		}
 		content.WriteString("\n")
 	}
@@ -315,7 +315,7 @@ func pythonReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) stri
 	content.WriteString("model: haiku\n")
 	content.WriteString("---\n\n")
 
-	content.WriteString(fmt.Sprintf("# Python Code Reviewer for %s\n\n", ctx.ProjectName))
+	fmt.Fprintf(&content, "# Python Code Reviewer for %s\n\n", ctx.ProjectName)
 	content.WriteString("You are an expert Python code reviewer for this project. When reviewing Python code, focus on:\n\n")
 
 	// Testing section with context
@@ -324,9 +324,9 @@ func pythonReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) stri
 		if len(ctx.TestingPatterns) > 0 {
 			content.WriteString("Detected testing patterns:\n")
 			for pattern, files := range ctx.TestingPatterns {
-				content.WriteString(fmt.Sprintf("- **%s**", pattern))
+				fmt.Fprintf(&content, "- **%s**", pattern)
 				if len(files) > 0 {
-					content.WriteString(fmt.Sprintf(" - see `%s`", files[0]))
+					fmt.Fprintf(&content, " - see `%s`", files[0])
 				}
 				content.WriteString("\n")
 			}
@@ -338,12 +338,12 @@ func pythonReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) stri
 				if i >= 3 {
 					break
 				}
-				content.WriteString(fmt.Sprintf("- `%s`\n", file))
+				fmt.Fprintf(&content, "- `%s`\n", file)
 			}
 			content.WriteString("\n")
 		}
 		if ctx.TestCommand != "" {
-			content.WriteString(fmt.Sprintf("Run tests: `%s`\n\n", ctx.TestCommand))
+			fmt.Fprintf(&content, "Run tests: `%s`\n\n", ctx.TestCommand)
 		}
 	}
 
@@ -351,13 +351,13 @@ func pythonReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) stri
 	if ctx.HasLintingContext() {
 		content.WriteString("## Linting & Formatting\n\n")
 		if pyproject, ok := ctx.ConfigFiles["pyproject"]; ok {
-			content.WriteString(fmt.Sprintf("Config: `%s`\n", pyproject))
+			fmt.Fprintf(&content, "Config: `%s`\n", pyproject)
 		}
 		if ctx.LintCommand != "" {
-			content.WriteString(fmt.Sprintf("Run lint: `%s`\n", ctx.LintCommand))
+			fmt.Fprintf(&content, "Run lint: `%s`\n", ctx.LintCommand)
 		}
 		if ctx.FormatCommand != "" {
-			content.WriteString(fmt.Sprintf("Format: `%s`\n", ctx.FormatCommand))
+			fmt.Fprintf(&content, "Format: `%s`\n", ctx.FormatCommand)
 		}
 		content.WriteString("\n")
 	}
@@ -403,7 +403,7 @@ func rustReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string
 	content.WriteString("model: haiku\n")
 	content.WriteString("---\n\n")
 
-	content.WriteString(fmt.Sprintf("# Rust Code Reviewer for %s\n\n", ctx.ProjectName))
+	fmt.Fprintf(&content, "# Rust Code Reviewer for %s\n\n", ctx.ProjectName)
 	content.WriteString("You are an expert Rust code reviewer for this project. When reviewing Rust code, focus on:\n\n")
 
 	// Testing section
@@ -415,12 +415,12 @@ func rustReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string
 				if i >= 3 {
 					break
 				}
-				content.WriteString(fmt.Sprintf("- `%s`\n", file))
+				fmt.Fprintf(&content, "- `%s`\n", file)
 			}
 			content.WriteString("\n")
 		}
 		if ctx.TestCommand != "" {
-			content.WriteString(fmt.Sprintf("Run tests: `%s`\n\n", ctx.TestCommand))
+			fmt.Fprintf(&content, "Run tests: `%s`\n\n", ctx.TestCommand)
 		}
 	}
 
@@ -463,7 +463,7 @@ func javaReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string
 	content.WriteString("model: haiku\n")
 	content.WriteString("---\n\n")
 
-	content.WriteString(fmt.Sprintf("# Java Code Reviewer for %s\n\n", ctx.ProjectName))
+	fmt.Fprintf(&content, "# Java Code Reviewer for %s\n\n", ctx.ProjectName)
 	content.WriteString("You are an expert Java code reviewer for this project. When reviewing Java code, focus on:\n\n")
 
 	// Testing section
@@ -472,16 +472,16 @@ func javaReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string
 		if len(ctx.TestingPatterns) > 0 {
 			content.WriteString("Detected testing patterns:\n")
 			for pattern, files := range ctx.TestingPatterns {
-				content.WriteString(fmt.Sprintf("- **%s**", pattern))
+				fmt.Fprintf(&content, "- **%s**", pattern)
 				if len(files) > 0 {
-					content.WriteString(fmt.Sprintf(" - see `%s`", files[0]))
+					fmt.Fprintf(&content, " - see `%s`", files[0])
 				}
 				content.WriteString("\n")
 			}
 			content.WriteString("\n")
 		}
 		if ctx.TestCommand != "" {
-			content.WriteString(fmt.Sprintf("Run tests: `%s`\n\n", ctx.TestCommand))
+			fmt.Fprintf(&content, "Run tests: `%s`\n\n", ctx.TestCommand)
 		}
 	}
 
@@ -527,21 +527,21 @@ func plannerAgentContent(analysis *types.Analysis, ctx *GeneratorContext) string
 	content.WriteString("permissionMode: plan\n")
 	content.WriteString("---\n\n")
 
-	content.WriteString(fmt.Sprintf("# Planner Agent for %s\n\n", ctx.ProjectName))
+	fmt.Fprintf(&content, "# Planner Agent for %s\n\n", ctx.ProjectName)
 	content.WriteString("You are a planning agent that helps break down complex tasks into manageable steps.\n\n")
 
 	// Project-specific context
 	if ctx.HasArchitectureContext() {
 		content.WriteString("## Project Structure\n\n")
 		if ctx.EntryPoint != "" {
-			content.WriteString(fmt.Sprintf("Entry point: `%s`\n", ctx.EntryPoint))
+			fmt.Fprintf(&content, "Entry point: `%s`\n", ctx.EntryPoint)
 		}
 		if len(ctx.Layers) > 0 {
 			content.WriteString("\nArchitectural layers:\n")
 			for _, layer := range ctx.Layers {
-				content.WriteString(fmt.Sprintf("- **%s**", layer.Name))
+				fmt.Fprintf(&content, "- **%s**", layer.Name)
 				if layer.Purpose != "" {
-					content.WriteString(fmt.Sprintf(": %s", layer.Purpose))
+					fmt.Fprintf(&content, ": %s", layer.Purpose)
 				}
 				content.WriteString("\n")
 			}
@@ -558,7 +558,7 @@ func plannerAgentContent(analysis *types.Analysis, ctx *GeneratorContext) string
 			if count >= 5 {
 				break
 			}
-			content.WriteString(fmt.Sprintf("- `%s` - %s\n", kf.Path, kf.Purpose))
+			fmt.Fprintf(&content, "- `%s` - %s\n", kf.Path, kf.Purpose)
 			count++
 		}
 		content.WriteString("\n")
@@ -568,13 +568,13 @@ func plannerAgentContent(analysis *types.Analysis, ctx *GeneratorContext) string
 	if ctx.BuildCommand != "" || ctx.TestCommand != "" || ctx.LintCommand != "" {
 		content.WriteString("## Verification Commands\n\n")
 		if ctx.BuildCommand != "" {
-			content.WriteString(fmt.Sprintf("- Build: `%s`\n", ctx.BuildCommand))
+			fmt.Fprintf(&content, "- Build: `%s`\n", ctx.BuildCommand)
 		}
 		if ctx.TestCommand != "" {
-			content.WriteString(fmt.Sprintf("- Test: `%s`\n", ctx.TestCommand))
+			fmt.Fprintf(&content, "- Test: `%s`\n", ctx.TestCommand)
 		}
 		if ctx.LintCommand != "" {
-			content.WriteString(fmt.Sprintf("- Lint: `%s`\n", ctx.LintCommand))
+			fmt.Fprintf(&content, "- Lint: `%s`\n", ctx.LintCommand)
 		}
 		content.WriteString("\n")
 	}
@@ -619,7 +619,7 @@ func securityReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) st
 	content.WriteString("  - test\n")
 	content.WriteString("---\n\n")
 
-	content.WriteString(fmt.Sprintf("# Security Reviewer for %s\n\n", ctx.ProjectName))
+	fmt.Fprintf(&content, "# Security Reviewer for %s\n\n", ctx.ProjectName)
 	content.WriteString("You are a security-focused code reviewer for this project. When reviewing code, focus on:\n\n")
 
 	// Project-specific auth patterns
@@ -627,9 +627,9 @@ func securityReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) st
 		content.WriteString("## Authentication in This Project\n\n")
 		content.WriteString("Detected patterns:\n")
 		for pattern, files := range ctx.AuthPatterns {
-			content.WriteString(fmt.Sprintf("- **%s**", pattern))
+			fmt.Fprintf(&content, "- **%s**", pattern)
 			if len(files) > 0 {
-				content.WriteString(fmt.Sprintf(" - see `%s`", files[0]))
+				fmt.Fprintf(&content, " - see `%s`", files[0])
 			}
 			content.WriteString("\n")
 		}
@@ -641,9 +641,9 @@ func securityReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) st
 		content.WriteString("## API Security\n\n")
 		content.WriteString("Detected API patterns to review:\n")
 		for pattern, files := range ctx.APIPatterns {
-			content.WriteString(fmt.Sprintf("- **%s**", pattern))
+			fmt.Fprintf(&content, "- **%s**", pattern)
 			if len(files) > 0 {
-				content.WriteString(fmt.Sprintf(" - see `%s`", files[0]))
+				fmt.Fprintf(&content, " - see `%s`", files[0])
 			}
 			content.WriteString("\n")
 		}

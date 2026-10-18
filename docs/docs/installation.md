@@ -54,7 +54,7 @@ tar -xzf argus_darwin_arm64.tar.gz
 sudo mv argus /usr/local/bin/
 
 # Verify
-argus --version
+argus version
 ```
 
 ## Build from Source
@@ -71,10 +71,20 @@ go build -o argus ./cmd/argus
 go install ./cmd/argus
 ```
 
+## Agent Skill
+
+To let coding agents (Claude Code, Codex, Cursor, Copilot, Gemini CLI and more) run argus for you:
+
+```bash
+npx skills add Priyans-hu/argus --skill argus   # add -g for all projects
+```
+
+In Claude Code you can also run `/plugin install argus --marketplace Priyans-hu/argus`. The skill drives the CLI, so install it with one of the methods above.
+
 ## Verify Installation
 
 ```bash
-argus --version
+argus version
 argus --help
 ```
 
