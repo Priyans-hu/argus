@@ -179,24 +179,26 @@ func (d *PatternDetector) detectLoggingPatterns() []types.Convention {
 	var conventions []types.Convention
 
 	// Logging patterns by language/framework with allowed extensions and,
-	// for libraries their calls do not name, the package that must be
-	// declared. Order matters: several patterns match the same lines (winston
-	// and pino), and a tie goes to the earlier entry.
+	// for libraries their calls do not name, evidence: a declared package or
+	// an import in the same file. Order matters: several patterns match the
+	// same lines (winston and pino), and a tie goes to the earlier entry.
 	logPatterns := []struct {
 		name       string
 		pattern    *regexp.Regexp
-		extensions []string // allowed file extensions, empty means any
-		packages   []string // evidence, empty when the call names the library
+		extensions []string       // allowed file extensions, empty means any
+		packages   []string       // a declared package that is evidence
+		imports    *regexp.Regexp // an import the file must also have
 	}{
-		{"console", regexp.MustCompile(`console\.(log|info|warn|error|debug)\(`), []string{".js", ".ts", ".jsx", ".tsx"}, nil},
-		{"winston", regexp.MustCompile(`(logger|log)\.(info|warn|error|debug)\(`), []string{".js", ".ts", ".jsx", ".tsx"}, []string{"winston"}},
-		{"pino", regexp.MustCompile(`(logger|log)\.(info|warn|error|debug|fatal)\(`), []string{".js", ".ts", ".jsx", ".tsx"}, []string{"pino"}},
-		{"python", regexp.MustCompile(`logging\.(info|warning|error|debug|critical)\(`), []string{".py"}, nil},
-		{"python-logger", regexp.MustCompile(`logger\.(info|warning|error|debug|critical)\(`), []string{".py"}, nil},
-		{"go-log", regexp.MustCompile(`log\.(Print|Printf|Println|Fatal|Panic)\(`), []string{".go"}, nil},
-		{"go-slog", regexp.MustCompile(`slog\.(Info|Warn|Error|Debug)\(`), []string{".go"}, nil},
-		{"rust-log", regexp.MustCompile(`(info|warn|error|debug|trace)!\(`), []string{".rs"}, nil},
-		{"ruby", regexp.MustCompile(`(logger|Rails\.logger)\.(info|warn|error|debug)\(`), []string{".rb"}, nil},
+		{"console", regexp.MustCompile(`console\.(log|info|warn|error|debug)\(`), []string{".js", ".ts", ".jsx", ".tsx"}, nil, nil},
+		{"winston", regexp.MustCompile(`(logger|log)\.(info|warn|error|debug)\(`), []string{".js", ".ts", ".jsx", ".tsx"}, []string{"winston"}, nil},
+		{"pino", regexp.MustCompile(`(logger|log)\.(info|warn|error|debug|fatal)\(`), []string{".js", ".ts", ".jsx", ".tsx"}, []string{"pino"}, nil},
+		{"python", regexp.MustCompile(`logging\.(info|warning|error|debug|critical)\(`), []string{".py"}, nil, nil},
+		{"python-logger", regexp.MustCompile(`logger\.(info|warning|error|debug|critical)\(`), []string{".py"}, nil, regexp.MustCompile(`(?m)^\s*(import|from) logging\b`)},
+		{"loguru", regexp.MustCompile(`(?m)^\s*(import loguru\b|from loguru import)`), []string{".py"}, nil, nil},
+		{"go-log", regexp.MustCompile(`log\.(Print|Printf|Println|Fatal|Panic)\(`), []string{".go"}, nil, nil},
+		{"go-slog", regexp.MustCompile(`slog\.(Info|Warn|Error|Debug)\(`), []string{".go"}, nil, nil},
+		{"rust-log", regexp.MustCompile(`(info|warn|error|debug|trace)!\(`), []string{".rs"}, []string{"log", "tracing"}, nil},
+		{"ruby", regexp.MustCompile(`(logger|Rails\.logger)\.(info|warn|error|debug)\(`), []string{".rb"}, nil, nil},
 	}
 
 	counts := make(map[string]int)
@@ -235,7 +237,9 @@ func (d *PatternDetector) detectLoggingPatterns() []types.Convention {
 				}
 			}
 
-			if (len(logPat.packages) == 0 || d.deps.declares(logPat.packages)) && logPat.pattern.MatchString(contentStr) {
+			evidenced := (len(logPat.packages) == 0 || d.deps.declares(logPat.packages)) &&
+				(logPat.imports == nil || logPat.imports.MatchString(contentStr))
+			if evidenced && logPat.pattern.MatchString(contentStr) {
 				counts[logPat.name]++
 			}
 		}
@@ -266,7 +270,8 @@ func (d *PatternDetector) detectLoggingPatterns() []types.Convention {
 			"python":   "Python logging module",
 			"go-log":   "Go standard library log package",
 			"go-slog":  "Go structured logging (slog)",
-			"rust-log": "Rust log crate macros",
+			"loguru":   "Loguru logging",
+			"rust-log": "Rust log/tracing macros",
 			"ruby":     "Ruby Logger / Rails.logger",
 		}
 

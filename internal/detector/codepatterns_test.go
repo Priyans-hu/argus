@@ -437,24 +437,43 @@ func TestLimitSlice(t *testing.T) {
 	}
 }
 
-// intrinsicRows are the JS rows reported without a declared dependency.
+// intrinsicRows are the rows reported without a declared dependency.
 var intrinsicRows = map[string]string{
+	// JS
 	"describe(": "framework-agnostic", "it(": "framework-agnostic", "test(": "framework-agnostic", "expect(": "framework-agnostic",
 	"fetch(": "platform", "<form": "platform", "className=": "platform", "module.css": "bundler",
+	// Python
+	"urllib": "stdlib", "def test_": "language", "unittest": "stdlib", "TestCase": "stdlib", "@patch": "stdlib",
+	"from typing import": "import", "Optional[": "stdlib", "List[": "stdlib", "Dict[": "stdlib", "Union[": "stdlib",
+	"Callable[": "stdlib", "TypeVar": "stdlib", "@dataclass": "stdlib", "@dataclasses": "stdlib",
+	"async def": "language", "await ": "language", "asyncio.": "stdlib", "argparse.": "stdlib",
+	"import pandas": "import", "import numpy": "import", "import matplotlib": "import", "import seaborn": "import",
+	"import sklearn": "import", "import torch": "import", "import tensorflow": "import", "import keras": "import",
+	"import transformers": "import", "import langchain": "import", "import openai": "import", "import anthropic": "import",
+	"import logging": "stdlib", "logging.getLogger": "stdlib",
+	"from celery": "import", "import rq": "import", "import dramatiq": "import", "import huey": "import",
+	// Rust
+	"async fn": "language", ".await": "language", "Pin<": "std", "poll(": "std",
+	"Result<": "language", "?;": "language", ".unwrap()": "language", ".expect(": "language", ".unwrap_or(": "language", ".map_err(": "language",
+	"#[test]": "language", "#[cfg(test)]": "language", "assert!": "language", "assert_eq!": "language", "assert_ne!": "language",
+	"std::thread": "std", "Arc<": "std", "Mutex<": "std", "RwLock<": "std", "mpsc::": "std",
 }
 
 var jsTables = []keywordTable{reactStateTable, vueStateTable, jsDataFetchingTable, jsRoutingTable, jsFormsTable,
 	jsTestingTable, jsStylingTable, jsAuthTable, apiTable, jsDatabaseTable, jsUtilitiesTable}
+
+var allTables = slices.Concat(jsTables, []keywordTable{pyDataFetchingTable, pyTestingTable, pyAuthTable, pyDatabaseTable},
+	pythonTables, rustTables)
 
 func allPatterns(cp *types.CodePatterns) []types.PatternInfo {
 	return slices.Concat(cp.StateManagement, cp.DataFetching, cp.Routing, cp.Forms, cp.Testing, cp.Styling,
 		cp.Authentication, cp.APIPatterns, cp.DatabaseORM, cp.Utilities, cp.GoPatterns, cp.RustPatterns, cp.PythonPatterns)
 }
 
-// Every JS row is reported with one of its packages declared and, unless it
-// is intrinsic, not without.
-func TestEveryJSRowNeedsItsPackage(t *testing.T) {
-	for _, table := range jsTables {
+// Every JS, Python and Rust row is reported with one of its packages
+// declared and, unless it is intrinsic, not without.
+func TestEveryRowNeedsItsPackage(t *testing.T) {
+	for _, table := range allTables {
 		for _, row := range table.rows {
 			_, intrinsic := intrinsicRows[row.keyword]
 			if intrinsic != (len(row.packages) == 0) {
@@ -521,5 +540,29 @@ func TestGenericWordsReportNothing(t *testing.T) {
 	})
 	if all := allPatterns(got); len(all) > 0 {
 		t.Errorf("patterns from generic words: %+v", all)
+	}
+}
+
+func TestPythonEvidence(t *testing.T) {
+	content := "import requests\nimport pandas\n\nrequests.get(\"x\")\n"
+	for _, tt := range []struct {
+		pkg  string
+		want []string
+	}{
+		{"requirements.txt", []string{"import pandas"}},
+		{"requirements.txt=requests", []string{"import pandas", "requests."}},
+	} {
+		files := map[string]string{"app/a.py": content}
+		if name, deps, ok := strings.Cut(tt.pkg, "="); ok {
+			files[name] = deps + "\n"
+		}
+		var got []string
+		for _, p := range allPatterns(detectPatterns(t, files)) {
+			got = append(got, p.Name)
+		}
+		slices.Sort(got)
+		if !reflect.DeepEqual(got, tt.want) {
+			t.Errorf("%s: patterns %v, want %v", tt.pkg, got, tt.want)
+		}
 	}
 }

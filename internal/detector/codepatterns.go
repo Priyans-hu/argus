@@ -283,6 +283,209 @@ var jsUtilitiesTable = keywordTable{"utilities", jsExts, nonTestFile, []keywordR
 	{"ramda", "Ramda FP utilities", []string{"ramda"}},
 }}
 
+// Python rows name PEP 503 package names; rows that are import statements,
+// standard library or syntax are intrinsic.
+var pyExts = []string{".py"}
+
+var pyDataFetchingTable = keywordTable{"data-fetching", pyExts, nonTestFile, []keywordRow{
+	{"requests.", "Python requests library", []string{"requests"}},
+	{"httpx.", "HTTPX async HTTP client", []string{"httpx"}},
+	{"aiohttp.", "aiohttp async HTTP client", []string{"aiohttp"}},
+	{"urllib", "Python urllib", nil},
+}}
+
+// pyTestingTable is read from test files only.
+var pyTestingTable = keywordTable{"testing", pyExts, IsTestFile, []keywordRow{
+	{"pytest", "Pytest framework", []string{"pytest"}},
+	{"def test_", "Pytest test function", nil},
+	{"unittest", "Python unittest", nil},
+	{"TestCase", "unittest TestCase class", nil},
+	{"@pytest.fixture", "Pytest fixture", []string{"pytest"}},
+	{"mock.", "Python mocking", []string{"pytest-mock", "mock"}},
+	{"@patch", "unittest mock patch", nil},
+}}
+
+var pyAuthTable = keywordTable{"auth", pyExts, nonTestFile, []keywordRow{
+	{"login_required", "Flask login decorator", []string{"flask-login", "django"}},
+	{"current_user", "Flask-Login current user", []string{"flask-login"}},
+	{"@jwt_required", "JWT required decorator", []string{"flask-jwt-extended"}},
+	{"OAuth", "OAuth integration", []string{"authlib", "oauthlib"}},
+	{"HTTPBearer", "FastAPI HTTP Bearer auth", []string{"fastapi"}},
+	{"Depends(", "FastAPI dependency injection", []string{"fastapi"}},
+}}
+
+var pyDatabaseTable = keywordTable{"database", pyExts, nonTestFile, []keywordRow{
+	{"SQLAlchemy", "SQLAlchemy ORM", []string{"sqlalchemy", "flask-sqlalchemy"}},
+	{"Base.metadata", "SQLAlchemy models", []string{"sqlalchemy", "flask-sqlalchemy"}},
+	{"django.db", "Django ORM", []string{"django"}},
+	{"models.Model", "Django model", []string{"django"}},
+	{"tortoise", "Tortoise ORM", []string{"tortoise-orm"}},
+	{"peewee", "Peewee ORM", []string{"peewee"}},
+	{"mongoengine", "MongoEngine ODM", []string{"mongoengine"}},
+	{"motor", "Motor async MongoDB", []string{"motor"}},
+}}
+
+var pythonTables = []keywordTable{
+	{"python-typing", pyExts, nonTestFile, []keywordRow{
+		{"from typing import", "Python typing imports", nil},
+		{"Optional[", "Optional type hint", nil},
+		{"List[", "List type hint", nil},
+		{"Dict[", "Dict type hint", nil},
+		{"Union[", "Union type hint", nil},
+		{"Callable[", "Callable type hint", nil},
+		{"TypeVar", "Generic type variable", nil},
+		{"@dataclass", "Dataclass decorator", nil},
+		{"@dataclasses", "Dataclass module", nil},
+		{"pydantic", "Pydantic validation", []string{"pydantic"}},
+		{"BaseModel", "Pydantic BaseModel", []string{"pydantic"}},
+	}},
+	{"python-async", pyExts, nonTestFile, []keywordRow{
+		{"async def", "Async function definition", nil},
+		{"await ", "Await expression", nil},
+		{"asyncio.", "Asyncio module", nil},
+		{"aiohttp.", "Aiohttp async HTTP", []string{"aiohttp"}},
+		{"httpx.Async", "HTTPX async client", []string{"httpx"}},
+		{"anyio.", "AnyIO async library", []string{"anyio"}},
+		{"trio.", "Trio async library", []string{"trio"}},
+	}},
+	{"python-data-science", pyExts, nonTestFile, []keywordRow{
+		{"import pandas", "Pandas data analysis", nil},
+		{"import numpy", "NumPy numerical computing", nil},
+		{"import matplotlib", "Matplotlib plotting", nil},
+		{"import seaborn", "Seaborn visualization", nil},
+		{"import sklearn", "Scikit-learn ML", nil},
+		{"import torch", "PyTorch deep learning", nil},
+		{"import tensorflow", "TensorFlow deep learning", nil},
+		{"import keras", "Keras deep learning", nil},
+		{"import transformers", "Hugging Face Transformers", nil},
+		{"import langchain", "LangChain LLM framework", nil},
+		{"import openai", "OpenAI API", nil},
+		{"import anthropic", "Anthropic API", nil},
+	}},
+	{"python-cli", pyExts, nonTestFile, []keywordRow{
+		{"argparse.", "Argparse CLI", nil},
+		{"click.", "Click CLI framework", []string{"click"}},
+		{"@click.", "Click decorator", []string{"click"}},
+		{"typer.", "Typer CLI framework", []string{"typer"}},
+		{"fire.", "Python Fire CLI", []string{"fire"}},
+		{"rich.", "Rich terminal formatting", []string{"rich"}},
+	}},
+	{"python-logging", pyExts, nonTestFile, []keywordRow{
+		{"import logging", "Python logging module", nil},
+		{"logging.getLogger", "Logger instance", nil},
+		{"structlog.", "Structlog structured logging", []string{"structlog"}},
+		{"loguru.", "Loguru logging", []string{"loguru"}},
+	}},
+	{"python-tasks", pyExts, nonTestFile, []keywordRow{
+		{"from celery", "Celery task queue", nil},
+		{"@celery.task", "Celery task decorator", []string{"celery"}},
+		{"import rq", "RQ (Redis Queue)", nil},
+		{"import dramatiq", "Dramatiq task processing", nil},
+		{"import huey", "Huey task queue", nil},
+	}},
+}
+
+// Rust rows name crates (lower-case, "-" for "_"); syntax and standard
+// library rows are intrinsic.
+var rsExts = []string{".rs"}
+
+var (
+	actixRocketCrates = []string{"actix-web", "rocket"}
+	logCrates         = []string{"log", "tracing"}
+)
+
+var rustTables = []keywordTable{
+	{"rust-async", rsExts, nonTestFile, []keywordRow{
+		{"tokio::", "Tokio async runtime", []string{"tokio"}},
+		{"#[tokio::main]", "Tokio main entry point", []string{"tokio"}},
+		{"#[tokio::test]", "Tokio async test", []string{"tokio"}},
+		{"async_std::", "async-std runtime", []string{"async-std"}},
+		{"async fn", "Async function definition", nil},
+		{".await", "Await syntax", nil},
+		{"futures::", "Futures crate utilities", []string{"futures"}},
+		{"Pin<", "Pinned futures", nil},
+		{"poll(", "Future polling", nil},
+	}},
+	{"rust-web", rsExts, nonTestFile, []keywordRow{
+		{"actix_web::", "Actix-web framework", []string{"actix-web"}},
+		{"#[get(", "Actix/Rocket route macro", actixRocketCrates},
+		{"#[post(", "Actix/Rocket POST route", actixRocketCrates},
+		{"axum::", "Axum web framework", []string{"axum"}},
+		{"Router::new()", "Axum router", []string{"axum"}},
+		{"rocket::", "Rocket web framework", []string{"rocket"}},
+		{"#[launch]", "Rocket launch macro", []string{"rocket"}},
+		{"warp::", "Warp web framework", []string{"warp"}},
+		{"hyper::", "Hyper HTTP library", []string{"hyper"}},
+	}},
+	{"rust-serde", rsExts, nonTestFile, []keywordRow{
+		{"serde::", "Serde serialization", []string{"serde"}},
+		{"#[derive(Serialize", "Serde Serialize derive", []string{"serde"}},
+		{"#[derive(Deserialize", "Serde Deserialize derive", []string{"serde"}},
+		{"serde_json::", "Serde JSON", []string{"serde-json"}},
+		{"serde_yaml::", "Serde YAML", []string{"serde-yaml"}},
+		{"toml::", "TOML parsing", []string{"toml"}},
+	}},
+	{"rust-error", rsExts, nonTestFile, []keywordRow{
+		{"anyhow::", "Anyhow error handling", []string{"anyhow"}},
+		{"thiserror::", "thiserror derive macros", []string{"thiserror"}},
+		{"#[error(", "thiserror error attribute", []string{"thiserror"}},
+		{"Result<", "Result type usage", nil},
+		{"?;", "Question mark operator", nil},
+		{".unwrap()", "Unwrap (panic on error)", nil},
+		{".expect(", "Expect (panic with message)", nil},
+		{".unwrap_or(", "Unwrap with default", nil},
+		{".map_err(", "Error mapping", nil},
+	}},
+	{"rust-cli", rsExts, nonTestFile, []keywordRow{
+		{"clap::", "Clap CLI framework", []string{"clap"}},
+		{"#[derive(Parser", "Clap derive Parser", []string{"clap"}},
+		{"#[command(", "Clap command attribute", []string{"clap"}},
+		{"#[arg(", "Clap argument attribute", []string{"clap"}},
+		{"structopt::", "StructOpt (deprecated, use clap)", []string{"structopt"}},
+		{"argh::", "Argh CLI parser", []string{"argh"}},
+	}},
+	{"rust-database", rsExts, nonTestFile, []keywordRow{
+		{"sqlx::", "SQLx async database", []string{"sqlx"}},
+		{"diesel::", "Diesel ORM", []string{"diesel"}},
+		{"sea_orm::", "SeaORM async ORM", []string{"sea-orm"}},
+		{"rusqlite::", "Rusqlite SQLite", []string{"rusqlite"}},
+		{"tokio_postgres::", "Tokio PostgreSQL", []string{"tokio-postgres"}},
+		{"mongodb::", "MongoDB driver", []string{"mongodb"}},
+		{"redis::", "Redis client", []string{"redis"}},
+	}},
+	// read from any file: unit tests live in #[cfg(test)] modules beside the code
+	{"rust-testing", rsExts, anyFile, []keywordRow{
+		{"#[test]", "Rust unit test", nil},
+		{"#[cfg(test)]", "Test module configuration", nil},
+		{"assert!", "Assert macro", nil},
+		{"assert_eq!", "Assert equality macro", nil},
+		{"assert_ne!", "Assert not equal macro", nil},
+		{"mockall::", "Mockall mocking", []string{"mockall"}},
+		{"#[mock]", "Mockall mock attribute", []string{"mockall"}},
+		{"proptest::", "Property-based testing", []string{"proptest"}},
+	}},
+	{"rust-concurrency", rsExts, nonTestFile, []keywordRow{
+		{"std::thread", "Standard library threads", nil},
+		{"Arc<", "Atomic reference counting", nil},
+		{"Mutex<", "Mutex synchronization", nil},
+		{"RwLock<", "Read-write lock", nil},
+		{"mpsc::", "Multi-producer single-consumer channels", nil},
+		{"crossbeam::", "Crossbeam concurrency utilities", []string{"crossbeam"}},
+		{"rayon::", "Rayon data parallelism", []string{"rayon"}},
+		{"parking_lot::", "Parking lot synchronization", []string{"parking-lot"}},
+	}},
+	{"rust-logging", rsExts, nonTestFile, []keywordRow{
+		{"log::", "Log crate", []string{"log"}},
+		{"tracing::", "Tracing framework", []string{"tracing"}},
+		{"#[instrument]", "Tracing instrument macro", []string{"tracing"}},
+		{"info!", "Info log macro", logCrates},
+		{"debug!", "Debug log macro", logCrates},
+		{"error!", "Error log macro", logCrates},
+		{"warn!", "Warning log macro", logCrates},
+		{"env_logger::", "Environment logger", []string{"env-logger"}},
+	}},
+}
+
 // bareCalls are keywords that also must not follow '.', so that method calls
 // such as Object.create( or foo.it( do not count.
 var bareCalls = map[string]bool{
@@ -382,7 +585,6 @@ func (d *CodePatternDetector) scanForKeywordsWithImports(patterns []PatternWithI
 // detectStateManagement detects state management patterns
 func (d *CodePatternDetector) detectStateManagement() []types.PatternInfo {
 	patterns := slices.Concat(d.report(reactStateTable), d.report(vueStateTable))
-	pyExts := []string{".py"}
 
 	// Python state patterns - use import-aware scanning to reduce false positives
 	pyPatterns := []PatternWithImport{
@@ -415,30 +617,8 @@ func (d *CodePatternDetector) detectStateManagement() []types.PatternInfo {
 
 // detectDataFetching detects data fetching patterns
 func (d *CodePatternDetector) detectDataFetching() []types.PatternInfo {
-	patterns := d.report(jsDataFetchingTable)
-	pyExts := []string{".py"}
+	patterns := slices.Concat(d.report(jsDataFetchingTable), d.report(pyDataFetchingTable))
 	goExts := []string{".go"}
-
-	// Python data fetching
-	pyKeywords := map[string]string{
-		"requests.": "Python requests library",
-		"httpx.":    "HTTPX async HTTP client",
-		"aiohttp.":  "aiohttp async HTTP client",
-		"urllib":    "Python urllib",
-	}
-
-	pyResults := d.scanForKeywords(keys(pyKeywords), pyExts)
-	for kw, files := range pyResults {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "data-fetching",
-				Description: pyKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
 
 	// Go HTTP clients
 	goKeywords := map[string]string{
@@ -466,7 +646,6 @@ func (d *CodePatternDetector) detectDataFetching() []types.PatternInfo {
 // detectRouting detects routing patterns
 func (d *CodePatternDetector) detectRouting() []types.PatternInfo {
 	patterns := d.report(jsRoutingTable)
-	pyExts := []string{".py"}
 	goExts := []string{".go"}
 
 	// Python routing - use import-aware scanning to reduce false positives
@@ -528,34 +707,9 @@ func (d *CodePatternDetector) detectForms() []types.PatternInfo {
 
 // detectTesting detects testing patterns
 func (d *CodePatternDetector) detectTesting() []types.PatternInfo {
-	patterns := d.report(jsTestingTable)
-	pyExts := []string{".py"}
+	patterns := slices.Concat(d.report(jsTestingTable), d.report(pyTestingTable))
 	goTestExts := []string{"_test.go"}
 	goExts := []string{".go"}
-
-	// Python testing, in test files only
-	pyKeywords := map[string]string{
-		"pytest":          "Pytest framework",
-		"def test_":       "Pytest test function",
-		"unittest":        "Python unittest",
-		"TestCase":        "unittest TestCase class",
-		"@pytest.fixture": "Pytest fixture",
-		"mock.":           "Python mocking",
-		"@patch":          "unittest mock patch",
-	}
-
-	pyResults := d.scanTestKeywords(keys(pyKeywords), pyExts)
-	for kw, files := range pyResults {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "testing",
-				Description: pyKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
 
 	// Go testing - scan only _test.go files, consolidate similar patterns
 	goTestKeywords := []string{"func Test", "t.Run(", "t.Error", "t.Fatal"}
@@ -641,31 +795,7 @@ func (d *CodePatternDetector) detectStyling() []types.PatternInfo {
 
 // detectAuthentication detects auth patterns
 func (d *CodePatternDetector) detectAuthentication() []types.PatternInfo {
-	patterns := d.report(jsAuthTable)
-	pyExts := []string{".py"}
-
-	// Python auth
-	pyKeywords := map[string]string{
-		"login_required": "Flask login decorator",
-		"current_user":   "Flask-Login current user",
-		"@jwt_required":  "JWT required decorator",
-		"OAuth":          "OAuth integration",
-		"HTTPBearer":     "FastAPI HTTP Bearer auth",
-		"Depends(":       "FastAPI dependency injection",
-	}
-
-	pyResults := d.scanForKeywords(keys(pyKeywords), pyExts)
-	for kw, files := range pyResults {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "auth",
-				Description: pyKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
+	patterns := slices.Concat(d.report(jsAuthTable), d.report(pyAuthTable))
 
 	return patterns
 }
@@ -677,34 +807,8 @@ func (d *CodePatternDetector) detectAPIPatterns() []types.PatternInfo {
 
 // detectDatabasePatterns detects database/ORM patterns
 func (d *CodePatternDetector) detectDatabasePatterns() []types.PatternInfo {
-	patterns := d.report(jsDatabaseTable)
-	pyExts := []string{".py"}
+	patterns := slices.Concat(d.report(jsDatabaseTable), d.report(pyDatabaseTable))
 	goExts := []string{".go"}
-
-	// Python ORMs
-	pyKeywords := map[string]string{
-		"SQLAlchemy":    "SQLAlchemy ORM",
-		"Base.metadata": "SQLAlchemy models",
-		"django.db":     "Django ORM",
-		"models.Model":  "Django model",
-		"tortoise":      "Tortoise ORM",
-		"peewee":        "Peewee ORM",
-		"mongoengine":   "MongoEngine ODM",
-		"motor":         "Motor async MongoDB",
-	}
-
-	pyResults := d.scanForKeywords(keys(pyKeywords), pyExts)
-	for kw, files := range pyResults {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "database",
-				Description: pyKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
 
 	// Go standard SQL; Go database libraries come from the Go AST detector
 	if files := d.scanForKeywords([]string{"sql.Open("}, goExts)["sql.Open("]; len(files) > 0 {
@@ -806,386 +910,18 @@ func (d *CodePatternDetector) detectGoPatterns() []types.PatternInfo {
 // detectRustPatterns detects Rust-specific patterns
 func (d *CodePatternDetector) detectRustPatterns() []types.PatternInfo {
 	var patterns []types.PatternInfo
-	rsExts := []string{".rs"}
-
-	// Async runtime
-	asyncKeywords := map[string]string{
-		"tokio::":        "Tokio async runtime",
-		"#[tokio::main]": "Tokio main entry point",
-		"#[tokio::test]": "Tokio async test",
-		"async_std::":    "async-std runtime",
-		"async fn":       "Async function definition",
-		".await":         "Await syntax",
-		"futures::":      "Futures crate utilities",
-		"Pin<":           "Pinned futures",
-		"poll(":          "Future polling",
+	for _, t := range rustTables {
+		patterns = append(patterns, d.report(t)...)
 	}
-
-	asyncResults := d.scanForKeywords(keys(asyncKeywords), rsExts)
-	for kw, files := range asyncResults {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "rust-async",
-				Description: asyncKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
-
-	// Web frameworks
-	webKeywords := map[string]string{
-		"actix_web::":   "Actix-web framework",
-		"#[get(":        "Actix/Rocket route macro",
-		"#[post(":       "Actix/Rocket POST route",
-		"axum::":        "Axum web framework",
-		"Router::new()": "Axum router",
-		"rocket::":      "Rocket web framework",
-		"#[launch]":     "Rocket launch macro",
-		"warp::":        "Warp web framework",
-		"hyper::":       "Hyper HTTP library",
-	}
-
-	webResults := d.scanForKeywords(keys(webKeywords), rsExts)
-	for kw, files := range webResults {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "rust-web",
-				Description: webKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
-
-	// Serialization
-	serdeKeywords := map[string]string{
-		"serde::":              "Serde serialization",
-		"#[derive(Serialize":   "Serde Serialize derive",
-		"#[derive(Deserialize": "Serde Deserialize derive",
-		"serde_json::":         "Serde JSON",
-		"serde_yaml::":         "Serde YAML",
-		"toml::":               "TOML parsing",
-	}
-
-	serdeResults := d.scanForKeywords(keys(serdeKeywords), rsExts)
-	for kw, files := range serdeResults {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "rust-serde",
-				Description: serdeKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
-
-	// Error handling
-	errorKeywords := map[string]string{
-		"anyhow::":    "Anyhow error handling",
-		"thiserror::": "thiserror derive macros",
-		"#[error(":    "thiserror error attribute",
-		"Result<":     "Result type usage",
-		"?;":          "Question mark operator",
-		".unwrap()":   "Unwrap (panic on error)",
-		".expect(":    "Expect (panic with message)",
-		".unwrap_or(": "Unwrap with default",
-		".map_err(":   "Error mapping",
-	}
-
-	errorResults := d.scanForKeywords(keys(errorKeywords), rsExts)
-	for kw, files := range errorResults {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "rust-error",
-				Description: errorKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
-
-	// CLI
-	cliKeywords := map[string]string{
-		"clap::":          "Clap CLI framework",
-		"#[derive(Parser": "Clap derive Parser",
-		"#[command(":      "Clap command attribute",
-		"#[arg(":          "Clap argument attribute",
-		"structopt::":     "StructOpt (deprecated, use clap)",
-		"argh::":          "Argh CLI parser",
-	}
-
-	cliResults := d.scanForKeywords(keys(cliKeywords), rsExts)
-	for kw, files := range cliResults {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "rust-cli",
-				Description: cliKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
-
-	// Database
-	dbKeywords := map[string]string{
-		"sqlx::":           "SQLx async database",
-		"diesel::":         "Diesel ORM",
-		"sea_orm::":        "SeaORM async ORM",
-		"rusqlite::":       "Rusqlite SQLite",
-		"tokio_postgres::": "Tokio PostgreSQL",
-		"mongodb::":        "MongoDB driver",
-		"redis::":          "Redis client",
-	}
-
-	dbResults := d.scanForKeywords(keys(dbKeywords), rsExts)
-	for kw, files := range dbResults {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "rust-database",
-				Description: dbKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
-
-	// Testing, in any file: unit tests live in #[cfg(test)] modules beside the code
-	testKeywords := map[string]string{
-		"#[test]":      "Rust unit test",
-		"#[cfg(test)]": "Test module configuration",
-		"assert!":      "Assert macro",
-		"assert_eq!":   "Assert equality macro",
-		"assert_ne!":   "Assert not equal macro",
-		"mockall::":    "Mockall mocking",
-		"#[mock]":      "Mockall mock attribute",
-		"proptest::":   "Property-based testing",
-	}
-
-	testResults := d.scanKeywords(keys(testKeywords), rsExts, anyFile)
-	for kw, files := range testResults {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "rust-testing",
-				Description: testKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
-
-	// Concurrency
-	concKeywords := map[string]string{
-		"std::thread":   "Standard library threads",
-		"Arc<":          "Atomic reference counting",
-		"Mutex<":        "Mutex synchronization",
-		"RwLock<":       "Read-write lock",
-		"mpsc::":        "Multi-producer single-consumer channels",
-		"crossbeam::":   "Crossbeam concurrency utilities",
-		"rayon::":       "Rayon data parallelism",
-		"parking_lot::": "Parking lot synchronization",
-	}
-
-	concResults := d.scanForKeywords(keys(concKeywords), rsExts)
-	for kw, files := range concResults {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "rust-concurrency",
-				Description: concKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
-
-	// Logging and tracing
-	logKeywords := map[string]string{
-		"log::":         "Log crate",
-		"tracing::":     "Tracing framework",
-		"#[instrument]": "Tracing instrument macro",
-		"info!":         "Info log macro",
-		"debug!":        "Debug log macro",
-		"error!":        "Error log macro",
-		"warn!":         "Warning log macro",
-		"env_logger::":  "Environment logger",
-	}
-
-	logResults := d.scanForKeywords(keys(logKeywords), rsExts)
-	for kw, files := range logResults {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "rust-logging",
-				Description: logKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
-
 	return patterns
 }
 
 // detectPythonPatterns detects Python-specific patterns beyond Flask/FastAPI
 func (d *CodePatternDetector) detectPythonPatterns() []types.PatternInfo {
 	var patterns []types.PatternInfo
-	pyExts := []string{".py"}
-
-	// Type hints
-	typeKeywords := map[string]string{
-		"from typing import": "Python typing imports",
-		"Optional[":          "Optional type hint",
-		"List[":              "List type hint",
-		"Dict[":              "Dict type hint",
-		"Union[":             "Union type hint",
-		"Callable[":          "Callable type hint",
-		"TypeVar":            "Generic type variable",
-		"@dataclass":         "Dataclass decorator",
-		"@dataclasses":       "Dataclass module",
-		"pydantic":           "Pydantic validation",
-		"BaseModel":          "Pydantic BaseModel",
+	for _, t := range pythonTables {
+		patterns = append(patterns, d.report(t)...)
 	}
-
-	typeResults := d.scanForKeywords(keys(typeKeywords), pyExts)
-	for kw, files := range typeResults {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "python-typing",
-				Description: typeKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
-
-	// Async patterns
-	asyncKeywords := map[string]string{
-		"async def":   "Async function definition",
-		"await ":      "Await expression",
-		"asyncio.":    "Asyncio module",
-		"aiohttp.":    "Aiohttp async HTTP",
-		"httpx.Async": "HTTPX async client",
-		"anyio.":      "AnyIO async library",
-		"trio.":       "Trio async library",
-	}
-
-	asyncResults := d.scanForKeywords(keys(asyncKeywords), pyExts)
-	for kw, files := range asyncResults {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "python-async",
-				Description: asyncKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
-
-	// Data science / ML
-	dsKeywords := map[string]string{
-		"import pandas":       "Pandas data analysis",
-		"import numpy":        "NumPy numerical computing",
-		"import matplotlib":   "Matplotlib plotting",
-		"import seaborn":      "Seaborn visualization",
-		"import sklearn":      "Scikit-learn ML",
-		"import torch":        "PyTorch deep learning",
-		"import tensorflow":   "TensorFlow deep learning",
-		"import keras":        "Keras deep learning",
-		"import transformers": "Hugging Face Transformers",
-		"import langchain":    "LangChain LLM framework",
-		"import openai":       "OpenAI API",
-		"import anthropic":    "Anthropic API",
-	}
-
-	dsResults := d.scanForKeywords(keys(dsKeywords), pyExts)
-	for kw, files := range dsResults {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "python-data-science",
-				Description: dsKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
-
-	// CLI patterns
-	cliKeywords := map[string]string{
-		"argparse.": "Argparse CLI",
-		"click.":    "Click CLI framework",
-		"@click.":   "Click decorator",
-		"typer.":    "Typer CLI framework",
-		"fire.":     "Python Fire CLI",
-		"rich.":     "Rich terminal formatting",
-	}
-
-	cliResults := d.scanForKeywords(keys(cliKeywords), pyExts)
-	for kw, files := range cliResults {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "python-cli",
-				Description: cliKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
-
-	// Logging and debugging
-	logKeywords := map[string]string{
-		"import logging":    "Python logging module",
-		"logging.getLogger": "Logger instance",
-		"structlog.":        "Structlog structured logging",
-		"loguru.":           "Loguru logging",
-	}
-
-	logResults := d.scanForKeywords(keys(logKeywords), pyExts)
-	for kw, files := range logResults {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "python-logging",
-				Description: logKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
-
-	// Task queues and background jobs
-	taskKeywords := map[string]string{
-		"from celery":     "Celery task queue",
-		"@celery.task":    "Celery task decorator",
-		"import rq":       "RQ (Redis Queue)",
-		"import dramatiq": "Dramatiq task processing",
-		"import huey":     "Huey task queue",
-	}
-
-	taskResults := d.scanForKeywords(keys(taskKeywords), pyExts)
-	for kw, files := range taskResults {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "python-tasks",
-				Description: taskKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
-
 	return patterns
 }
 
