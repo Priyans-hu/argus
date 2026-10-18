@@ -74,3 +74,37 @@ func TestAgentsListNoSkills(t *testing.T) {
 		}
 	}
 }
+
+func TestArchitectureRuleHasOneFencePair(t *testing.T) {
+	analysis := renderFixture()
+	analysis.ArchitectureInfo = &types.ArchitectureInfo{
+		Style:      "Layered",
+		EntryPoint: "cmd/app/main.go",
+		Layers:     []types.ArchitectureLayer{{Name: "internal", Packages: []string{"api"}}},
+		Diagram:    "```\n  ┌─────┐\n  │ api │\n  └─────┘\n```\n",
+	}
+	content, ok := renderClaudeCode(t, analysis)[".claude/rules/architecture.md"]
+	if !ok {
+		t.Fatal("architecture.md was not generated")
+	}
+	lines := strings.Split(content, "\n")
+	for i := 1; i < len(lines); i++ {
+		if strings.HasPrefix(lines[i-1], "```") && strings.HasPrefix(lines[i], "```") {
+			t.Fatalf("doubled fence at line %d:\n%s", i, content)
+		}
+	}
+	if strings.Count(content, "```") != 2 {
+		t.Errorf("want one fenced diagram:\n%s", content)
+	}
+}
+
+func TestSecurityRuleNeedsAuthPatterns(t *testing.T) {
+	analysis := renderFixture()
+	if _, ok := renderClaudeCode(t, analysis)[".claude/rules/security.md"]; !ok {
+		t.Error("no security rule with auth patterns")
+	}
+	analysis.CodePatterns.Authentication = nil
+	if _, ok := renderClaudeCode(t, analysis)[".claude/rules/security.md"]; ok {
+		t.Error("security rule without auth patterns")
+	}
+}
