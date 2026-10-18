@@ -18,7 +18,7 @@ func TestMergeFailedTempWriteLeavesFileUntouched(t *testing.T) {
 	captureOutput(t)
 	root := t.TempDir()
 	const stale = merger.AutoStartMarker + "\nstale\n" + merger.AutoEndMarker + "\n"
-	writeFiles(t, root, map[string]string{"CLAUDE.md": stale})
+	writeFiles(t, root, map[string]string{"AGENTS.md": stale})
 
 	var old syscall.Rlimit
 	if err := syscall.Getrlimit(syscall.RLIMIT_FSIZE, &old); err != nil {
@@ -31,14 +31,14 @@ func TestMergeFailedTempWriteLeavesFileUntouched(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = syscall.Setrlimit(syscall.RLIMIT_FSIZE, &old) })
 
-	err := generateOutput(root, "", "claude", goAnalysis(), config.DefaultConfig(), false, false)
+	err := generateOutput(root, "", "agents", goAnalysis(), config.DefaultConfig(), false, false)
 	if err == nil {
 		t.Fatal("a write past the size limit succeeded")
 	}
-	if got := readFile(t, root, "CLAUDE.md"); got != stale {
-		t.Errorf("CLAUDE.md changed after a failed write: %q", got)
+	if got := readFile(t, root, "AGENTS.md"); got != stale {
+		t.Errorf("AGENTS.md changed after a failed write: %q", got)
 	}
 	if entries, _ := os.ReadDir(root); len(entries) != 1 {
-		t.Errorf("directory holds %v, want only CLAUDE.md", entries)
+		t.Errorf("directory holds %v, want only AGENTS.md", entries)
 	}
 }

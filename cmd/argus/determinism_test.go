@@ -101,7 +101,7 @@ func initFixtureRepo(t *testing.T, root string) {
 	}
 }
 
-var allFormats = []string{"claude", "claude-code", "cursor", "copilot", "continue"}
+var allFormats = []string{"agents", "claude", "claude-code", "cursor", "copilot", "continue"}
 
 // analyze runs the parallel or the sequential analyzer on root.
 func analyze(t *testing.T, root string, useParallel bool) *types.Analysis {
@@ -161,7 +161,7 @@ func TestOutputIsDeterministic(t *testing.T) {
 				out := t.TempDir()
 				analysis := analyze(t, root, mode.useParallel)
 				writeFormats(t, filepath.Join(out, "full"), analysis, false, allFormats...)
-				writeFormats(t, filepath.Join(out, "compact"), analysis, true, "claude")
+				writeFormats(t, filepath.Join(out, "compact"), analysis, true, "agents")
 
 				tree := snapshotTree(t, out)
 				if i == 0 {
@@ -195,9 +195,9 @@ func TestRescanIsIdempotent(t *testing.T) {
 	}
 
 	clean := writeDeterminismFixture(t)
-	writeFormats(t, clean, analyze(t, clean, true), false, "claude")
-	if got, want := autoSpan(t, first["CLAUDE.md"]), autoSpan(t, readFile(t, clean, "CLAUDE.md")); got != want {
-		t.Errorf("rescanned CLAUDE.md differs from a clean scan:\n%s\n--- clean ---\n%s", got, want)
+	writeFormats(t, clean, analyze(t, clean, true), false, "agents")
+	if got, want := autoSpan(t, first["AGENTS.md"]), autoSpan(t, readFile(t, clean, "AGENTS.md")); got != want {
+		t.Errorf("rescanned AGENTS.md differs from a clean scan:\n%s\n--- clean ---\n%s", got, want)
 	}
 }
 

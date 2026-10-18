@@ -14,6 +14,10 @@ import (
 	"github.com/Priyans-hu/argus/internal/merger"
 )
 
+// shimNotes is the Claude-only CUSTOM block a new CLAUDE.md shim gets below
+// its import of AGENTS.md.
+const shimNotes = merger.CustomStartMarker + "\n<!-- Claude Code only: notes here are not shared with other tools. argus keeps this block when it regenerates. -->\n" + merger.CustomEndMarker
+
 // tempPattern names the temp file writeFile renames over its target; scans
 // and watch skip what it leaves behind (generator.IsGeneratedPath).
 const tempPattern = generator.TempPrefix + "*"
@@ -65,6 +69,9 @@ func writeMerged(root, label, rel string, generated []byte, dryRun bool) error {
 			return nil
 		}
 		content = []byte(merger.WrapContent(string(generated)))
+	}
+	if rel == "CLAUDE.md" && isBlank(existing) {
+		content = append(content, "\n\n"+shimNotes...)
 	}
 	if addCustomBlock && !bytes.Contains(content, []byte(merger.CustomStartMarker)) {
 		content = []byte(merger.AddCustomSectionPlaceholder(string(content)))
@@ -204,6 +211,11 @@ func notifyOnce(shown string) bool {
 // directory; label is the workspace path of a monorepo workspace.
 func displayPath(label, rel string) string {
 	return path.Join(filepath.ToSlash(label), rel)
+}
+
+// isBlank reports whether a file holds nothing but whitespace and a BOM.
+func isBlank(b []byte) bool {
+	return len(bytes.TrimSpace(bytes.TrimPrefix(b, []byte("\ufeff")))) == 0
 }
 
 // sameText reports whether a and b are equal when CRLF is read as LF.

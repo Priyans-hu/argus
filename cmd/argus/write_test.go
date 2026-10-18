@@ -367,7 +367,7 @@ func generate(t *testing.T, root, format string) {
 }
 
 func TestMergeFilesAreMarkedAndStable(t *testing.T) {
-	files := map[string]string{"claude": "CLAUDE.md", "cursor": ".cursorrules", "copilot": ".github/copilot-instructions.md"}
+	files := map[string]string{"agents": "AGENTS.md", "claude": "CLAUDE.md", "cursor": ".cursorrules", "copilot": ".github/copilot-instructions.md"}
 	for format, rel := range files {
 		t.Run(format, func(t *testing.T) {
 			resetFlags(t)
@@ -403,19 +403,19 @@ func TestMergeDefusesMarkerTextFromReadme(t *testing.T) {
 	out, errOut := captureOutput(t)
 	root := t.TempDir()
 	analysis := goAnalysis()
-	analysis.ReadmeContent = &types.ReadmeContent{Features: []string{"Replaces the " + merger.AutoStartMarker + " block"}}
+	analysis.ReadmeContent = &types.ReadmeContent{Description: "Replaces the " + merger.AutoStartMarker + " block."}
 
 	for run := 1; run <= 3; run++ {
 		out.Reset()
-		if err := generateOutput(root, "", "claude", analysis, config.DefaultConfig(), false, false); err != nil {
+		if err := generateOutput(root, "", "agents", analysis, config.DefaultConfig(), false, false); err != nil {
 			t.Fatal(err)
 		}
-		got := readFile(t, root, "CLAUDE.md")
+		got := readFile(t, root, "AGENTS.md")
 		checkMarked(t, got)
-		if !strings.Contains(got, "\n- Replaces the <!--ARGUS:AUTO --> block\n") {
-			t.Errorf("run %d: defused bullet missing:\n%s", run, got)
+		if !strings.Contains(got, "\nReplaces the <!--ARGUS:AUTO --> block.\n") {
+			t.Errorf("run %d: defused description missing:\n%s", run, got)
 		}
-		if run > 1 && out.String() != "✅ CLAUDE.md is up to date\n" {
+		if run > 1 && out.String() != "✅ AGENTS.md is up to date\n" {
 			t.Errorf("run %d printed %q", run, out)
 		}
 	}
@@ -608,8 +608,8 @@ func TestMergeKeepsCRLFFilesCRLF(t *testing.T) {
 	resetFlags(t)
 	out, errOut := captureOutput(t)
 	ref := t.TempDir()
-	generate(t, ref, "claude")
-	block := strings.TrimSuffix(readFile(t, ref, "CLAUDE.md"), "\n")
+	generate(t, ref, "agents")
+	block := strings.TrimSuffix(readFile(t, ref, "AGENTS.md"), "\n")
 
 	const (
 		top   = "# Team rules\r\nKEEP-TOP\r\n\r\n"
@@ -624,16 +624,16 @@ func TestMergeKeepsCRLFFilesCRLF(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			root := t.TempDir()
-			writeFiles(t, root, map[string]string{"CLAUDE.md": top + stale + tt.bottom})
+			writeFiles(t, root, map[string]string{"AGENTS.md": top + stale + tt.bottom})
 			want := top + tt.block + tt.bottom
 			for run := 1; run <= 2; run++ {
 				out.Reset()
-				generate(t, root, "claude")
-				if got := readFile(t, root, "CLAUDE.md"); got != want {
+				generate(t, root, "agents")
+				if got := readFile(t, root, "AGENTS.md"); got != want {
 					t.Errorf("run %d wrote %q, want %q", run, got, want)
 				}
 			}
-			if out.String() != "✅ CLAUDE.md is up to date\n" || errOut.Len() != 0 {
+			if out.String() != "✅ AGENTS.md is up to date\n" || errOut.Len() != 0 {
 				t.Errorf("run 2 printed %q / %q", out, errOut)
 			}
 		})

@@ -81,7 +81,7 @@ type UsageConfig struct {
 // DefaultConfig returns a config with sensible defaults
 func DefaultConfig() *Config {
 	return &Config{
-		Output: []string{"claude"},
+		Output: []string{"agents", "claude"},
 		Ignore: []string{
 			"node_modules",
 			".git",
@@ -115,7 +115,7 @@ func Load(dir string) (*Config, error) {
 
 	// Apply defaults for empty fields
 	if len(cfg.Output) == 0 {
-		cfg.Output = []string{"claude"}
+		cfg.Output = []string{"agents", "claude"}
 	}
 
 	return &cfg, nil
@@ -157,8 +157,10 @@ func ConfigWithComments() string {
 # https://github.com/Priyans-hu/argus
 
 # Output formats to generate
-# Options: claude, claude-code, cursor, copilot, all
+# Options: agents, claude, claude-code, cursor, copilot, all
+# agents writes AGENTS.md; claude writes a CLAUDE.md that imports it
 output:
+  - agents
   - claude
   # - claude-code  # Generate .claude/ directory with agents, commands, rules
   # - cursor
