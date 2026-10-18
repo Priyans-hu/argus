@@ -4,7 +4,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"testing"
+
+	"github.com/Priyans-hu/argus/pkg/types"
 )
 
 func TestGitDetector_DetectCommitConvention(t *testing.T) {
@@ -55,7 +58,7 @@ func TestGitDetector_DetectCommitConvention(t *testing.T) {
 	}
 
 	// Test detection
-	detector := NewGitDetector(tmpDir)
+	detector := NewGitDetectorGoGit(tmpDir)
 	conventions := detector.Detect()
 
 	if conventions == nil {
@@ -148,7 +151,7 @@ func TestGitDetector_DetectBranchConvention(t *testing.T) {
 	}
 
 	// Test detection
-	detector := NewGitDetector(tmpDir)
+	detector := NewGitDetectorGoGit(tmpDir)
 	conventions := detector.Detect()
 
 	if conventions == nil {
@@ -193,7 +196,7 @@ func TestGitDetector_NotGitRepo(t *testing.T) {
 	}
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
-	detector := NewGitDetector(tmpDir)
+	detector := NewGitDetectorGoGit(tmpDir)
 	conventions := detector.Detect()
 
 	if conventions == nil {
@@ -209,7 +212,7 @@ func TestGitDetector_NotGitRepo(t *testing.T) {
 	}
 }
 
-func TestGetTopKeys(t *testing.T) {
+func TestGetTopKeysFromMap(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    map[string]int
@@ -234,29 +237,126 @@ func TestGetTopKeys(t *testing.T) {
 			n:        2,
 			expected: []string{"b", "d"},
 		},
+		{
+			name:     "ties sort by key",
+			input:    map[string]int{"fix": 2, "docs": 1, "feat": 2, "chore": 1, "ci": 1},
+			n:        4,
+			expected: []string{"feat", "fix", "chore", "ci"},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := getTopKeys(tt.input, tt.n)
-			if len(result) != len(tt.expected) {
-				t.Errorf("expected %d items, got %d", len(tt.expected), len(result))
-				return
-			}
-			// For the sorted case, check exact match
-			if tt.name == "more items than n" {
-				for i, v := range tt.expected {
-					if result[i] != v {
-						t.Errorf("expected %s at position %d, got %s", v, i, result[i])
-					}
+			for range 20 {
+				if result := getTopKeysFromMap(tt.input, tt.n); !reflect.DeepEqual(result, tt.expected) {
+					t.Fatalf("getTopKeysFromMap() = %v, want %v", result, tt.expected)
 				}
 			}
 		})
 	}
 }
 
-// runGitCommand runs a git command in the specified directory
+func TestAnalyzeCommitPatterns(t *testing.T) {
+	conventional := func(commitTypes, scopes []string, example string) *types.CommitConvention {
+		return &types.CommitConvention{
+			Style: "conventional", Format: "<type>(<scope>): <description>",
+			Types: commitTypes, Scopes: scopes, Example: example,
+		}
+	}
+	gitmoji := &types.CommitConvention{Style: "gitmoji", Format: ":<emoji>: <description>", Example: ":sparkles: add new feature"}
+	jira := &types.CommitConvention{Style: "jira", Format: "<TICKET-ID> <description>", Example: "PROJ-123 add new feature"}
+
+	tests := []struct {
+		name    string
+		commits []string
+		want    *types.CommitConvention
+	}{
+		{
+			name:    "scoped conventional",
+			commits: []string{"feat(api): add users", "fix(auth): handle expiry", "feat(cli): add flag", "fix(api): check nil"},
+			want:    conventional([]string{"feat", "fix"}, []string{"api", "auth", "cli"}, "feat(api): add new feature"),
+		},
+		{
+			name:    "unscoped conventional",
+			commits: []string{"fix: handle nil", "docs: update readme", "feat: add search"},
+			want:    conventional([]string{"docs", "feat", "fix"}, nil, "docs: add new feature"),
+		},
+		{
+			name:    "breaking change marker",
+			commits: []string{"feat(api)!: drop v1 endpoints", "refactor!: rename config keys"},
+			want:    conventional([]string{"feat", "refactor"}, []string{"api"}, "feat(api): add new feature"),
+		},
+		{
+			name:    "gitmoji",
+			commits: []string{":sparkles: add search", ":bug: fix crash", ":pencil2: fix typo"},
+			want:    gitmoji,
+		},
+		{
+			name:    "jira",
+			commits: []string{"PROJ-12 add search", "PROJ-13 fix crash", "OPS-7 bump image"},
+			want:    jira,
+		},
+		{
+			name: "merge commits mixed in",
+			commits: []string{
+				"Merge pull request #12 from org/feat/search", "feat(search): add index",
+				"Merge branch 'main' into feat/search", "fix(search): escape query",
+			},
+			want: conventional([]string{"feat", "fix"}, []string{"search"}, "feat(search): add new feature"),
+		},
+		{
+			name:    "conventional wins its tie with angular",
+			commits: []string{"feat(ui): add button", "fix(ui): align label"},
+			want:    conventional([]string{"feat", "fix"}, []string{"ui"}, "feat(ui): add new feature"),
+		},
+		{
+			name:    "equal counts go to the earlier style",
+			commits: []string{"PROJ-1 add search", ":sparkles: add search", "PROJ-2 fix crash", ":bug: fix crash"},
+			want:    gitmoji,
+		},
+		{
+			name: "below the 30% threshold",
+			commits: []string{
+				"feat: add search", "fix: crash", "update readme", "wip", "more work",
+				"tweak", "cleanup", "bump", "try again", "final",
+			},
+			want: nil,
+		},
+		{
+			name:    "no style in a short history",
+			commits: []string{"initial commit", "wip"},
+			want:    nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for range 20 {
+				if got := analyzeCommitPatterns(tt.commits); !reflect.DeepEqual(got, tt.want) {
+					t.Fatalf("analyzeCommitPatterns() = %+v, want %+v", got, tt.want)
+				}
+			}
+		})
+	}
+}
+
+func TestAnalyzeBranchPatterns(t *testing.T) {
+	branches := []string{"feature/search", "origin/fix/crash", "bugfix/login", "chore/deps", "release/v1", "spike-idea", "origin/HEAD"}
+	want := &types.BranchConvention{
+		Prefixes: []string{"fix", "chore", "feat", "release"},
+		Format:   "<prefix>/<description>",
+		Examples: []string{"fix/user-auth", "chore/login-bug", "feat/update-deps"},
+	}
+	for range 20 {
+		if got := analyzeBranchPatterns(branches); !reflect.DeepEqual(got, want) {
+			t.Fatalf("analyzeBranchPatterns() = %+v, want %+v", got, want)
+		}
+	}
+}
+
+// runGitCommand runs a git command in the specified directory, ignoring any
+// hooks or signing setup in the user's git config
 func runGitCommand(dir string, args ...string) error {
+	args = append([]string{"-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false"}, args...)
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GIT_AUTHOR_DATE=2024-01-01T00:00:00", "GIT_COMMITTER_DATE=2024-01-01T00:00:00")
