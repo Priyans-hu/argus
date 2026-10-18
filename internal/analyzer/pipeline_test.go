@@ -217,3 +217,27 @@ func TestReactHooksNeedReact(t *testing.T) {
 		t.Errorf("hooks reported without React: %+v", a.CodePatterns.StateManagement)
 	}
 }
+
+func TestGoLibrariesAreFiledByCategory(t *testing.T) {
+	root := t.TempDir()
+	writeTree(t, root, map[string]string{
+		"go.mod":        "module example.com/m\n\ngo 1.24\n",
+		"api/api.go":    "package api\n\nimport (\n\t_ \"github.com/gin-gonic/gin\"\n\t_ \"gorm.io/gorm\"\n\t_ \"github.com/spf13/cobra\"\n)\n",
+		"api/a_test.go": "package api\n\nimport _ \"github.com/stretchr/testify/assert\"\n",
+	})
+	a, _ := analyzeBoth(t, root, nil)
+	cp := a.CodePatterns
+	for _, c := range []struct {
+		field          []types.PatternInfo
+		name, category string
+	}{
+		{cp.Routing, "gin", "routing"},
+		{cp.DatabaseORM, "gorm", "database"},
+		{cp.Testing, "testify", "testing"},
+		{cp.GoPatterns, "cobra", "go-cli"},
+	} {
+		if !slices.ContainsFunc(c.field, func(p types.PatternInfo) bool { return p.Name == c.name && p.Category == c.category }) {
+			t.Errorf("%s (%s) not filed: %+v", c.name, c.category, c.field)
+		}
+	}
+}

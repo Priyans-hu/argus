@@ -265,55 +265,6 @@ func TestSomething(t *testing.T) {
 	}
 }
 
-func TestCodePatternDetector_DetectAuthentication(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "auth-pattern-test")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer func() { _ = os.RemoveAll(tmpDir) }()
-
-	// Create a file with JWT handling
-	authContent := `package auth
-
-import (
-	"github.com/golang-jwt/jwt/v5"
-)
-
-func ValidateToken(tokenString string) (*jwt.Token, error) {
-	return jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		return []byte("secret"), nil
-	})
-}
-`
-	authDir := filepath.Join(tmpDir, "internal", "auth")
-	if err := os.MkdirAll(authDir, 0755); err != nil {
-		t.Fatalf("failed to create auth dir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(authDir, "jwt.go"), []byte(authContent), 0644); err != nil {
-		t.Fatalf("failed to create jwt.go: %v", err)
-	}
-
-	files := []types.FileInfo{
-		{Path: "internal/auth/jwt.go", Name: "jwt.go", Extension: ".go", IsDir: false},
-	}
-
-	detector := NewCodePatternDetector(tmpDir, files, nil)
-	patterns := detector.detectAuthentication()
-
-	// Should detect JWT pattern
-	hasJWT := false
-	for _, p := range patterns {
-		if p.Name == "jwt." {
-			hasJWT = true
-			break
-		}
-	}
-
-	if !hasJWT {
-		t.Error("expected JWT authentication pattern to be detected")
-	}
-}
-
 func TestCodePatternDetector_DetectDatabasePatterns(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "db-pattern-test")
 	if err != nil {
@@ -336,6 +287,10 @@ type User struct {
 func NewDB() (*gorm.DB, error) {
 	return gorm.Open(sqlite.Open("test.db"), &gorm.Config{})
 }
+
+func NewSQL() (*sql.DB, error) {
+	return sql.Open("sqlite", "test.db")
+}
 `
 	repoDir := filepath.Join(tmpDir, "internal", "repository")
 	if err := os.MkdirAll(repoDir, 0755); err != nil {
@@ -352,17 +307,13 @@ func NewDB() (*gorm.DB, error) {
 	detector := NewCodePatternDetector(tmpDir, files, nil)
 	patterns := detector.detectDatabasePatterns()
 
-	// Should detect GORM patterns
-	hasGORM := false
+	// GORM comes from the Go AST detector's imports, sql.Open from the keywords
+	var names []string
 	for _, p := range patterns {
-		if p.Name == "gorm.Open" || p.Name == "gorm.Model" {
-			hasGORM = true
-			break
-		}
+		names = append(names, p.Name)
 	}
-
-	if !hasGORM {
-		t.Error("expected GORM database pattern to be detected")
+	if !reflect.DeepEqual(names, []string{"sql.Open"}) {
+		t.Errorf("database patterns = %v, want [sql.Open]", names)
 	}
 }
 

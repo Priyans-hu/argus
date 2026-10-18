@@ -21,8 +21,6 @@ func TestLoggingLibrariesNeedEvidence(t *testing.T) {
 		{"both declared", ".ts", "logger.info('started');", []string{"pino", "winston"}, "Winston logger with structured logging"},
 		{"neither declared", ".ts", "logger.info('started');", nil, ""},
 		{"console needs none", ".ts", "console.log('started');", nil, "console.log/warn/error for logging"},
-		// zap's pattern also matches zerolog's chained calls
-		{"zap over zerolog", ".go", `logger.Info().Msg("started")`, nil, "Uber's Zap logger"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

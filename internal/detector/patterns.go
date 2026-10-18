@@ -181,7 +181,7 @@ func (d *PatternDetector) detectLoggingPatterns() []types.Convention {
 	// Logging patterns by language/framework with allowed extensions and,
 	// for libraries their calls do not name, the package that must be
 	// declared. Order matters: several patterns match the same lines (winston
-	// and pino, zap and zerolog), and a tie goes to the earlier entry.
+	// and pino), and a tie goes to the earlier entry.
 	logPatterns := []struct {
 		name       string
 		pattern    *regexp.Regexp
@@ -195,8 +195,6 @@ func (d *PatternDetector) detectLoggingPatterns() []types.Convention {
 		{"python-logger", regexp.MustCompile(`logger\.(info|warning|error|debug|critical)\(`), []string{".py"}, nil},
 		{"go-log", regexp.MustCompile(`log\.(Print|Printf|Println|Fatal|Panic)\(`), []string{".go"}, nil},
 		{"go-slog", regexp.MustCompile(`slog\.(Info|Warn|Error|Debug)\(`), []string{".go"}, nil},
-		{"go-zap", regexp.MustCompile(`(logger|zap)\.(Info|Warn|Error|Debug)\(`), []string{".go"}, nil},
-		{"go-zerolog", regexp.MustCompile(`(log|logger)\.(Info|Warn|Error|Debug)\(\)\.(Msg|Msgf)\(`), []string{".go"}, nil},
 		{"rust-log", regexp.MustCompile(`(info|warn|error|debug|trace)!\(`), []string{".rs"}, nil},
 		{"ruby", regexp.MustCompile(`(logger|Rails\.logger)\.(info|warn|error|debug)\(`), []string{".rb"}, nil},
 	}
@@ -262,16 +260,14 @@ func (d *PatternDetector) detectLoggingPatterns() []types.Convention {
 
 	if dominantLogger != "" {
 		loggerDescriptions := map[string]string{
-			"console":    "console.log/warn/error for logging",
-			"winston":    "Winston logger with structured logging",
-			"pino":       "Pino logger (fast JSON logging)",
-			"python":     "Python logging module",
-			"go-log":     "Go standard library log package",
-			"go-slog":    "Go structured logging (slog)",
-			"go-zap":     "Uber's Zap logger",
-			"go-zerolog": "Zerolog (zero-allocation JSON logging)",
-			"rust-log":   "Rust log crate macros",
-			"ruby":       "Ruby Logger / Rails.logger",
+			"console":  "console.log/warn/error for logging",
+			"winston":  "Winston logger with structured logging",
+			"pino":     "Pino logger (fast JSON logging)",
+			"python":   "Python logging module",
+			"go-log":   "Go standard library log package",
+			"go-slog":  "Go structured logging (slog)",
+			"rust-log": "Rust log crate macros",
+			"ruby":     "Ruby Logger / Rails.logger",
 		}
 
 		conventions = append(conventions, types.Convention{

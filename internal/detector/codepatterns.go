@@ -3,7 +3,6 @@ package detector
 import (
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"unicode"
@@ -357,18 +356,6 @@ func (d *CodePatternDetector) scanTestKeywords(keywords, extensions []string) ma
 	return d.scanKeywords(keywords, extensions, IsTestFile)
 }
 
-// scanForRegex returns the non-test files that match pattern.
-func (d *CodePatternDetector) scanForRegex(pattern string, extensions []string) []string {
-	var matches []string
-	re := regexp.MustCompile(pattern)
-	d.eachFile(extensions, nonTestFile, func(rel, content string) {
-		if re.MatchString(content) {
-			matches = append(matches, rel)
-		}
-	})
-	return matches
-}
-
 // PatternWithImport defines a pattern that requires a specific import to be valid
 type PatternWithImport struct {
 	Keyword     string   // The keyword to search for
@@ -458,7 +445,6 @@ func (d *CodePatternDetector) detectDataFetching() []types.PatternInfo {
 		"http.Get":    "Go standard HTTP GET",
 		"http.Post":   "Go standard HTTP POST",
 		"http.Client": "Go HTTP client",
-		"resty.":      "Resty HTTP client",
 	}
 
 	goResults := d.scanForKeywords(keys(goKeywords), goExts)
@@ -515,15 +501,6 @@ func (d *CodePatternDetector) detectRouting() []types.PatternInfo {
 
 	// Go routing
 	goKeywords := map[string]string{
-		"gin.Context":     "Gin framework context",
-		"gin.Default":     "Gin default router",
-		"echo.Context":    "Echo framework context",
-		"echo.New":        "Echo router initialization",
-		"fiber.Ctx":       "Fiber framework context",
-		"fiber.New":       "Fiber app initialization",
-		"chi.Router":      "Chi router",
-		"chi.NewRouter":   "Chi router initialization",
-		"mux.NewRouter":   "Gorilla Mux router",
 		"http.HandleFunc": "Go standard HTTP handler",
 		"http.Handle":     "Go standard HTTP handler",
 	}
@@ -637,9 +614,6 @@ func (d *CodePatternDetector) detectTesting() []types.PatternInfo {
 
 	// Go testing helpers - can be in any .go file
 	goHelperKeywords := map[string]string{
-		"require.":  "Testify require assertions",
-		"assert.":   "Testify assert",
-		"gomock":    "GoMock mocking",
 		"httptest.": "Go HTTP testing",
 	}
 
@@ -669,7 +643,6 @@ func (d *CodePatternDetector) detectStyling() []types.PatternInfo {
 func (d *CodePatternDetector) detectAuthentication() []types.PatternInfo {
 	patterns := d.report(jsAuthTable)
 	pyExts := []string{".py"}
-	goExts := []string{".go"}
 
 	// Python auth
 	pyKeywords := map[string]string{
@@ -688,24 +661,6 @@ func (d *CodePatternDetector) detectAuthentication() []types.PatternInfo {
 				Name:        kw,
 				Category:    "auth",
 				Description: pyKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
-
-	// Go auth
-	goKeywords := map[string]string{
-		"jwt.": "JWT handling",
-	}
-
-	goResults := d.scanForKeywords(keys(goKeywords), goExts)
-	for kw, files := range goResults {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "auth",
-				Description: goKeywords[kw],
 				FileCount:   len(files),
 				Examples:    limitSlice(files, 3),
 			})
@@ -751,43 +706,14 @@ func (d *CodePatternDetector) detectDatabasePatterns() []types.PatternInfo {
 		}
 	}
 
-	// Go ORMs - use more specific patterns to avoid false positives
-	goKeywords := map[string]string{
-		"gorm.Open(":    "GORM ORM",
-		"gorm.Model":    "GORM model embedding",
-		"sqlx.Connect":  "sqlx database library",
-		"sqlx.Open":     "sqlx database library",
-		"sql.Open(":     "Go standard SQL",
-		"pgx.Connect":   "pgx PostgreSQL driver",
-		"mongo.Connect": "MongoDB Go driver",
-		"bun.NewDB":     "Bun ORM",
-	}
-
-	goResults := d.scanForKeywords(keys(goKeywords), goExts)
-	for kw, files := range goResults {
-		if len(files) > 0 {
-			// Clean display name
-			displayName := strings.Split(kw, "(")[0]
-			displayName = strings.Split(displayName, ".")[0] + "." + strings.Split(displayName, ".")[1]
-			patterns = append(patterns, types.PatternInfo{
-				Name:        displayName,
-				Category:    "database",
-				Description: goKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
-
-	// Ent ORM - needs regex to avoid false positives (content, environment, etc.)
-	entFiles := d.scanForRegex(`ent\.(Client|Schema|Field|Edge|Mixin)`, goExts)
-	if len(entFiles) > 0 {
+	// Go standard SQL; Go database libraries come from the Go AST detector
+	if files := d.scanForKeywords([]string{"sql.Open("}, goExts)["sql.Open("]; len(files) > 0 {
 		patterns = append(patterns, types.PatternInfo{
-			Name:        "ent",
+			Name:        "sql.Open",
 			Category:    "database",
-			Description: "Ent ORM (entgo.io)",
-			FileCount:   len(entFiles),
-			Examples:    limitSlice(entFiles, 3),
+			Description: "Go standard SQL",
+			FileCount:   len(files),
+			Examples:    limitSlice(files, 3),
 		})
 	}
 
@@ -803,48 +729,6 @@ func (d *CodePatternDetector) detectUtilityPatterns() []types.PatternInfo {
 func (d *CodePatternDetector) detectGoPatterns() []types.PatternInfo {
 	var patterns []types.PatternInfo
 	goExts := []string{".go"}
-
-	// CLI frameworks
-	cliKeywords := map[string]string{
-		"cobra.Command": "Cobra CLI framework",
-		"urfave/cli":    "urfave/cli framework",
-		"kingpin.":      "Kingpin CLI framework",
-		"spf13/pflag":   "spf13 pflag for flags",
-	}
-
-	cliResults := d.scanForKeywords(keys(cliKeywords), goExts)
-	for kw, files := range cliResults {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "go-cli",
-				Description: cliKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
-
-	// Configuration management
-	configKeywords := map[string]string{
-		"viper.":      "Viper configuration",
-		"spf13/viper": "Viper config library",
-		"godotenv":    "GoDotEnv environment variables",
-		"envconfig":   "Kelseyhightower envconfig",
-	}
-
-	configResults := d.scanForKeywords(keys(configKeywords), goExts)
-	for kw, files := range configResults {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "go-config",
-				Description: configKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
 
 	// Concurrency patterns
 	concurrencyKeywords := map[string]string{
@@ -873,27 +757,6 @@ func (d *CodePatternDetector) detectGoPatterns() []types.PatternInfo {
 		}
 	}
 
-	// Logging libraries
-	loggingKeywords := map[string]string{
-		"logrus.":  "Logrus structured logging",
-		"zap.":     "Zap high-performance logging",
-		"zerolog.": "Zerolog logging",
-		"slog.":    "Go 1.21+ structured logging",
-	}
-
-	loggingResults := d.scanForKeywords(keys(loggingKeywords), goExts)
-	for kw, files := range loggingResults {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "go-logging",
-				Description: loggingKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
-
 	// Error handling patterns
 	errorKeywords := map[string]string{
 		"errors.Is":   "Go 1.13+ error comparison",
@@ -909,26 +772,6 @@ func (d *CodePatternDetector) detectGoPatterns() []types.PatternInfo {
 				Name:        kw,
 				Category:    "go-errors",
 				Description: errorKeywords[kw],
-				FileCount:   len(files),
-				Examples:    limitSlice(files, 3),
-			})
-		}
-	}
-
-	// Dependency injection
-	diKeywords := map[string]string{
-		"wire.": "Google Wire dependency injection",
-		"dig.":  "Uber Dig dependency injection",
-		"fx.":   "Uber Fx application framework",
-	}
-
-	diResults := d.scanForKeywords(keys(diKeywords), goExts)
-	for kw, files := range diResults {
-		if len(files) > 0 {
-			patterns = append(patterns, types.PatternInfo{
-				Name:        kw,
-				Category:    "go-di",
-				Description: diKeywords[kw],
 				FileCount:   len(files),
 				Examples:    limitSlice(files, 3),
 			})

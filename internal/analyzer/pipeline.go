@@ -72,7 +72,7 @@ func (p *pipeline) conventions() ([]types.Convention, error) {
 
 // codePatterns runs the keyword, ML and AST detectors on project source;
 // React hooks, reported only with React or Preact declared, and the Python
-// AST results join the keyword results by name. The JS and Python AST
+// and Go AST results join the keyword results by name. The JS and Python AST
 // detectors skip test files, which feed only testing patterns.
 func (p *pipeline) codePatterns() *types.CodePatterns {
 	patterns := detector.NewCodePatternDetector(p.root, p.src, p.deps).Detect()
@@ -83,7 +83,29 @@ func (p *pipeline) codePatterns() *types.CodePatterns {
 		patterns.StateManagement = mergePatterns(patterns.StateManagement, hooks)
 	}
 	patterns.PythonPatterns = mergePatterns(patterns.PythonPatterns, detector.NewPythonASTDetector(p.root, nonTest).Detect())
+	mergeGoAST(patterns, detector.NewGoASTDetector(p.root, p.src).Detect())
 	return patterns
+}
+
+// mergeGoAST files the Go AST results by name: web libraries in Routing,
+// database libraries in Database & ORM, testing libraries in Testing, the
+// rest in Go Patterns under their go-* category.
+func mergeGoAST(patterns *types.CodePatterns, found []types.PatternInfo) {
+	for _, p := range found {
+		switch p.Category {
+		case "go-web":
+			p.Category = "routing"
+			patterns.Routing = mergePatterns(patterns.Routing, []types.PatternInfo{p})
+		case "go-database":
+			p.Category = "database"
+			patterns.DatabaseORM = mergePatterns(patterns.DatabaseORM, []types.PatternInfo{p})
+		case "go-testing":
+			p.Category = "testing"
+			patterns.Testing = mergePatterns(patterns.Testing, []types.PatternInfo{p})
+		default:
+			patterns.GoPatterns = mergePatterns(patterns.GoPatterns, []types.PatternInfo{p})
+		}
+	}
 }
 
 // commands returns the script, Makefile and manifest commands, pyproject and
