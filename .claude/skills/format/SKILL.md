@@ -2,6 +2,8 @@
 name: format
 description: Format code according to project standards. Use after making changes or before committing.
 allowed-tools: Bash, Read, Edit, Glob
+metadata:
+  internal: true
 ---
 
 # Format - argus

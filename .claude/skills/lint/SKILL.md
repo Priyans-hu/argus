@@ -2,6 +2,8 @@
 name: lint
 description: Run code linting and static analysis. Use to check code quality, find issues, or auto-fix style problems.
 allowed-tools: Bash, Read, Edit, Glob
+metadata:
+  internal: true
 ---
 
 # Lint - argus

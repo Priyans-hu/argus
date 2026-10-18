@@ -2,6 +2,8 @@
 name: build
 description: Build the project. Use when compiling code, creating artifacts, or preparing for deployment.
 allowed-tools: Bash, Read, Glob
+metadata:
+  internal: true
 ---
 
 # Build - argus
