@@ -131,6 +131,8 @@ This creates:
 argus sync
 ```
 
+Sync replaces only the `ARGUS:AUTO` block of `CLAUDE.md`, `.cursorrules` and `.github/copilot-instructions.md` and keeps your text around it. It never overwrites `.claude/**` or `.continue/config.yaml` files you edited; it reports them as skipped. Run `argus sync --force` or delete the file to regenerate one.
+
 ### Watch Mode (Auto-regenerate)
 
 ```bash
@@ -151,19 +153,19 @@ argus scan
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--output`, `-o` | Output formats (claude, cursor, copilot, all) | `all` |
 | `--merge` | Preserve custom sections when regenerating | `true` |
 | `--add-custom` | Add placeholder for custom sections | `false` |
+| `--force` | Overwrite files argus would otherwise skip (edited `.claude/**` and `.continue/config.yaml`, unbalanced or repeated `ARGUS:AUTO` markers); scan and sync only | `false` |
 | `--path`, `-p` | Path to scan | `.` (current directory) |
 
 ### Examples
 
 ```bash
 # Generate only CLAUDE.md
-argus sync -o claude
+argus scan --format claude
 
 # Generate with custom section placeholder
-argus init --add-custom
+argus scan --add-custom
 
 # Scan a different directory
 argus scan -p /path/to/project
@@ -177,7 +179,7 @@ Argus preserves your custom documentation when regenerating files.
 
 ### Add Custom Content
 
-After running `argus init --add-custom`, you'll see markers in the generated files:
+After running `argus scan --add-custom`, you'll see markers in the generated files:
 
 ```markdown
 <!-- ARGUS:AUTO -->
@@ -313,9 +315,13 @@ chmod +x argus
 
 ### Files Not Updating
 
-Check if you have `--merge=false` set. By default, merge mode preserves existing content.
+argus does not overwrite `.claude/**` or `.continue/config.yaml` files that differ from what it would generate, for example ones you edited. It prints `Skipped N existing files ...`; add `-v` to list them. To regenerate them:
+```bash
+argus sync --force
+```
+or delete the file and run `argus sync` again.
 
-To force complete regeneration:
+In `CLAUDE.md`, `.cursorrules` and `.github/copilot-instructions.md` only the `ARGUS:AUTO` block is regenerated. If argus warns about unbalanced or repeated `ARGUS:AUTO` markers, fix the markers or run with `--force`. To replace these files completely, dropping your own text:
 ```bash
 argus sync --merge=false
 ```

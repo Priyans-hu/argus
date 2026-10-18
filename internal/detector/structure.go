@@ -2,9 +2,11 @@ package detector
 
 import (
 	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/Priyans-hu/argus/pkg/types"
@@ -67,12 +69,11 @@ func (d *StructureDetector) Detect() (*types.ProjectStructure, error) {
 	}
 
 	// Create directory entries with purposes
-	for dir, count := range dirCounts {
-		purpose := inferDirectoryPurpose(dir)
+	for _, dir := range slices.Sorted(maps.Keys(dirCounts)) {
 		structure.Directories = append(structure.Directories, types.Directory{
 			Path:      dir,
-			Purpose:   purpose,
-			FileCount: count,
+			Purpose:   inferDirectoryPurpose(dir),
+			FileCount: dirCounts[dir],
 		})
 	}
 
@@ -615,8 +616,8 @@ func detectPackageJSONCommands(pkgDir string, prefix string) []types.Command {
 	// Determine package manager (npm, yarn, pnpm, bun)
 	pkgManager := detectPackageManager(pkgDir)
 
-	for name, cmd := range scripts {
-		cmdStr, ok := cmd.(string)
+	for _, name := range slices.Sorted(maps.Keys(scripts)) {
+		cmdStr, ok := scripts[name].(string)
 		if !ok {
 			continue
 		}

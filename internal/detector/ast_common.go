@@ -1,6 +1,22 @@
 package detector
 
-import "github.com/Priyans-hu/argus/pkg/types"
+import (
+	"cmp"
+	"maps"
+	"slices"
+
+	"github.com/Priyans-hu/argus/pkg/types"
+)
+
+// longestFirst returns the keys of m longest first, alphabetical among equal
+// lengths, so the most specific prefix wins ("next/router" before "next").
+func longestFirst[V any](m map[string]V) []string {
+	keys := slices.Collect(maps.Keys(m))
+	slices.SortFunc(keys, func(a, b string) int {
+		return cmp.Or(cmp.Compare(len(b), len(a)), cmp.Compare(a, b))
+	})
+	return keys
+}
 
 // ASTDetector is the interface for language-specific AST detectors
 type ASTDetector interface {

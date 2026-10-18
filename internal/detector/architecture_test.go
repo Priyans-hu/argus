@@ -100,6 +100,24 @@ func TestArchitectureDetector_DetectStyle(t *testing.T) {
 	}
 }
 
+func TestDetectPrimaryLanguageTieGoesToTheEarlierLanguage(t *testing.T) {
+	tests := []struct {
+		files map[string]string
+		want  string
+	}{
+		{map[string]string{"a.py": "", "b.py": "", "c.go": "", "d.go": ""}, "Go"},
+		{map[string]string{"a.py": "", "b.js": "", "c.rs": ""}, "Rust"},
+		{map[string]string{"a.py": "", "b.py": "", "c.js": ""}, "Python"},
+	}
+	for _, tt := range tests {
+		root, files := writeProject(t, tt.files)
+		got := stableResult(t, func() string { return NewArchitectureDetector(root, files).detectPrimaryLanguage() })
+		if got != tt.want {
+			t.Errorf("detectPrimaryLanguage(%v) = %q, want %q", tt.files, got, tt.want)
+		}
+	}
+}
+
 func TestArchitectureDetector_DetectEntryPoint(t *testing.T) {
 	// Create temp directory
 	tmpDir, err := os.MkdirTemp("", "entry-test")

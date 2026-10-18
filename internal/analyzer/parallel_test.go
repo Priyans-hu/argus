@@ -2,9 +2,14 @@ package analyzer
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"testing"
+
+	"github.com/Priyans-hu/argus/internal/detector"
 )
 
 func TestParallelAnalyzer_Analyze(t *testing.T) {
@@ -143,6 +148,51 @@ func main() {
 	if len(seqAnalysis.Commands) != len(parAnalysis.Commands) {
 		t.Errorf("commands count mismatch: seq=%d, par=%d",
 			len(seqAnalysis.Commands), len(parAnalysis.Commands))
+	}
+}
+
+func TestParallelAnalyzerMergesConventionsInOrder(t *testing.T) {
+	root := t.TempDir()
+	files := map[string]string{
+		"go.mod": "module example.com/shop\n\ngo 1.22\n\nrequire github.com/gin-gonic/gin v1.10.0\n",
+	}
+	for _, name := range []string{"carts", "items", "orders", "payments", "users"} {
+		files["api/"+name+".go"] = fmt.Sprintf("package api\n\nimport \"github.com/gin-gonic/gin\"\n\n"+
+			"func %s(c *gin.Context) {\n\terr := c.Bind(nil)\n\tif err != nil {\n\t\treturn\n\t}\n}\n", name)
+		files["api/"+name+"_test.go"] = "package api\n"
+	}
+	writeTree(t, root, files)
+
+	// The three groups Analyzer.Analyze concatenates, in its order.
+	walked, err := NewWalker(root).Walk(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	conventions, _ := detector.NewConventionDetector(root, walked).Detect()
+	patterns, _ := detector.NewPatternDetector(root, walked).Detect()
+	framework, _ := detector.NewFrameworkDetector(root, walked).Detect()
+	if len(conventions) == 0 || len(patterns) == 0 || len(framework) == 0 {
+		t.Fatalf("fixture must trigger all three detectors: %d conventions, %d patterns, %d framework",
+			len(conventions), len(patterns), len(framework))
+	}
+	want := slices.Concat(conventions, patterns, framework)
+
+	for i := range 30 {
+		analysis, err := NewParallelAnalyzer(root, nil).Analyze(context.Background())
+		if err != nil {
+			t.Fatalf("run %d: %v", i, err)
+		}
+		if !reflect.DeepEqual(analysis.Conventions, want) {
+			t.Fatalf("run %d: conventions = %+v, want %+v", i, analysis.Conventions, want)
+		}
+	}
+
+	sequential, err := NewAnalyzer(root, nil).Analyze(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(sequential.Conventions, want) {
+		t.Errorf("sequential conventions = %+v, want %+v", sequential.Conventions, want)
 	}
 }
 

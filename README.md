@@ -83,6 +83,15 @@ argus scan
 argus sync
 ```
 
+## Re-running is safe
+
+Run `argus scan` or `argus sync` as often as you like:
+
+- `CLAUDE.md`, `.cursorrules` and `.github/copilot-instructions.md` hold the generated content between `<!-- ARGUS:AUTO -->` markers. A rescan replaces only that block; anything you write above or below it is kept.
+- A file without markers (hand-written, or from an older argus) keeps its text below a new generated block, and argus tells you once.
+- `.claude/**` and `.continue/config.yaml` are written once. If you edit them, later runs leave them alone and report them; `--force` overwrites them.
+- A file whose content would not change is not rewritten.
+
 ## What Argus Detects
 
 - **Tech Stack** — Frameworks, languages, databases
@@ -136,7 +145,8 @@ src/
 argus init      # Initialize config (optional)
 argus scan      # Analyze and generate files
 argus sync      # Update files with changes
-argus version   # Print version
+argus scan --force   # Also overwrite edited .claude/ and .continue/ files
+argus --version # Print version (same as argus version)
 ```
 
 ## Configuration (Optional)

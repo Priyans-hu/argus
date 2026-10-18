@@ -190,7 +190,8 @@ func (g *ContinueGenerator) addConventionRules(rules *[]string, conventions []ty
 	}
 
 	// Add key conventions from each category
-	for cat, convs := range categories {
+	for _, cat := range sortedKeys(categories) {
+		convs := categories[cat]
 		// Skip some categories that are too verbose
 		if cat == "patterns" || cat == "detected-patterns" {
 			continue

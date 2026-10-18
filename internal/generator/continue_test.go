@@ -397,3 +397,18 @@ func TestSanitizeYAMLString(t *testing.T) {
 		})
 	}
 }
+
+func TestContinueConventionRulesFollowCategoryNames(t *testing.T) {
+	content, err := NewContinueGenerator().Generate(renderFixture())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// custom, general (no category), gin, logging, naming, react
+	assertInOrder(t, string(content),
+		"  - Keep handlers thin\n",
+		"  - Keep functions small\n",
+		"  - Gin HTTP handlers with gin.Context\n",
+		"  - Structured logging with slog\n",
+		"  - \"Files use kebab-case\"\n",
+		"  - Functional components with hooks\n")
+}

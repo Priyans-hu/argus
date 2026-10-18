@@ -10,12 +10,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Agent Skill (`skills/argus/SKILL.md`), installable with `npx skills add Priyans-hu/argus`
 - Claude Code plugin marketplace manifest (`.claude-plugin/marketplace.json`)
+- `--force` on scan and sync overwrites files argus would otherwise skip
+- `argus --version`, matching `argus version`; `go install` builds report their module version
 
 ### Changed
 - Repo dev skills in `.claude/skills/` are marked `metadata.internal: true`, so the skills CLI no longer offers them
+- Existing .claude/** and .continue/config.yaml files that differ from the generated output are skipped and reported instead of overwritten
+- The first write of CLAUDE.md, .cursorrules and the Copilot file carries ARGUS:AUTO markers, so rescans no longer append a Previous Content copy; an existing file without markers gets the generated block on top and its text kept below; --add-custom applies to these files only
+- `--monorepo` reads `claude_code:` from the root `.argus.yaml` for every workspace; a `claude_code:` section in a workspace's own `.argus.yaml` is no longer read
+
+### Deprecated
+- `-o`/`--output` has no effect; it is hidden and will be removed in a future release
 
 ### Fixed
 - Agent Skill: first writes use `--add-custom`, so a later plain scan no longer doubles CLAUDE.md
+- Rescans are stable: argus no longer counts its own outputs (CLAUDE.md, AGENTS.md, .cursorrules, .claude/, .continue/, the Copilot file) as project files, and watch no longer re-triggers on .continue/config.yaml
+- Regeneration keeps all text outside the ARGUS:AUTO block; the block is replaced in place instead of everything but CUSTOM blocks being dropped
+- The Continue config stays valid YAML on repeated runs; claude_code settings in the root .argus.yaml apply to monorepo workspaces; Claude Code config write errors are reported
+- Generated Markdown files end with exactly one newline and are not rewritten when unchanged
+- --monorepo merges the root CLAUDE.md overview instead of overwriting hand-written content
+- Output is deterministic: repeated scans of the same repository produce identical files (map order, tie-break and goroutine order fixes)
+- Commit style detection uses real regexes: scoped feat(x): commits are recognized and ties resolve deterministically
+- Errors print once; usage is shown only for argument and flag errors
+- `argus upgrade` compares versions with semver and times out stalled requests
+- `argus upgrade` replaces the running binary atomically instead of overwriting it in place
+- Existing output files are replaced through a temp file and a rename, so a full disk or an interrupted run cannot truncate them
+
+### Security
+- The Repository line no longer leaks credentials or SSH host aliases; only github.com, gitlab.com and bitbucket.org are linked, other hosts show owner/name, local remotes are omitted
+- A remote whose owner or name has characters other than letters, digits, '.', '_' and '-' is omitted from the Repository line
 
 ## [0.3.0] - 2026-01-25
 

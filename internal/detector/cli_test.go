@@ -3,6 +3,7 @@ package detector
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/Priyans-hu/argus/pkg/types"
@@ -144,6 +145,22 @@ func main() {
 
 	if result.VerboseFlag == "" {
 		t.Error("expected verbose flag to be detected")
+	}
+}
+
+func TestCLIDetectorIndicatorsKeepListOrder(t *testing.T) {
+	root, files := writeProject(t, map[string]string{
+		"main.go": "package main\n\n// → 📄 ⚠️ 🔍 ✅\n",
+	})
+
+	indicators := stableResult(t, func() []types.Indicator { return NewCLIDetector(root, files, nil).detectIndicators() })
+
+	var symbols []string
+	for _, ind := range indicators {
+		symbols = append(symbols, ind.Symbol)
+	}
+	if want := []string{"✅", "⚠️", "🔍", "📄", "→"}; !reflect.DeepEqual(symbols, want) {
+		t.Errorf("indicators = %v, want %v", symbols, want)
 	}
 }
 

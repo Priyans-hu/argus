@@ -1,8 +1,10 @@
 package detector
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/Priyans-hu/argus/pkg/types"
@@ -340,12 +342,14 @@ func (d *JSASTDetector) importsToPatterns(imports map[string][]string) []types.P
 		"date-fns":          "date-fns",
 	}
 
-	for importPath, files := range imports {
-		for prefix, framework := range frameworkImports {
-			if strings.HasPrefix(importPath, prefix) || importPath == prefix {
+	prefixes := longestFirst(frameworkImports)
+	for _, importPath := range slices.Sorted(maps.Keys(imports)) {
+		files := imports[importPath]
+		for _, prefix := range prefixes {
+			if strings.HasPrefix(importPath, prefix) {
 				patterns = append(patterns, types.PatternInfo{
 					Category:    "JavaScript Frameworks",
-					Name:        framework,
+					Name:        frameworkImports[prefix],
 					Description: "Detected via import: " + importPath,
 					FileCount:   len(files),
 					Examples:    limitSlice(dedupe(files), 3),
@@ -382,7 +386,8 @@ func (d *JSASTDetector) hooksToPatterns(hooks map[string][]string) []types.Patte
 		"useAuth":         "Authentication hook",
 	}
 
-	for hook, files := range hooks {
+	for _, hook := range slices.Sorted(maps.Keys(hooks)) {
+		files := hooks[hook]
 		desc := hookDescriptions[hook]
 		if desc == "" {
 			desc = "Custom React hook"
@@ -411,7 +416,8 @@ func (d *JSASTDetector) funcToPatterns(funcPatterns map[string][]string) []types
 		"await":              "Await expressions",
 	}
 
-	for pattern, files := range funcPatterns {
+	for _, pattern := range slices.Sorted(maps.Keys(funcPatterns)) {
+		files := funcPatterns[pattern]
 		desc := patternDescriptions[pattern]
 		if desc == "" {
 			desc = "JavaScript pattern"
@@ -432,7 +438,8 @@ func (d *JSASTDetector) funcToPatterns(funcPatterns map[string][]string) []types
 func (d *JSASTDetector) classToPatterns(classPatterns map[string][]string) []types.PatternInfo {
 	var patterns []types.PatternInfo
 
-	for pattern, files := range classPatterns {
+	for _, pattern := range slices.Sorted(maps.Keys(classPatterns)) {
+		files := classPatterns[pattern]
 		patterns = append(patterns, types.PatternInfo{
 			Category:    "JavaScript Patterns",
 			Name:        pattern,

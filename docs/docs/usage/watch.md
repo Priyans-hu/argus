@@ -26,7 +26,6 @@ argus watch .
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--verbose` | `-v` | Show detailed output |
-| `--output` | `-o` | Custom output file path |
 
 ## Example
 

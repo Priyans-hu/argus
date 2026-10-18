@@ -14,7 +14,9 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -22,14 +24,29 @@ import (
 	"github.com/Priyans-hu/argus/internal/analyzer"
 	"github.com/Priyans-hu/argus/internal/config"
 	"github.com/Priyans-hu/argus/internal/generator"
-	"github.com/Priyans-hu/argus/internal/merger"
 	"github.com/Priyans-hu/argus/internal/usage"
 	"github.com/Priyans-hu/argus/pkg/types"
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
+	"golang.org/x/mod/semver"
 )
 
+// version is set at release build time with -ldflags "-X main.version=...";
+// init resolves it further for go install builds.
 var version = "dev"
+
+// resolveVersion returns the version argus reports: the release version set
+// with ldflags, else the module version go install records (without its
+// leading "v"), else "dev".
+func resolveVersion(ldflag, mainVersion string) string {
+	if ldflag != "" && ldflag != "dev" {
+		return ldflag
+	}
+	if mainVersion != "" && mainVersion != "(devel)" {
+		return strings.TrimPrefix(mainVersion, "v")
+	}
+	return "dev"
+}
 
 // Flags
 var (
@@ -59,7 +76,11 @@ Argus scans your codebase and generates optimized context files
 for AI coding assistants (Claude Code, Cursor, Copilot, etc.).
 
 No more manually writing CLAUDE.md or .cursorrules - Argus sees everything.`,
+	// execute prints errors once. Usage is shown only for flag and argument
+	// errors, which cobra reports before PersistentPreRun silences it.
+	SilenceErrors: true,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		cmd.SilenceUsage = true
 		setupLogging()
 	},
 }
@@ -129,7 +150,7 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print version information",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("argus version %s\n", version)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "argus version %s\n", version)
 	},
 }
 
@@ -146,11 +167,19 @@ This command will:
 }
 
 func init() {
+	var mainVersion string
+	if info, ok := debug.ReadBuildInfo(); ok {
+		mainVersion = info.Main.Version
+	}
+	version = resolveVersion(version, mainVersion)
+	rootCmd.Version = version
+
 	// Init command flags
 	initCmd.Flags().BoolVarP(&force, "force", "f", false, "Overwrite existing config file")
 
 	// Scan command flags
 	scanCmd.Flags().StringVarP(&outputDir, "output", "o", ".", "Output directory for generated files")
+	_ = scanCmd.Flags().MarkDeprecated("output", "it has no effect and will be removed in a future release")
 	scanCmd.Flags().StringVarP(&outputFormat, "format", "f", "claude", "Output format: claude, claude-code, cursor, copilot, continue, all")
 	scanCmd.Flags().BoolVarP(&dryRun, "dry-run", "n", false, "Show what would be generated without writing files")
 	scanCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed output")
@@ -161,6 +190,7 @@ func init() {
 	scanCmd.Flags().BoolVar(&usageMode, "usage", false, "Include AI usage insights from Claude Code session logs")
 	scanCmd.Flags().BoolVar(&aiMode, "ai", false, "Enrich output with AI-generated insights via local Ollama")
 	scanCmd.Flags().BoolVar(&monorepoMode, "monorepo", false, "Generate output per workspace in monorepo projects")
+	scanCmd.Flags().BoolVar(&force, "force", false, "Overwrite files argus would otherwise skip")
 
 	// Sync command flags
 	syncCmd.Flags().BoolVarP(&dryRun, "dry-run", "n", false, "Show what would be generated without writing files")
@@ -171,6 +201,7 @@ func init() {
 	syncCmd.Flags().BoolVarP(&parallel, "parallel", "p", true, "Run detectors in parallel for faster analysis (default: true)")
 	syncCmd.Flags().BoolVar(&usageMode, "usage", false, "Include AI usage insights from Claude Code session logs")
 	syncCmd.Flags().BoolVar(&aiMode, "ai", false, "Enrich output with AI-generated insights via local Ollama")
+	syncCmd.Flags().BoolVar(&force, "force", false, "Overwrite files argus would otherwise skip")
 
 	// Insights command flags
 	insightsCmd.Flags().StringVarP(&insightsSince, "since", "s", "", "Date filter (e.g., 7d, 30d, 2025-01-01)")
@@ -234,6 +265,8 @@ func runInit(cmd *cobra.Command, args []string) error {
 }
 
 func runScan(cmd *cobra.Command, args []string) error {
+	defer reportSkipped()
+
 	// Determine target path
 	targetPath := "."
 	if len(args) > 0 {
@@ -346,7 +379,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 	// Generate output for each format
 	for _, format := range formats {
-		if err := generateOutput(absPath, format, analysis, dryRun, compactMode); err != nil {
+		if err := generateOutput(absPath, "", format, analysis, cfg, dryRun, compactMode); err != nil {
 			return err
 		}
 	}
@@ -366,7 +399,7 @@ func runMonorepoScan(ctx context.Context, absPath string, cfg *config.Config, fo
 	if len(wsResults) == 0 {
 		fmt.Println("No workspaces found to analyze, falling back to single-project mode")
 		for _, format := range formats {
-			if err := generateOutput(absPath, format, rootAnalysis, dryRun, compactMode); err != nil {
+			if err := generateOutput(absPath, "", format, rootAnalysis, cfg, dryRun, compactMode); err != nil {
 				return err
 			}
 		}
@@ -400,12 +433,16 @@ func runMonorepoScan(ctx context.Context, absPath string, cfg *config.Config, fo
 		}
 
 		wsAbsPath := filepath.Join(absPath, ws.Path)
+		ok := true
 		for _, format := range wsFormats {
-			if err := generateOutput(wsAbsPath, format, ws.Analysis, dryRun, compactMode); err != nil {
-				fmt.Printf("   [warn] %s (%s): %v\n", ws.Path, format, err)
+			if err := generateOutput(wsAbsPath, ws.Path, format, ws.Analysis, cfg, dryRun, compactMode); err != nil {
+				errf("   [warn] %s (%s): %v\n", ws.Path, format, err)
+				ok = false
 			}
 		}
-		successCount++
+		if ok {
+			successCount++
+		}
 	}
 
 	// Generate root overview
@@ -439,25 +476,21 @@ func runMonorepoScan(ctx context.Context, absPath string, cfg *config.Config, fo
 			return fmt.Errorf("overview generation failed: %w", err)
 		}
 
-		outPath := filepath.Join(absPath, "CLAUDE.md")
-		if dryRun {
-			fmt.Printf("\n   Would write overview to %s\n", outPath)
-		} else {
-			if err := os.WriteFile(outPath, overview, 0644); err != nil {
-				return fmt.Errorf("failed to write overview: %w", err)
-			}
-			fmt.Printf("✅ Generated monorepo overview: %s\n", outPath)
+		if err := writeMerged(absPath, "", "CLAUDE.md", overview, dryRun); err != nil {
+			return err
 		}
 	}
 
 	if !dryRun {
-		fmt.Printf("✅ Generated context files for %d/%d workspaces\n", successCount, len(wsResults))
+		outf("✅ Generated context files for %d/%d workspaces\n", successCount, len(wsResults))
 	}
 
 	return nil
 }
 
 func runSync(cmd *cobra.Command, args []string) error {
+	defer reportSkipped()
+
 	// Determine target path
 	targetPath := "."
 	if len(args) > 0 {
@@ -543,7 +576,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 
 	// Generate output for each format in config
 	for _, format := range cfg.Output {
-		if err := generateOutput(absPath, format, analysis, dryRun, compactMode); err != nil {
+		if err := generateOutput(absPath, "", format, analysis, cfg, dryRun, compactMode); err != nil {
 			return err
 		}
 	}
@@ -557,10 +590,12 @@ type contextGenerator interface {
 	OutputFile() string
 }
 
-func generateOutput(absPath, format string, analysis *types.Analysis, dryRun, compact bool) error {
+// generateOutput renders one format into absPath. label is the workspace
+// path shown in messages ("" for the scanned directory itself).
+func generateOutput(absPath, label, format string, analysis *types.Analysis, cfg *config.Config, dryRun, compact bool) error {
 	// Handle claude-code format separately (multi-file generator)
 	if format == "claude-code" {
-		return generateClaudeCodeOutput(absPath, analysis, dryRun)
+		return generateClaudeCodeOutput(absPath, label, analysis, cfg.ClaudeCode, dryRun)
 	}
 
 	var gen contextGenerator
@@ -593,97 +628,52 @@ func generateOutput(absPath, format string, analysis *types.Analysis, dryRun, co
 		return fmt.Errorf("generation failed: %w", err)
 	}
 
-	outPath := filepath.Join(absPath, outputFile)
-
-	// Handle merge mode - preserve custom sections from existing file
-	if mergeMode {
-		existingContent, err := os.ReadFile(outPath)
-		if err == nil && len(existingContent) > 0 {
-			m := merger.NewMerger(true)
-			content = m.Merge(existingContent, content)
-			if verbose {
-				fmt.Printf("   ℹ️  Merged with existing content (preserving custom sections)\n")
-			}
-		}
+	if generator.IsMergeFile(outputFile) {
+		return writeMerged(absPath, label, outputFile, content, dryRun)
 	}
-
-	// Add custom block placeholder if requested
-	if addCustomBlock {
-		contentStr := string(content)
-		if !strings.Contains(contentStr, merger.CustomStartMarker) {
-			content = []byte(merger.AddCustomSectionPlaceholder(contentStr))
-		}
+	status, err := writeCreateOnly(absPath, label, outputFile, content, dryRun)
+	if err != nil {
+		return err
 	}
-
-	if dryRun {
-		fmt.Printf("\n📄 Would write to %s:\n", outPath)
-		fmt.Println("---")
-		fmt.Println(string(content))
-		fmt.Println("---")
-		return nil
-	}
-
-	// Ensure parent directory exists (for .github/copilot-instructions.md)
-	if dir := filepath.Dir(outPath); dir != absPath {
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return fmt.Errorf("failed to create directory: %w", err)
-		}
-	}
-
-	if err := os.WriteFile(outPath, content, 0644); err != nil {
-		return fmt.Errorf("failed to write file: %w", err)
-	}
-
-	fmt.Printf("✅ Generated %s\n", outPath)
+	reportFile(displayPath(label, outputFile), status, dryRun)
 	return nil
 }
 
-// generateClaudeCodeOutput handles the multi-file claude-code format
-func generateClaudeCodeOutput(absPath string, analysis *types.Analysis, dryRun bool) error {
-	// Load config to get ClaudeCode settings
-	cfg, err := config.Load(absPath)
-	if err != nil {
-		cfg = config.DefaultConfig()
-	}
-
-	g := generator.NewClaudeCodeGenerator(cfg.ClaudeCode)
-	files, err := g.Generate(analysis)
+// generateClaudeCodeOutput writes the multi-file claude-code format. Every
+// file is create-only, so hand-edited configs are skipped and reported.
+func generateClaudeCodeOutput(absPath, label string, analysis *types.Analysis, cfg *config.ClaudeCodeConfig, dryRun bool) error {
+	files, err := generator.NewClaudeCodeGenerator(cfg).Generate(analysis)
 	if err != nil {
 		return fmt.Errorf("claude-code generation failed: %w", err)
 	}
 
 	if len(files) == 0 {
-		fmt.Println("ℹ️  No Claude Code configs generated (check claude_code settings)")
+		outf("ℹ️  No Claude Code configs generated (check claude_code settings)\n")
 		return nil
 	}
 
+	written, skippedFiles := 0, 0
 	for _, file := range files {
-		outPath := filepath.Join(absPath, file.Path)
-
-		if dryRun {
-			fmt.Printf("\n📄 Would write to %s:\n", outPath)
-			fmt.Println("---")
-			fmt.Println(string(file.Content))
-			fmt.Println("---")
-			continue
+		status, err := writeCreateOnly(absPath, label, file.Path, file.Content, dryRun)
+		if err != nil {
+			return err
 		}
-
-		// Create parent directories
-		if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
-			return fmt.Errorf("failed to create directory for %s: %w", file.Path, err)
+		switch status {
+		case fileWritten:
+			written++
+		case fileSkipped:
+			skippedFiles++
 		}
-
-		if err := os.WriteFile(outPath, file.Content, 0644); err != nil {
-			return fmt.Errorf("failed to write %s: %w", file.Path, err)
-		}
-
 		if verbose {
-			fmt.Printf("✅ Generated %s\n", outPath)
+			reportFile(displayPath(label, file.Path), status, dryRun)
 		}
 	}
 
-	if !dryRun {
-		fmt.Printf("✅ Generated %d Claude Code configs in .claude/\n", len(files))
+	switch {
+	case written > 0 && !dryRun:
+		outf("✅ Generated %d Claude Code configs in .claude/\n", written)
+	case written == 0 && skippedFiles == 0:
+		outf("✅ Claude Code configs are up to date\n")
 	}
 
 	return nil
@@ -756,11 +746,15 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	// Create incremental analyzer
 	incAnalyzer := analyzer.NewIncrementalAnalyzer(absPath)
 
+	// Skip notices print once per path for the whole session
+	watchNotified = map[string]bool{}
+
 	// Do initial full generation
 	fmt.Println("🔍 Running initial full analysis...")
 	if err := regenerateWithAnalyzer(ctx, absPath, cfg, incAnalyzer, "", true); err != nil {
 		fmt.Printf("⚠️  Initial generation failed: %v\n", err)
 	}
+	reportSkipped()
 
 	// Setup signal handling for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
@@ -770,6 +764,9 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	var debounceTimer *time.Timer
 	var lastChangedFile string
 	debounceDelay := 500 * time.Millisecond
+
+	// Timer callbacks run on their own goroutines; one regeneration at a time
+	var regenMu sync.Mutex
 
 	for {
 		select {
@@ -784,7 +781,7 @@ func runWatch(cmd *cobra.Command, args []string) error {
 			}
 
 			// Skip generated files to avoid infinite loops
-			if isGeneratedFile(event.Name) {
+			if isGeneratedFile(absPath, event.Name) {
 				continue
 			}
 
@@ -798,9 +795,12 @@ func runWatch(cmd *cobra.Command, args []string) error {
 
 			changedFile := lastChangedFile // Capture for closure
 			debounceTimer = time.AfterFunc(debounceDelay, func() {
+				regenMu.Lock()
+				defer regenMu.Unlock()
 				if err := regenerateWithAnalyzer(ctx, absPath, cfg, incAnalyzer, changedFile, false); err != nil {
 					fmt.Printf("⚠️  Regeneration failed: %v\n", err)
 				}
+				reportSkipped()
 			})
 
 		case err, ok := <-watcher.Errors:
@@ -846,7 +846,7 @@ func regenerateWithAnalyzer(ctx context.Context, absPath string, cfg *config.Con
 
 	// Generate output for each format
 	for _, format := range cfg.Output {
-		if err := generateOutput(absPath, format, analysis, false, compactMode); err != nil {
+		if err := generateOutput(absPath, "", format, analysis, cfg, false, compactMode); err != nil {
 			return err
 		}
 	}
@@ -913,19 +913,15 @@ func isRelevantChange(event fsnotify.Event) bool {
 	return relevantExts[ext] || configFiles[name]
 }
 
-func isGeneratedFile(path string) bool {
-	// Check if path is in .claude/ directory
-	if strings.Contains(path, ".claude/") || strings.Contains(path, ".claude"+string(filepath.Separator)) {
-		return true
+// isGeneratedFile reports whether path, an event path under the watch root,
+// is an argus output. Only the part below root counts, so a root inside a
+// .claude directory is still watched.
+func isGeneratedFile(root, path string) bool {
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		return false
 	}
-
-	name := filepath.Base(path)
-	generated := map[string]bool{
-		"CLAUDE.md":               true,
-		".cursorrules":            true,
-		"copilot-instructions.md": true,
-	}
-	return generated[name]
+	return generator.IsGeneratedPath(rel)
 }
 
 func runInsights(cmd *cobra.Command, args []string) error {
@@ -1177,10 +1173,36 @@ func parseSinceFlag(s string) (time.Time, error) {
 }
 
 func main() {
+	os.Exit(execute(os.Stderr))
+}
+
+// execute runs the command line, reports a failure once on w and returns the
+// exit code.
+func execute(w io.Writer) int {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		_, _ = fmt.Fprintf(w, "Error: %v\n", err)
+		return 1
 	}
+	return 0
+}
+
+// releaseURL is the GitHub API endpoint for the latest release.
+var releaseURL = "https://api.github.com/repos/Priyans-hu/argus/releases/latest"
+
+// httpClient bounds the release lookup, so a stalled connection fails
+// instead of hanging.
+var httpClient = &http.Client{Timeout: 60 * time.Second}
+
+// downloadClient bounds the asset download, which takes longer than the
+// lookup on a slow connection.
+var downloadClient = &http.Client{Timeout: 5 * time.Minute}
+
+// isNewer reports whether latest is a higher semantic version than current.
+// Invalid versions such as "dev" sort below valid ones, so a dev build
+// upgrades, a newer local build never downgrades and a malformed release tag
+// is never installed.
+func isNewer(latest, current string) bool {
+	return semver.Compare("v"+strings.TrimPrefix(latest, "v"), "v"+strings.TrimPrefix(current, "v")) > 0
 }
 
 // GitHubRelease represents a GitHub release
@@ -1202,13 +1224,11 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to check for updates: %w", err)
 	}
 
-	latestVersion := strings.TrimPrefix(release.TagName, "v")
-	currentVersion := strings.TrimPrefix(version, "v")
-
-	if latestVersion == currentVersion {
+	if !isNewer(release.TagName, version) {
 		fmt.Printf("✅ Already on the latest version (%s)\n", version)
 		return nil
 	}
+	latestVersion := strings.TrimPrefix(release.TagName, "v")
 
 	fmt.Printf("📦 New version available: %s → %s\n", version, release.TagName)
 
@@ -1264,7 +1284,7 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 }
 
 func getLatestRelease() (*GitHubRelease, error) {
-	resp, err := http.Get("https://api.github.com/repos/Priyans-hu/argus/releases/latest")
+	resp, err := httpClient.Get(releaseURL)
 	if err != nil {
 		return nil, err
 	}
@@ -1295,7 +1315,7 @@ func getAssetName(ver string) string {
 }
 
 func downloadAsset(url string) (string, error) {
-	resp, err := http.Get(url)
+	resp, err := downloadClient.Get(url)
 	if err != nil {
 		return "", err
 	}
@@ -1414,27 +1434,57 @@ func extractZip(archivePath string) (string, error) {
 	return "", fmt.Errorf("argus.exe not found in archive")
 }
 
-func replaceBinary(newBinary, targetPath string) error {
-	// On Windows, we can't replace a running executable directly
-	// So we rename the old one first
-	if runtime.GOOS == "windows" {
-		oldPath := targetPath + ".old"
-		_ = os.Remove(oldPath) // Remove any existing .old file
-		if err := os.Rename(targetPath, oldPath); err != nil {
-			return err
-		}
-	}
-
-	// Read the new binary
-	data, err := os.ReadFile(newBinary)
+// replaceBinary installs newBinary at targetPath. The new binary is copied to
+// a temporary file next to the target and renamed over it, so the running
+// executable is never written in place (Linux refuses that with ETXTBSY, and
+// macOS can kill a signed binary whose pages change). Windows cannot replace
+// a running executable, so the old one is moved aside first and moved back
+// if the install fails.
+func replaceBinary(newBinary, targetPath string) (err error) {
+	src, err := os.Open(newBinary)
 	if err != nil {
 		return err
 	}
+	defer func() { _ = src.Close() }()
 
-	// Write to target
-	if err := os.WriteFile(targetPath, data, 0755); err != nil {
+	tmp, err := os.CreateTemp(filepath.Dir(targetPath), ".argus-upgrade-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer func() {
+		if err != nil {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
+	_, err = io.Copy(tmp, src)
+	if closeErr := tmp.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return err
+	}
+	mode := os.FileMode(0755)
+	if fi, statErr := os.Stat(targetPath); statErr == nil {
+		mode = fi.Mode().Perm()
+	}
+	if err = os.Chmod(tmpPath, mode); err != nil {
 		return err
 	}
 
+	if runtime.GOOS != "windows" {
+		return os.Rename(tmpPath, targetPath)
+	}
+
+	oldPath := targetPath + ".old"
+	_ = os.Remove(oldPath) // left by an earlier upgrade
+	if err = os.Rename(targetPath, oldPath); err != nil {
+		return err
+	}
+	if err = os.Rename(tmpPath, targetPath); err != nil {
+		_ = os.Rename(oldPath, targetPath)
+		return err
+	}
 	return nil
 }

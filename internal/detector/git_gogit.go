@@ -1,8 +1,11 @@
 package detector
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"maps"
+	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/Priyans-hu/argus/pkg/types"
@@ -50,83 +53,35 @@ func (d *GitDetectorGoGit) Detect() *types.GitConventions {
 	return conventions
 }
 
-// detectRepository extracts git repository information
+// detectRepository extracts git repository information from the origin
+// remote, or the first remote by name when there is no origin
 func (d *GitDetectorGoGit) detectRepository() *types.GitRepository {
 	if d.repo == nil {
 		return nil
 	}
 
-	// Get remote URL
 	remotes, err := d.repo.Remotes()
 	if err != nil || len(remotes) == 0 {
 		return nil
 	}
 
-	// Use origin remote, or first available
-	var remoteURL string
-	for _, remote := range remotes {
-		if remote.Config().Name == "origin" {
-			if len(remote.Config().URLs) > 0 {
-				remoteURL = remote.Config().URLs[0]
-			}
+	// Remotes come from a map, so pick by name rather than position
+	slices.SortFunc(remotes, func(a, b *git.Remote) int {
+		return cmp.Compare(a.Config().Name, b.Config().Name)
+	})
+	remote := remotes[0]
+	for _, r := range remotes {
+		if r.Config().Name == "origin" {
+			remote = r
 			break
 		}
 	}
 
-	// Fallback to first remote if origin not found
-	if remoteURL == "" && len(remotes) > 0 {
-		if len(remotes[0].Config().URLs) > 0 {
-			remoteURL = remotes[0].Config().URLs[0]
-		}
-	}
-
-	if remoteURL == "" {
+	urls := remote.Config().URLs
+	if len(urls) == 0 {
 		return nil
 	}
-
-	repo := &types.GitRepository{
-		RemoteURL: remoteURL,
-	}
-
-	// Parse URL to extract owner, name, and platform
-	var owner, name, platform string
-
-	// Remove .git suffix
-	remoteURL = strings.TrimSuffix(remoteURL, ".git")
-
-	// Detect platform
-	if strings.Contains(remoteURL, "github") {
-		platform = "github"
-	} else if strings.Contains(remoteURL, "gitlab") {
-		platform = "gitlab"
-	} else if strings.Contains(remoteURL, "bitbucket") {
-		platform = "bitbucket"
-	}
-
-	// Parse HTTPS URL
-	if strings.HasPrefix(remoteURL, "http") {
-		parts := strings.Split(remoteURL, "/")
-		if len(parts) >= 2 {
-			name = parts[len(parts)-1]
-			owner = parts[len(parts)-2]
-		}
-	} else if strings.Contains(remoteURL, "@") {
-		// Parse SSH URL (git@host:owner/repo)
-		parts := strings.Split(remoteURL, ":")
-		if len(parts) >= 2 {
-			pathParts := strings.Split(parts[1], "/")
-			if len(pathParts) >= 2 {
-				owner = pathParts[0]
-				name = pathParts[1]
-			}
-		}
-	}
-
-	repo.Owner = owner
-	repo.Name = name
-	repo.Platform = platform
-
-	return repo
+	return repositoryFromRemote(urls[0])
 }
 
 // getRecentCommits retrieves recent commit history
@@ -247,58 +202,60 @@ func (d *GitDetectorGoGit) detectBranchConvention() *types.BranchConvention {
 	return analyzeBranchPatterns(branches)
 }
 
-// analyzeCommitPatterns extracts commit message conventions
-// This is extracted from the original implementation for reuse
-func analyzeCommitPatterns(commits []string) *types.CommitConvention {
-	// Pattern matching logic (from original git.go)
-	conventionalRegex := `^(feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(\(([^)]+)\))?:\s*(.+)`
-	gitmojiRegex := `^:[a-z_]+:\s*.+`
-	jiraRegex := `^[A-Z]+-\d+\s*.+`
-	angularRegex := `^(feat|fix|docs|style|refactor|test|chore)\(.+\):\s*.+`
+// commitStyles are checked in this order, and on equal counts the earlier
+// style wins. Every angular commit is also conventional, so angular can only
+// tie conventional and never wins.
+var commitStyles = []struct {
+	name string
+	re   *regexp.Regexp
+}{
+	// submatches: type, scope
+	{"conventional", regexp.MustCompile(`^(feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(?:\(([^)]+)\))?!?:\s*.+`)},
+	{"angular", regexp.MustCompile(`^(feat|fix|docs|style|refactor|test|chore)\(([^)]+)\)!?:\s*.+`)},
+	{"gitmoji", regexp.MustCompile(`^:[a-z0-9_]+:\s*.+`)},
+	{"jira", regexp.MustCompile(`^[A-Z]+-\d+\s*.+`)},
+}
 
-	counts := make(map[string]int)
+// branchPrefixRegex captures the prefix of a branch such as feat/user-auth.
+var branchPrefixRegex = regexp.MustCompile(`^(feat|fix|feature|bugfix|hotfix|release|chore|docs|test|refactor|ci|build)/`)
+
+// analyzeCommitPatterns extracts commit message conventions
+func analyzeCommitPatterns(commits []string) *types.CommitConvention {
+	counts := make([]int, len(commitStyles))
 	typeCount := make(map[string]int)
 	scopeCount := make(map[string]int)
 
 	for _, commit := range commits {
-		// Check patterns
-		if matched, _ := matchPattern(commit, conventionalRegex); matched {
-			counts["conventional"]++
-			// Extract type and scope
-			if parts := extractConventionalParts(commit); len(parts) >= 2 {
-				typeCount[parts[1]]++
-				if len(parts) >= 4 && parts[3] != "" {
-					scopeCount[parts[3]]++
+		for i, style := range commitStyles {
+			m := style.re.FindStringSubmatch(commit)
+			if m == nil {
+				continue
+			}
+			counts[i]++
+			if style.name == "conventional" {
+				typeCount[m[1]]++
+				if m[2] != "" {
+					scopeCount[m[2]]++
 				}
 			}
-		}
-		if matched, _ := matchPattern(commit, gitmojiRegex); matched {
-			counts["gitmoji"]++
-		}
-		if matched, _ := matchPattern(commit, jiraRegex); matched {
-			counts["jira"]++
-		}
-		if matched, _ := matchPattern(commit, angularRegex); matched {
-			counts["angular"]++
 		}
 	}
 
 	// Determine dominant convention
-	var bestPattern string
-	var bestCount int
-	for name, count := range counts {
-		if count > bestCount {
-			bestCount = count
-			bestPattern = name
+	best := 0
+	for i, count := range counts {
+		if count > counts[best] {
+			best = i
 		}
 	}
 
 	// Need at least 30% of commits to follow a pattern
 	threshold := len(commits) * 30 / 100
-	if bestCount < threshold {
+	if counts[best] == 0 || counts[best] < threshold {
 		return nil
 	}
 
+	bestPattern := commitStyles[best].name
 	convention := &types.CommitConvention{
 		Style: bestPattern,
 	}
@@ -334,8 +291,6 @@ func analyzeCommitPatterns(commits []string) *types.CommitConvention {
 
 // analyzeBranchPatterns extracts branch naming conventions
 func analyzeBranchPatterns(branches []string) *types.BranchConvention {
-	prefixPattern := `^(feat|fix|feature|bugfix|hotfix|release|chore|docs|test|refactor|ci|build)/`
-
 	prefixCount := make(map[string]int)
 	var matchedBranches int
 
@@ -343,10 +298,9 @@ func analyzeBranchPatterns(branches []string) *types.BranchConvention {
 		// Remove origin/ prefix for counting
 		branch = strings.TrimPrefix(branch, "origin/")
 
-		if matched, prefix := matchPattern(branch, prefixPattern); matched && prefix != "" {
+		if m := branchPrefixRegex.FindStringSubmatch(branch); m != nil {
 			// Normalize similar prefixes
-			normalizedPrefix := normalizeBranchPrefix(prefix)
-			prefixCount[normalizedPrefix]++
+			prefixCount[normalizeBranchPrefix(m[1])]++
 			matchedBranches++
 		}
 	}
@@ -379,47 +333,6 @@ func analyzeBranchPatterns(branches []string) *types.BranchConvention {
 
 // Helper functions
 
-func matchPattern(text, pattern string) (bool, string) {
-	// Simple pattern matching - can be enhanced with regexp
-	if strings.Contains(pattern, "(feat|fix|") {
-		// Branch pattern
-		for _, prefix := range []string{"feat/", "fix/", "feature/", "bugfix/", "hotfix/", "release/", "chore/", "docs/", "test/", "refactor/", "ci/", "build/"} {
-			if strings.HasPrefix(text, prefix) {
-				return true, strings.TrimSuffix(prefix, "/")
-			}
-		}
-	}
-	// Commit patterns - simple check
-	if strings.HasPrefix(text, "feat:") || strings.HasPrefix(text, "fix:") ||
-		strings.HasPrefix(text, "docs:") || strings.HasPrefix(text, "chore:") {
-		return true, ""
-	}
-	return false, ""
-}
-
-func extractConventionalParts(commit string) []string {
-	// Extract type(scope): message
-	parts := strings.SplitN(commit, ":", 2)
-	if len(parts) != 2 {
-		return nil
-	}
-
-	typeScope := parts[0]
-	result := []string{"", "", "", ""}
-
-	// Check for scope
-	if strings.Contains(typeScope, "(") && strings.Contains(typeScope, ")") {
-		startScope := strings.Index(typeScope, "(")
-		endScope := strings.Index(typeScope, ")")
-		result[1] = typeScope[:startScope]             // type
-		result[3] = typeScope[startScope+1 : endScope] // scope
-	} else {
-		result[1] = typeScope // type only
-	}
-
-	return result
-}
-
 func normalizeBranchPrefix(prefix string) string {
 	switch prefix {
 	case "feature":
@@ -431,28 +344,15 @@ func normalizeBranchPrefix(prefix string) string {
 	}
 }
 
+// getTopKeysFromMap returns up to n keys of m, highest count first and ties
+// in key order.
 func getTopKeysFromMap(m map[string]int, n int) []string {
-	type kv struct {
-		Key   string
-		Value int
-	}
-
-	var sorted []kv
-	for k, v := range m {
-		sorted = append(sorted, kv{k, v})
-	}
-
-	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].Value > sorted[j].Value
+	keys := slices.Collect(maps.Keys(m))
+	slices.SortFunc(keys, func(a, b string) int {
+		return cmp.Or(cmp.Compare(m[b], m[a]), cmp.Compare(a, b))
 	})
-
-	var result []string
-	for i, item := range sorted {
-		if i >= n {
-			break
-		}
-		result = append(result, item.Key)
+	if len(keys) > n {
+		keys = keys[:n]
 	}
-
-	return result
+	return keys
 }

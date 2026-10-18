@@ -144,19 +144,19 @@ func (d *CLIDetector) detectFlags() (verboseFlag, dryRunFlag string) {
 func (d *CLIDetector) detectIndicators() []types.Indicator {
 	var indicators []types.Indicator
 
-	// Common CLI indicator patterns
-	indicatorPatterns := map[string]string{
-		"✅":  "Success",
-		"❌":  "Error",
-		"⚠️": "Warning",
-		"🔍":  "Scanning/analyzing",
-		"🔄":  "Processing/syncing",
-		"📊":  "Analysis results",
-		"📄":  "File output",
-		"👁️": "Watch mode",
-		"✓":  "Success",
-		"✗":  "Error",
-		"→":  "Progress indicator",
+	// Common CLI indicator patterns, in the order they are listed
+	indicatorPatterns := []types.Indicator{
+		{Symbol: "✅", Meaning: "Success"},
+		{Symbol: "❌", Meaning: "Error"},
+		{Symbol: "⚠️", Meaning: "Warning"},
+		{Symbol: "🔍", Meaning: "Scanning/analyzing"},
+		{Symbol: "🔄", Meaning: "Processing/syncing"},
+		{Symbol: "📊", Meaning: "Analysis results"},
+		{Symbol: "📄", Meaning: "File output"},
+		{Symbol: "👁️", Meaning: "Watch mode"},
+		{Symbol: "✓", Meaning: "Success"},
+		{Symbol: "✗", Meaning: "Error"},
+		{Symbol: "→", Meaning: "Progress indicator"},
 	}
 
 	// Find source files
@@ -172,13 +172,10 @@ func (d *CLIDetector) detectIndicators() []types.Indicator {
 
 		contentStr := string(content)
 
-		for symbol, meaning := range indicatorPatterns {
-			if strings.Contains(contentStr, symbol) && !foundIndicators[symbol] {
-				foundIndicators[symbol] = true
-				indicators = append(indicators, types.Indicator{
-					Symbol:  symbol,
-					Meaning: meaning,
-				})
+		for _, ind := range indicatorPatterns {
+			if strings.Contains(contentStr, ind.Symbol) && !foundIndicators[ind.Symbol] {
+				foundIndicators[ind.Symbol] = true
+				indicators = append(indicators, ind)
 			}
 		}
 	}

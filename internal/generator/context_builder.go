@@ -1,7 +1,9 @@
 package generator
 
 import (
+	"maps"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/Priyans-hu/argus/pkg/types"
@@ -172,6 +174,29 @@ func (ctx *GeneratorContext) GetLintConfig() string {
 }
 
 // Helper functions
+
+// sortedKeys returns the keys of m in sorted order, so output never depends on
+// map iteration order.
+func sortedKeys[V any](m map[string]V) []string {
+	return slices.Sorted(maps.Keys(m))
+}
+
+// orderedKeys returns the keys of m listed in first, in that order, followed by
+// the remaining keys sorted.
+func orderedKeys[V any](m map[string]V, first []string) []string {
+	keys := make([]string, 0, len(m))
+	for _, k := range first {
+		if _, ok := m[k]; ok {
+			keys = append(keys, k)
+		}
+	}
+	for _, k := range sortedKeys(m) {
+		if !slices.Contains(first, k) {
+			keys = append(keys, k)
+		}
+	}
+	return keys
+}
 
 // findTestFiles extracts test file paths from the analysis
 func findTestFiles(analysis *types.Analysis) []string {

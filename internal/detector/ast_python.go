@@ -1,8 +1,10 @@
 package detector
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/Priyans-hu/argus/pkg/types"
@@ -308,13 +310,15 @@ func (d *PythonASTDetector) importsToPatterns(imports map[string][]string) []typ
 		"azure":        "Azure",
 	}
 
-	for importPath, files := range imports {
+	prefixes := longestFirst(frameworkImports)
+	for _, importPath := range slices.Sorted(maps.Keys(imports)) {
+		files := imports[importPath]
 		// Check direct match or prefix match
-		for prefix, framework := range frameworkImports {
+		for _, prefix := range prefixes {
 			if importPath == prefix || strings.HasPrefix(importPath, prefix+".") {
 				patterns = append(patterns, types.PatternInfo{
 					Category:    "Python Frameworks",
-					Name:        framework,
+					Name:        frameworkImports[prefix],
 					Description: "Detected via import: " + importPath,
 					FileCount:   len(files),
 					Examples:    limitSlice(dedupe(files), 3),
@@ -354,13 +358,15 @@ func (d *PythonASTDetector) decoratorsToPatterns(decorators map[string][]string)
 		"asynccontextmanager": "Async context manager",
 	}
 
-	for decorator, files := range decorators {
+	keys := longestFirst(decoratorDescriptions)
+	for _, decorator := range slices.Sorted(maps.Keys(decorators)) {
+		files := decorators[decorator]
 		desc := decoratorDescriptions[decorator]
 		if desc == "" {
-			// Check for partial matches
-			for key, value := range decoratorDescriptions {
+			// Check for partial matches, most specific first
+			for _, key := range keys {
 				if strings.Contains(decorator, key) {
-					desc = value
+					desc = decoratorDescriptions[key]
 					break
 				}
 			}
@@ -394,7 +400,8 @@ func (d *PythonASTDetector) classToPatterns(classPatterns map[string][]string) [
 		"extends:ABC":       "Abstract base class",
 	}
 
-	for pattern, files := range classPatterns {
+	for _, pattern := range slices.Sorted(maps.Keys(classPatterns)) {
+		files := classPatterns[pattern]
 		desc := baseClassDescriptions[pattern]
 		if desc == "" {
 			if strings.HasPrefix(pattern, "extends:") {
@@ -431,7 +438,8 @@ func (d *PythonASTDetector) funcToPatterns(funcPatterns map[string][]string) []t
 		"generator":  "Generator functions",
 	}
 
-	for pattern, files := range funcPatterns {
+	for _, pattern := range slices.Sorted(maps.Keys(funcPatterns)) {
+		files := funcPatterns[pattern]
 		desc := patternDescriptions[pattern]
 		if desc == "" {
 			desc = "Python function pattern"

@@ -1,10 +1,13 @@
 package detector
 
 import (
+	"cmp"
 	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/Priyans-hu/argus/pkg/types"
@@ -51,22 +54,22 @@ func (d *TechStackDetector) Detect() (*types.TechStack, error) {
 // detectLanguages detects languages from file extensions
 func (d *TechStackDetector) detectLanguages(stack *types.TechStack) {
 	extToLang := map[string]string{
-		".js":    "JavaScript",
-		".jsx":   "JavaScript",
-		".ts":    "TypeScript",
-		".tsx":   "TypeScript",
-		".py":    "Python",
-		".go":    "Go",
-		".rs":    "Rust",
-		".rb":    "Ruby",
-		".java":  "Java",
-		".kt":    "Kotlin",
-		".swift": "Swift",
-		".php":   "PHP",
-		".cs":    "C#",
-		".cpp":   "C++",
-		".c":     "C",
-		".vue":   "Vue",
+		".js":     "JavaScript",
+		".jsx":    "JavaScript",
+		".ts":     "TypeScript",
+		".tsx":    "TypeScript",
+		".py":     "Python",
+		".go":     "Go",
+		".rs":     "Rust",
+		".rb":     "Ruby",
+		".java":   "Java",
+		".kt":     "Kotlin",
+		".swift":  "Swift",
+		".php":    "PHP",
+		".cs":     "C#",
+		".cpp":    "C++",
+		".c":      "C",
+		".vue":    "Vue",
 		".svelte": "Svelte",
 	}
 
@@ -92,6 +95,10 @@ func (d *TechStackDetector) detectLanguages(stack *types.TechStack) {
 			})
 		}
 	}
+	// Languages[0] is used as the primary language, so ties need a fixed winner
+	slices.SortFunc(stack.Languages, func(a, b types.Language) int {
+		return cmp.Or(cmp.Compare(b.Percentage, a.Percentage), cmp.Compare(a.Name, b.Name))
+	})
 }
 
 // PackageJSON represents package.json structure
@@ -128,14 +135,14 @@ func (d *TechStackDetector) detectFromPackageJSON(stack *types.TechStack) {
 	// Detect frameworks
 	frameworkMap := map[string]struct{ name, category string }{
 		// Frontend frameworks
-		"next":         {"Next.js", "frontend"},
-		"react":        {"React", "frontend"},
-		"vue":          {"Vue.js", "frontend"},
-		"nuxt":         {"Nuxt.js", "frontend"},
-		"svelte":       {"Svelte", "frontend"},
+		"next":          {"Next.js", "frontend"},
+		"react":         {"React", "frontend"},
+		"vue":           {"Vue.js", "frontend"},
+		"nuxt":          {"Nuxt.js", "frontend"},
+		"svelte":        {"Svelte", "frontend"},
 		"@angular/core": {"Angular", "frontend"},
-		"solid-js":     {"SolidJS", "frontend"},
-		"astro":        {"Astro", "frontend"},
+		"solid-js":      {"SolidJS", "frontend"},
+		"astro":         {"Astro", "frontend"},
 
 		// Backend frameworks
 		"express":      {"Express.js", "backend"},
@@ -145,68 +152,66 @@ func (d *TechStackDetector) detectFromPackageJSON(stack *types.TechStack) {
 		"@nestjs/core": {"NestJS", "backend"},
 
 		// Full-stack
-		"remix":        {"Remix", "fullstack"},
+		"remix": {"Remix", "fullstack"},
 
 		// Styling
-		"tailwindcss":  {"TailwindCSS", "styling"},
-		"@chakra-ui/react": {"Chakra UI", "styling"},
-		"@mui/material": {"Material UI", "styling"},
+		"tailwindcss":       {"TailwindCSS", "styling"},
+		"@chakra-ui/react":  {"Chakra UI", "styling"},
+		"@mui/material":     {"Material UI", "styling"},
 		"styled-components": {"Styled Components", "styling"},
 
 		// State management
-		"redux":        {"Redux", "state"},
-		"zustand":      {"Zustand", "state"},
+		"redux":                 {"Redux", "state"},
+		"zustand":               {"Zustand", "state"},
 		"@tanstack/react-query": {"React Query", "state"},
-		"swr":          {"SWR", "state"},
+		"swr":                   {"SWR", "state"},
 
 		// Testing
-		"jest":         {"Jest", "testing"},
-		"vitest":       {"Vitest", "testing"},
-		"mocha":        {"Mocha", "testing"},
+		"jest":             {"Jest", "testing"},
+		"vitest":           {"Vitest", "testing"},
+		"mocha":            {"Mocha", "testing"},
 		"@playwright/test": {"Playwright", "testing"},
-		"cypress":      {"Cypress", "testing"},
+		"cypress":          {"Cypress", "testing"},
 
 		// ORM/Database
-		"prisma":       {"Prisma", "database"},
+		"prisma":         {"Prisma", "database"},
 		"@prisma/client": {"Prisma", "database"},
-		"drizzle-orm":  {"Drizzle", "database"},
-		"mongoose":     {"Mongoose", "database"},
-		"typeorm":      {"TypeORM", "database"},
-		"sequelize":    {"Sequelize", "database"},
+		"drizzle-orm":    {"Drizzle", "database"},
+		"mongoose":       {"Mongoose", "database"},
+		"typeorm":        {"TypeORM", "database"},
+		"sequelize":      {"Sequelize", "database"},
 
 		// Tools
-		"typescript":   {"TypeScript", "language"},
-		"eslint":       {"ESLint", "tooling"},
-		"prettier":     {"Prettier", "tooling"},
+		"typescript": {"TypeScript", "language"},
+		"eslint":     {"ESLint", "tooling"},
+		"prettier":   {"Prettier", "tooling"},
 	}
 
-	seen := make(map[string]bool)
-	for dep, version := range allDeps {
+	// Sorted, so a framework listed under two packages (prisma, @prisma/client)
+	// always takes its version from the same one
+	for _, dep := range slices.Sorted(maps.Keys(allDeps)) {
 		if fw, ok := frameworkMap[dep]; ok {
-			if !seen[fw.name] {
-				stack.Frameworks = append(stack.Frameworks, types.Framework{
-					Name:     fw.name,
-					Version:  cleanVersion(version),
-					Category: fw.category,
-				})
-				seen[fw.name] = true
-			}
+			addFramework(stack, types.Framework{
+				Name:     fw.name,
+				Version:  cleanVersion(allDeps[dep]),
+				Category: fw.category,
+			})
 		}
 	}
 
 	// Detect databases from dependencies
 	dbDeps := map[string]string{
-		"pg":           "PostgreSQL",
-		"mysql2":       "MySQL",
-		"mongodb":      "MongoDB",
-		"redis":        "Redis",
+		"pg":                    "PostgreSQL",
+		"mysql2":                "MySQL",
+		"mongodb":               "MongoDB",
+		"redis":                 "Redis",
 		"@supabase/supabase-js": "Supabase",
-		"firebase":     "Firebase",
+		"firebase":              "Firebase",
 	}
 
-	for dep, db := range dbDeps {
-		if _, ok := allDeps[dep]; ok {
-			stack.Databases = append(stack.Databases, db)
+	for _, dep := range slices.Sorted(maps.Keys(dbDeps)) {
+		if _, ok := allDeps[dep]; ok && !slices.Contains(stack.Databases, dbDeps[dep]) {
+			stack.Databases = append(stack.Databases, dbDeps[dep])
 		}
 	}
 }
@@ -241,24 +246,21 @@ func (d *TechStackDetector) detectFromGoMod(stack *types.TechStack) {
 
 	// Detect frameworks
 	goFrameworks := map[string]struct{ name, category string }{
-		"github.com/gin-gonic/gin":   {"Gin", "backend"},
-		"github.com/labstack/echo":   {"Echo", "backend"},
-		"github.com/gofiber/fiber":   {"Fiber", "backend"},
-		"github.com/gorilla/mux":     {"Gorilla Mux", "backend"},
-		"github.com/go-chi/chi":      {"Chi", "backend"},
-		"github.com/spf13/cobra":     {"Cobra", "cli"},
-		"github.com/urfave/cli":      {"urfave/cli", "cli"},
-		"gorm.io/gorm":               {"GORM", "database"},
-		"github.com/jmoiron/sqlx":    {"sqlx", "database"},
+		"github.com/gin-gonic/gin":    {"Gin", "backend"},
+		"github.com/labstack/echo":    {"Echo", "backend"},
+		"github.com/gofiber/fiber":    {"Fiber", "backend"},
+		"github.com/gorilla/mux":      {"Gorilla Mux", "backend"},
+		"github.com/go-chi/chi":       {"Chi", "backend"},
+		"github.com/spf13/cobra":      {"Cobra", "cli"},
+		"github.com/urfave/cli":       {"urfave/cli", "cli"},
+		"gorm.io/gorm":                {"GORM", "database"},
+		"github.com/jmoiron/sqlx":     {"sqlx", "database"},
 		"go.mongodb.org/mongo-driver": {"MongoDB Driver", "database"},
 	}
 
-	for pkg, fw := range goFrameworks {
+	for _, pkg := range slices.Sorted(maps.Keys(goFrameworks)) {
 		if strings.Contains(content, pkg) {
-			stack.Frameworks = append(stack.Frameworks, types.Framework{
-				Name:     fw.name,
-				Category: fw.category,
-			})
+			addFramework(stack, types.Framework{Name: goFrameworks[pkg].name, Category: goFrameworks[pkg].category})
 		}
 	}
 }
@@ -280,26 +282,23 @@ func (d *TechStackDetector) detectFromPython(stack *types.TechStack) {
 
 func (d *TechStackDetector) parsePythonDeps(content string, stack *types.TechStack) {
 	pyFrameworks := map[string]struct{ name, category string }{
-		"django":      {"Django", "backend"},
-		"flask":       {"Flask", "backend"},
-		"fastapi":     {"FastAPI", "backend"},
-		"starlette":   {"Starlette", "backend"},
-		"pytest":      {"pytest", "testing"},
-		"sqlalchemy":  {"SQLAlchemy", "database"},
-		"alembic":     {"Alembic", "database"},
-		"celery":      {"Celery", "task"},
-		"pandas":      {"pandas", "data"},
-		"numpy":       {"NumPy", "data"},
-		"pydantic":    {"Pydantic", "validation"},
+		"django":     {"Django", "backend"},
+		"flask":      {"Flask", "backend"},
+		"fastapi":    {"FastAPI", "backend"},
+		"starlette":  {"Starlette", "backend"},
+		"pytest":     {"pytest", "testing"},
+		"sqlalchemy": {"SQLAlchemy", "database"},
+		"alembic":    {"Alembic", "database"},
+		"celery":     {"Celery", "task"},
+		"pandas":     {"pandas", "data"},
+		"numpy":      {"NumPy", "data"},
+		"pydantic":   {"Pydantic", "validation"},
 	}
 
 	contentLower := strings.ToLower(content)
-	for pkg, fw := range pyFrameworks {
+	for _, pkg := range slices.Sorted(maps.Keys(pyFrameworks)) {
 		if strings.Contains(contentLower, pkg) {
-			stack.Frameworks = append(stack.Frameworks, types.Framework{
-				Name:     fw.name,
-				Category: fw.category,
-			})
+			addFramework(stack, types.Framework{Name: pyFrameworks[pkg].name, Category: pyFrameworks[pkg].category})
 		}
 	}
 }
@@ -325,13 +324,18 @@ func (d *TechStackDetector) detectFromCargo(stack *types.TechStack) {
 		"clap":      {"Clap", "cli"},
 	}
 
-	for pkg, fw := range rustFrameworks {
+	for _, pkg := range slices.Sorted(maps.Keys(rustFrameworks)) {
 		if strings.Contains(content, pkg) {
-			stack.Frameworks = append(stack.Frameworks, types.Framework{
-				Name:     fw.name,
-				Category: fw.category,
-			})
+			addFramework(stack, types.Framework{Name: rustFrameworks[pkg].name, Category: rustFrameworks[pkg].category})
 		}
+	}
+}
+
+// addFramework appends fw unless the stack already lists a framework of
+// that name (requirements.txt and pyproject.toml are both parsed, for one).
+func addFramework(stack *types.TechStack, fw types.Framework) {
+	if !slices.ContainsFunc(stack.Frameworks, func(f types.Framework) bool { return f.Name == fw.Name }) {
+		stack.Frameworks = append(stack.Frameworks, fw)
 	}
 }
 

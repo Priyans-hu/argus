@@ -10,17 +10,38 @@ argus generates a `CLAUDE.md` file with structured sections that AI assistants c
 
 ## File Structure
 
-The output file has two main regions:
+The generated content sits between `ARGUS:AUTO` markers. Everything outside them is yours and is kept on every re-scan:
 
 ```markdown
+... your notes (kept on re-scan) ...
+
 <!-- ARGUS:AUTO -->
 ... auto-generated content ...
 <!-- /ARGUS:AUTO -->
 
 <!-- ARGUS:CUSTOM -->
-... your custom notes (preserved on re-scan) ...
+... more of your notes (kept on re-scan) ...
 <!-- /ARGUS:CUSTOM -->
 ```
+
+## Re-running argus
+
+`argus scan`, `argus sync` and `argus watch` treat existing files in one of two ways.
+
+**Merged files:** `CLAUDE.md`, `.cursorrules` and `.github/copilot-instructions.md`
+
+- A new file is written with `ARGUS:AUTO` markers around the generated content.
+- With one `ARGUS:AUTO` pair, only the text between the markers is replaced. Text above, between and below (CUSTOM blocks or plain notes) stays where it is, and you may move the block.
+- A file without markers, for example one you wrote yourself or one from an older argus version, gets the generated block on top and keeps its text below it. argus prints a one-time notice; remove anything an older argus run wrote that you no longer want.
+- With unbalanced or repeated `ARGUS:AUTO` markers the file is left unchanged and argus warns. Fix the markers, or use `--force` to replace the file with a fresh generated one.
+- `--merge=false` replaces the whole file with a fresh generated one.
+
+**Create-only files:** everything under `.claude/` and `.continue/config.yaml`
+
+- A missing file is written. A file that already matches the generated output is reported as up to date.
+- A file that differs (for example one you edited) is left alone, and argus reports how many files it skipped (`-v` lists them). Run `argus scan --force` or `argus sync --force`, or delete the file, to regenerate it.
+
+In both cases a file whose content would not change is not rewritten, and `--dry-run` shows the same decisions without writing anything.
 
 ## Auto-Generated Sections
 
@@ -111,7 +132,7 @@ Code patterns found in the codebase:
 
 ## Custom Section
 
-Add your own notes that persist across scans:
+Any text outside the `ARGUS:AUTO` block persists across scans. A CUSTOM block (`argus scan --add-custom` adds an empty one) marks your notes explicitly:
 
 ```markdown
 <!-- ARGUS:CUSTOM -->

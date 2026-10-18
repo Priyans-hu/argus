@@ -120,7 +120,8 @@ func goReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string {
 		content.WriteString("## Testing\n\n")
 		if len(ctx.TestingPatterns) > 0 {
 			content.WriteString("Detected testing patterns:\n")
-			for pattern, files := range ctx.TestingPatterns {
+			for _, pattern := range sortedKeys(ctx.TestingPatterns) {
+				files := ctx.TestingPatterns[pattern]
 				fmt.Fprintf(&content, "- **%s**", pattern)
 				if len(files) > 0 {
 					fmt.Fprintf(&content, " - see `%s`", files[0])
@@ -230,7 +231,8 @@ func tsReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string {
 		content.WriteString("## Testing\n\n")
 		if len(ctx.TestingPatterns) > 0 {
 			content.WriteString("Detected testing patterns:\n")
-			for pattern, files := range ctx.TestingPatterns {
+			for _, pattern := range sortedKeys(ctx.TestingPatterns) {
+				files := ctx.TestingPatterns[pattern]
 				fmt.Fprintf(&content, "- **%s**", pattern)
 				if len(files) > 0 {
 					fmt.Fprintf(&content, " - see `%s`", files[0])
@@ -323,7 +325,8 @@ func pythonReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) stri
 		content.WriteString("## Testing\n\n")
 		if len(ctx.TestingPatterns) > 0 {
 			content.WriteString("Detected testing patterns:\n")
-			for pattern, files := range ctx.TestingPatterns {
+			for _, pattern := range sortedKeys(ctx.TestingPatterns) {
+				files := ctx.TestingPatterns[pattern]
 				fmt.Fprintf(&content, "- **%s**", pattern)
 				if len(files) > 0 {
 					fmt.Fprintf(&content, " - see `%s`", files[0])
@@ -471,7 +474,8 @@ func javaReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string
 		content.WriteString("## Testing\n\n")
 		if len(ctx.TestingPatterns) > 0 {
 			content.WriteString("Detected testing patterns:\n")
-			for pattern, files := range ctx.TestingPatterns {
+			for _, pattern := range sortedKeys(ctx.TestingPatterns) {
+				files := ctx.TestingPatterns[pattern]
 				fmt.Fprintf(&content, "- **%s**", pattern)
 				if len(files) > 0 {
 					fmt.Fprintf(&content, " - see `%s`", files[0])
@@ -626,7 +630,8 @@ func securityReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) st
 	if len(ctx.AuthPatterns) > 0 {
 		content.WriteString("## Authentication in This Project\n\n")
 		content.WriteString("Detected patterns:\n")
-		for pattern, files := range ctx.AuthPatterns {
+		for _, pattern := range sortedKeys(ctx.AuthPatterns) {
+			files := ctx.AuthPatterns[pattern]
 			fmt.Fprintf(&content, "- **%s**", pattern)
 			if len(files) > 0 {
 				fmt.Fprintf(&content, " - see `%s`", files[0])
@@ -640,7 +645,8 @@ func securityReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) st
 	if len(ctx.APIPatterns) > 0 {
 		content.WriteString("## API Security\n\n")
 		content.WriteString("Detected API patterns to review:\n")
-		for pattern, files := range ctx.APIPatterns {
+		for _, pattern := range sortedKeys(ctx.APIPatterns) {
+			files := ctx.APIPatterns[pattern]
 			fmt.Fprintf(&content, "- **%s**", pattern)
 			if len(files) > 0 {
 				fmt.Fprintf(&content, " - see `%s`", files[0])
