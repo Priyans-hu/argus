@@ -10,7 +10,6 @@ import (
 	"path"
 	"path/filepath"
 
-	"github.com/Priyans-hu/argus/internal/generator"
 	"github.com/Priyans-hu/argus/internal/merger"
 )
 
@@ -41,24 +40,9 @@ const (
 	fileSkipped                     // differs from the generated output, left alone
 )
 
-// writePolicy is how an output that already exists is treated.
-type writePolicy int
-
-const (
-	policyCreateOnly writePolicy = iota // written once, later differences skipped
-	policyMerge                         // ARGUS:AUTO block replaced, other text kept
-)
-
-// policyFor returns the write policy for a slash path relative to its root.
-func policyFor(rel string) writePolicy {
-	if generator.IsMergeFile(rel) {
-		return policyMerge
-	}
-	return policyCreateOnly
-}
-
-// writeMerged writes a merge-policy output: the generated text replaces the
-// file's ARGUS:AUTO block and everything outside the block is kept.
+// writeMerged writes a merge file (see generator.IsMergeFile): the generated
+// text replaces the file's ARGUS:AUTO block and everything outside the block
+// is kept.
 func writeMerged(root, label, rel string, generated []byte, dryRun bool) error {
 	target := filepath.Join(root, filepath.FromSlash(rel))
 	shown := displayPath(label, rel)

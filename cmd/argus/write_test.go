@@ -346,29 +346,6 @@ func TestMonorepoAdoptsHandWrittenRootFile(t *testing.T) {
 	}
 }
 
-func TestPolicyFor(t *testing.T) {
-	tests := []struct {
-		rel  string
-		want writePolicy
-	}{
-		{"CLAUDE.md", policyMerge},
-		{"AGENTS.md", policyMerge},
-		{".cursorrules", policyMerge},
-		{".github/copilot-instructions.md", policyMerge},
-		{".continue/config.yaml", policyCreateOnly},
-		{".claude/settings.json", policyCreateOnly},
-		{".claude/mcp.json", policyCreateOnly},
-		{".claude/agents/planner.md", policyCreateOnly},
-		{".claude/rules/testing.md", policyCreateOnly},
-		{".claude/skills/test/SKILL.md", policyCreateOnly},
-	}
-	for _, tt := range tests {
-		if got := policyFor(tt.rel); got != tt.want {
-			t.Errorf("policyFor(%q) = %v, want %v", tt.rel, got, tt.want)
-		}
-	}
-}
-
 // checkMarked fails unless content holds one AUTO pair and ends with
 // exactly one newline.
 func checkMarked(t *testing.T, content string) {

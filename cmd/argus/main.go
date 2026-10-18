@@ -628,7 +628,7 @@ func generateOutput(absPath, label, format string, analysis *types.Analysis, cfg
 		return fmt.Errorf("generation failed: %w", err)
 	}
 
-	if policyFor(outputFile) == policyMerge {
+	if generator.IsMergeFile(outputFile) {
 		return writeMerged(absPath, label, outputFile, content, dryRun)
 	}
 	status, err := writeCreateOnly(absPath, label, outputFile, content, dryRun)
