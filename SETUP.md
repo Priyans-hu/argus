@@ -153,7 +153,6 @@ argus scan
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--output`, `-o` | Output formats (claude, cursor, copilot, all) | `all` |
 | `--merge` | Preserve custom sections when regenerating | `true` |
 | `--add-custom` | Add placeholder for custom sections | `false` |
 | `--force` | Overwrite files argus would otherwise skip (edited `.claude/**` and `.continue/config.yaml`, unbalanced or repeated `ARGUS:AUTO` markers); scan and sync only | `false` |
@@ -163,10 +162,10 @@ argus scan
 
 ```bash
 # Generate only CLAUDE.md
-argus sync -o claude
+argus scan --format claude
 
 # Generate with custom section placeholder
-argus init --add-custom
+argus scan --add-custom
 
 # Scan a different directory
 argus scan -p /path/to/project
@@ -180,7 +179,7 @@ Argus preserves your custom documentation when regenerating files.
 
 ### Add Custom Content
 
-After running `argus init --add-custom`, you'll see markers in the generated files:
+After running `argus scan --add-custom`, you'll see markers in the generated files:
 
 ```markdown
 <!-- ARGUS:AUTO -->

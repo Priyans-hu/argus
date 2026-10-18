@@ -24,7 +24,6 @@ argus scan /path/to/project
 |------|-------|-------------|
 | `--verbose` | `-v` | Show detailed analysis output |
 | `--dry-run` | `-n` | Preview output without writing files |
-| `--output` | `-o` | Custom output file path |
 | `--merge` | `-m` | Keep your text around the generated block when regenerating (default `true`; `--merge=false` replaces the whole file) |
 | `--add-custom` | | Add an empty CUSTOM block for your notes to CLAUDE.md, `.cursorrules` and the Copilot file |
 | `--force` | | Overwrite files argus would otherwise skip: edited `.claude/` and `.continue/config.yaml` files, and files with unbalanced or repeated `ARGUS:AUTO` markers |
@@ -51,12 +50,6 @@ Shows detailed progress:
 - Files being scanned
 - Patterns detected
 - Time taken for each phase
-
-### Custom Output Path
-
-```bash
-argus scan . -o docs/AI_CONTEXT.md
-```
 
 ### Scan Specific Directory
 

@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Existing .claude/** and .continue/config.yaml files that differ from the generated output are skipped and reported instead of overwritten
 - The first write of CLAUDE.md, .cursorrules and the Copilot file carries ARGUS:AUTO markers, so rescans no longer append a Previous Content copy; an existing file without markers gets the generated block on top and its text kept below; --add-custom applies to these files only
 
+### Deprecated
+- `-o`/`--output` has no effect; it is hidden and will be removed in a future release
+
 ### Fixed
 - Agent Skill: first writes use `--add-custom`, so a later plain scan no longer doubles CLAUDE.md
 - Rescans are stable: argus no longer counts its own outputs (CLAUDE.md, AGENTS.md, .cursorrules, .claude/, .continue/, the Copilot file) as project files, and watch no longer re-triggers on .continue/config.yaml

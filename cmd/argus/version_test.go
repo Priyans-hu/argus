@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"bytes"
+	"strings"
+	"testing"
+)
 
 func TestResolveVersion(t *testing.T) {
 	tests := []struct {
@@ -37,17 +41,39 @@ func TestVersionFlagMatchesVersionCommand(t *testing.T) {
 
 func TestScanShortVIsVerbose(t *testing.T) {
 	resetFlags(t)
+	restoreFlags(t, scanCmd, "verbose", "dry-run")
 	if err := scanCmd.ParseFlags([]string{"-v", "--dry-run"}); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() {
-		for _, name := range []string{"verbose", "dry-run"} {
-			f := scanCmd.Flags().Lookup(name)
-			_ = f.Value.Set(f.DefValue)
-			f.Changed = false
-		}
-	})
 	if !verbose || !dryRun {
 		t.Errorf("scan -v --dry-run parsed verbose=%v dryRun=%v, want both true", verbose, dryRun)
+	}
+}
+
+func TestOutputFlagIsHiddenAndDeprecated(t *testing.T) {
+	resetFlags(t)
+	help, _, err := executeRoot(t, "scan", "--help")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(help, "--output") || strings.Contains(help, "-o,") {
+		t.Errorf("scan --help lists -o/--output:\n%s", help)
+	}
+
+	var warnings bytes.Buffer
+	rootCmd.SetOut(&warnings) // cobra prints flag warnings to stderr unless an output is set
+	t.Cleanup(resetRoot)
+	restoreFlags(t, scanCmd, "output", "dry-run")
+	if err := scanCmd.ParseFlags([]string{"-o", "x", "--dry-run"}); err != nil {
+		t.Fatalf("scan -o x --dry-run: %v", err)
+	}
+	// cobra keeps earlier warnings in its buffer when the test runs again in
+	// the same process, so check for the line rather than the whole output
+	want := "Flag --output has been deprecated, it has no effect and will be removed in a future release\n"
+	if !strings.HasSuffix(warnings.String(), want) {
+		t.Errorf("warnings = %q, want them to end with %q", warnings.String(), want)
+	}
+	if outputDir != "x" || !dryRun {
+		t.Errorf("parsed outputDir=%q dryRun=%v, want x and true", outputDir, dryRun)
 	}
 }

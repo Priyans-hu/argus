@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/Priyans-hu/argus/pkg/types"
+	"github.com/spf13/cobra"
 )
 
 // resetFlags puts the flag and reporting globals at their defaults for one
@@ -16,7 +17,7 @@ import (
 func resetFlags(t *testing.T) {
 	t.Helper()
 	reset := func() {
-		outputFormat, dryRun, verbose, force = "claude", false, false, false
+		outputDir, outputFormat, dryRun, verbose, force = ".", "claude", false, false, false
 		mergeMode, addCustomBlock, compactMode, parallel = true, false, false, true
 		usageMode, monorepoMode, aiMode = false, false, false
 		skipped, watchNotified = nil, nil
@@ -63,18 +64,34 @@ func runCLI(t *testing.T, args ...string) (errOut string, code int) {
 	return buf.String(), code
 }
 
-// resetRoot undoes what executing rootCmd leaves behind.
+// resetRoot undoes what executing rootCmd leaves behind: streams, args,
+// silenced usage and a set --help or --version.
 func resetRoot() {
 	rootCmd.SetOut(nil)
 	rootCmd.SetErr(nil)
 	rootCmd.SetArgs(nil)
-	if f := rootCmd.Flags().Lookup("version"); f != nil {
+	for _, c := range append(rootCmd.Commands(), rootCmd) {
+		c.SilenceUsage = false
+		resetFlag(c, "help")
+		resetFlag(c, "version")
+	}
+}
+
+// restoreFlags puts the named flags of cmd back to their defaults when the
+// test ends.
+func restoreFlags(t *testing.T, cmd *cobra.Command, names ...string) {
+	t.Helper()
+	t.Cleanup(func() {
+		for _, name := range names {
+			resetFlag(cmd, name)
+		}
+	})
+}
+
+func resetFlag(cmd *cobra.Command, name string) {
+	if f := cmd.Flags().Lookup(name); f != nil {
 		_ = f.Value.Set(f.DefValue)
 		f.Changed = false
-	}
-	rootCmd.SilenceUsage = false
-	for _, c := range rootCmd.Commands() {
-		c.SilenceUsage = false
 	}
 }
 

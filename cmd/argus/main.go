@@ -178,6 +178,7 @@ func init() {
 
 	// Scan command flags
 	scanCmd.Flags().StringVarP(&outputDir, "output", "o", ".", "Output directory for generated files")
+	_ = scanCmd.Flags().MarkDeprecated("output", "it has no effect and will be removed in a future release")
 	scanCmd.Flags().StringVarP(&outputFormat, "format", "f", "claude", "Output format: claude, claude-code, cursor, copilot, continue, all")
 	scanCmd.Flags().BoolVarP(&dryRun, "dry-run", "n", false, "Show what would be generated without writing files")
 	scanCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed output")
