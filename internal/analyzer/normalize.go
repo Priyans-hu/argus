@@ -62,6 +62,11 @@ func normalize(a *types.Analysis) {
 		}
 	}
 
+	// the order the Configuration section renders
+	slices.SortFunc(a.ConfigFiles, func(x, y types.ConfigFileInfo) int {
+		return cmp.Or(cmp.Compare(x.Type, y.Type), cmp.Compare(x.Path, y.Path), cmp.Compare(x.Purpose, y.Purpose))
+	})
+
 	slices.SortFunc(a.Endpoints, func(x, y types.Endpoint) int {
 		return cmp.Or(
 			cmp.Compare(x.File, y.File),

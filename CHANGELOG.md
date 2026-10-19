@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Claude Code plugin marketplace manifest (`.claude-plugin/marketplace.json`)
 - `--force` on scan and sync overwrites files argus would otherwise skip
 - `argus --version`, matching `argus version`; `go install` builds report their module version
+- Dependencies are read from package.json (including peer and optional dependencies), go.mod, pyproject.toml, requirements*.txt and Cargo.toml at the root and up to two directories deep
 
 ### Changed
 - Repo dev skills in `.claude/skills/` are marked `metadata.internal: true`, so the skills CLI no longer offers them
@@ -21,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Deprecated
 - `-o`/`--output` has no effect; it is hidden and will be removed in a future release
+
+### Removed
+- The unused godirwalk dependency
 
 ### Fixed
 - Agent Skill: first writes use `--add-custom`, so a later plain scan no longer doubles CLAUDE.md
@@ -35,6 +39,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `argus upgrade` compares versions with semver and times out stalled requests
 - `argus upgrade` replaces the running binary atomically instead of overwriting it in place
 - Existing output files are replaced through a temp file and a rename, so a full disk or an interrupted run cannot truncate them
+- Ignore rules match entry names instead of substrings: .github, .gitignore, build.gradle.kts and directories such as internal/binder are no longer hidden from analysis; `ignore` in .argus.yaml now takes effect in every mode (a name at any depth, a glob, or a path anchored at the project root)
+- Tech stack detection compares exact dependency names instead of searching manifest text, and finds frameworks declared in sub-directories or only as peer dependencies
+- scan, scan --parallel=false and watch produce the same analysis; project tools and AST detectors run in every mode
+- Code pattern detection reads project source only: docs, examples, fixtures, vendored and generated code are skipped, test files count only for testing patterns, and keywords no longer match inside identifiers (`it(` in `init(`, `cy.` in `frecency.`)
 
 ### Security
 - The Repository line no longer leaks credentials or SSH host aliases; only github.com, gitlab.com and bitbucket.org are linked, other hosts show owner/name, local remotes are omitted

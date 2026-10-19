@@ -164,13 +164,13 @@ func TestParallelAnalyzerMergesConventionsInOrder(t *testing.T) {
 	writeTree(t, root, files)
 
 	// The three groups Analyzer.Analyze concatenates, in its order.
-	walked, err := NewWalker(root).Walk(context.Background())
+	walked, err := NewWalker(root, nil).Walk(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
 	conventions, _ := detector.NewConventionDetector(root, walked).Detect()
-	patterns, _ := detector.NewPatternDetector(root, walked).Detect()
-	framework, _ := detector.NewFrameworkDetector(root, walked).Detect()
+	patterns, _ := detector.NewPatternDetector(root, walked, detector.ReadDependencies(root, walked)).Detect()
+	framework, _ := detector.NewFrameworkDetector(root, walked, detector.ReadDependencies(root, walked)).Detect()
 	if len(conventions) == 0 || len(patterns) == 0 || len(framework) == 0 {
 		t.Fatalf("fixture must trigger all three detectors: %d conventions, %d patterns, %d framework",
 			len(conventions), len(patterns), len(framework))
@@ -341,49 +341,6 @@ func TestParallelAnalyzer_MultipleRuns(t *testing.T) {
 		if analysis == nil {
 			t.Fatalf("analysis run %d returned nil", i)
 		}
-	}
-}
-
-func TestGetProjectName(t *testing.T) {
-	tests := []struct {
-		path     string
-		expected string
-	}{
-		{"/path/to/project", "project"},
-		{"/single", "single"},
-		{"relative/path", "path"},
-		{"simple", "simple"},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.path, func(t *testing.T) {
-			result := getProjectName(tc.path)
-			if result != tc.expected {
-				t.Errorf("getProjectName(%q) = %q, expected %q", tc.path, result, tc.expected)
-			}
-		})
-	}
-}
-
-func TestBaseFileName(t *testing.T) {
-	tests := []struct {
-		path     string
-		expected string
-	}{
-		{"/path/to/file.go", "file.go"},
-		{"file.go", "file.go"},
-		{"/root", "root"},
-		{"a/b/c/d", "d"},
-		{"", ""},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.path, func(t *testing.T) {
-			result := baseFileName(tc.path)
-			if result != tc.expected {
-				t.Errorf("baseFileName(%q) = %q, expected %q", tc.path, result, tc.expected)
-			}
-		})
 	}
 }
 

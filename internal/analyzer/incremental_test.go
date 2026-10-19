@@ -20,11 +20,16 @@ func TestDetermineImpact_PackageManager(t *testing.T) {
 		file     string
 		expected []string
 	}{
-		{"go.mod", []string{ImpactTechStack, ImpactDevelopment}},
-		{"package.json", []string{ImpactTechStack, ImpactDevelopment}},
-		{"Cargo.toml", []string{ImpactTechStack, ImpactDevelopment}},
-		{"pyproject.toml", []string{ImpactTechStack, ImpactDevelopment}},
-		{"requirements.txt", []string{ImpactTechStack, ImpactDevelopment}},
+		{"go.mod", []string{ImpactAll}},
+		{"package.json", []string{ImpactAll}},
+		{"web/package.json", []string{ImpactAll}},
+		{"Cargo.toml", []string{ImpactAll}},
+		{"pyproject.toml", []string{ImpactAll}},
+		{"requirements.txt", []string{ImpactAll}},
+		{"requirements-dev.txt", []string{ImpactAll}},
+		{"requirements/base.txt", []string{ImpactAll}},
+		{"requirements/dev.in", []string{ImpactAll}},
+		{"yarn.lock", []string{ImpactAll}},
 	}
 
 	for _, tt := range tests {
@@ -216,7 +221,7 @@ func main() {
 	}
 
 	// Test full analysis
-	ia := NewIncrementalAnalyzer(tmpDir)
+	ia := NewIncrementalAnalyzer(tmpDir, nil)
 	analysis, err := ia.AnalyzeFull(context.Background())
 
 	if err != nil {
@@ -266,7 +271,7 @@ func main() {
 	}
 
 	// Do initial full analysis
-	ia := NewIncrementalAnalyzer(tmpDir)
+	ia := NewIncrementalAnalyzer(tmpDir, nil)
 	_, err = ia.AnalyzeFull(context.Background())
 	if err != nil {
 		t.Fatalf("initial analysis failed: %v", err)
@@ -308,7 +313,7 @@ func TestIncrementalAnalyzer_NoCacheFallsBackToFull(t *testing.T) {
 	}
 
 	// Create new analyzer without running full analysis first
-	ia := NewIncrementalAnalyzer(tmpDir)
+	ia := NewIncrementalAnalyzer(tmpDir, nil)
 
 	// Incremental analysis should fall back to full when no cache
 	analysis, impacts, err := ia.AnalyzeIncremental(context.Background(), filepath.Join(tmpDir, "main.go"))
