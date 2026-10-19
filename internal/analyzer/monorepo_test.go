@@ -32,7 +32,7 @@ func TestResolveWorkspaces_GlobPatterns(t *testing.T) {
 	mkdirAll(t, filepath.Join(root, "apps", "web"))
 	mkdirAll(t, filepath.Join(root, "apps", "api"))
 
-	ma := NewMonorepoAnalyzer(root, nil, false, 4)
+	ma := NewMonorepoAnalyzer(root, nil, false, 4, nil)
 
 	info := &types.MonorepoInfo{
 		IsMonorepo:     true,
@@ -65,7 +65,7 @@ func TestResolveWorkspaces_FromPackages(t *testing.T) {
 	mkdirAll(t, filepath.Join(root, "apps", "web"))
 	mkdirAll(t, filepath.Join(root, "apps", "api"))
 
-	ma := NewMonorepoAnalyzer(root, nil, false, 4)
+	ma := NewMonorepoAnalyzer(root, nil, false, 4, nil)
 
 	info := &types.MonorepoInfo{
 		IsMonorepo: true,
@@ -88,7 +88,7 @@ func TestResolveWorkspaces_Deduplication(t *testing.T) {
 	root := t.TempDir()
 	mkdirAll(t, filepath.Join(root, "packages", "shared"))
 
-	ma := NewMonorepoAnalyzer(root, nil, false, 4)
+	ma := NewMonorepoAnalyzer(root, nil, false, 4, nil)
 
 	info := &types.MonorepoInfo{
 		IsMonorepo:     true,
@@ -110,7 +110,7 @@ func TestResolveWorkspaces_Deduplication(t *testing.T) {
 
 func TestResolveWorkspaces_Empty(t *testing.T) {
 	root := t.TempDir()
-	ma := NewMonorepoAnalyzer(root, nil, false, 4)
+	ma := NewMonorepoAnalyzer(root, nil, false, 4, nil)
 
 	info := &types.MonorepoInfo{
 		IsMonorepo: true,
@@ -129,7 +129,7 @@ func TestAnalyzeWorkspaces_Sequential(t *testing.T) {
 	mkdirAll(t, wsDir)
 	writeFile(t, filepath.Join(wsDir, "main.go"), []byte("package main\n"))
 
-	ma := NewMonorepoAnalyzer(root, nil, false, 4)
+	ma := NewMonorepoAnalyzer(root, nil, false, 4, nil)
 
 	info := &types.MonorepoInfo{
 		IsMonorepo:     true,
@@ -163,7 +163,7 @@ func TestAnalyzeWorkspaces_Parallel(t *testing.T) {
 		writeFile(t, filepath.Join(wsDir, "index.js"), []byte("console.log('hello');\n"))
 	}
 
-	ma := NewMonorepoAnalyzer(root, nil, true, 2)
+	ma := NewMonorepoAnalyzer(root, nil, true, 2, nil)
 
 	info := &types.MonorepoInfo{
 		IsMonorepo:     true,
@@ -193,7 +193,7 @@ func TestAnalyzeWorkspaces_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	ma := NewMonorepoAnalyzer(root, nil, false, 4)
+	ma := NewMonorepoAnalyzer(root, nil, false, 4, nil)
 
 	info := &types.MonorepoInfo{
 		IsMonorepo:     true,
@@ -252,5 +252,37 @@ func TestExtractJSONField(t *testing.T) {
 				t.Errorf("expected %q, got %q", tt.expected, result)
 			}
 		})
+	}
+}
+
+// A workspace uses what the monorepo root declares, so root dependencies are
+// evidence for its patterns too.
+func TestWorkspacesUseRootDependencies(t *testing.T) {
+	root := t.TempDir()
+	writeTree(t, root, map[string]string{
+		"package.json": `{"name": "m", "workspaces": ["apps/*"],
+			"devDependencies": {"vitest": "2.0.0", "@testing-library/react": "16.0.0", "react": "18.2.0"}}`,
+		"apps/web/package.json":   `{"name": "web", "dependencies": {"next": "14.0.0"}}`,
+		"apps/web/src/a.tsx":      "const [a] = useState(0);\n",
+		"apps/web/src/a.test.tsx": "vi.mock(\"x\");\nrender(<A />);\nscreen.getByText(\"x\");\n",
+	})
+	rootAnalysis, err := NewParallelAnalyzer(root, nil).Analyze(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, par := range []bool{false, true} {
+		results := NewMonorepoAnalyzer(root, nil, par, 2, rootAnalysis.Dependencies).AnalyzeWorkspaces(context.Background(), rootAnalysis.MonorepoInfo)
+		if len(results) != 1 || results[0].Analysis == nil {
+			t.Fatalf("workspaces = %+v, want apps/web", results)
+		}
+		cp := results[0].Analysis.CodePatterns
+		if !hasPattern(cp.StateManagement, "useState") {
+			t.Errorf("parallel %v: useState missing: %+v", par, cp.StateManagement)
+		}
+		for _, name := range []string{"vi.mock", "render(", "screen."} {
+			if !hasPattern(cp.Testing, name) {
+				t.Errorf("parallel %v: %s missing: %+v", par, name, cp.Testing)
+			}
+		}
 	}
 }

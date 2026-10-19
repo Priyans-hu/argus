@@ -198,3 +198,35 @@ func TestDepSet(t *testing.T) {
 		}
 	}
 }
+
+func TestReadDependenciesFromRequirementsDirectory(t *testing.T) {
+	got := readDeps(t, map[string]string{
+		"requirements/base.txt":         "Django==4.2.0\nrequests>=2.31\n",
+		"requirements/dev.in":           "-r base.txt\npytest\n",
+		"requirements/README.md":        "docs\n",
+		"backend/requirements/prod.txt": "gunicorn==21.0.0\n",
+	})
+	var names []string
+	for _, d := range got {
+		names = append(names, d.Name)
+	}
+	if want := []string{"django", "gunicorn", "pytest", "requests"}; !reflect.DeepEqual(names, want) {
+		t.Errorf("dependencies = %v, want %v", names, want)
+	}
+
+	// a Django app laid out this way keeps its library patterns
+	root, infos := writeProject(t, map[string]string{
+		"requirements/base.txt": "Django==4.2.0\nrequests>=2.31\n",
+		"app/models.py":         "from django.db import models\n\nclass A(models.Model):\n    pass\n",
+		"app/api.py":            "import requests\n\nrequests.get(\"x\")\n",
+	})
+	cp := NewCodePatternDetector(root, infos, ReadDependencies(root, infos)).Detect()
+	for _, name := range []string{"django.db", "models.Model"} {
+		if patternExamples(cp.DatabaseORM, name) == nil {
+			t.Errorf("%s missing: %+v", name, cp.DatabaseORM)
+		}
+	}
+	if patternExamples(cp.DataFetching, "requests.") == nil {
+		t.Errorf("requests. missing: %+v", cp.DataFetching)
+	}
+}

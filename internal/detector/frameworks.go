@@ -13,14 +13,13 @@ import (
 type FrameworkDetector struct {
 	rootPath string
 	files    []types.FileInfo
+	deps     DepSet
 }
 
-// NewFrameworkDetector creates a new framework detector
-func NewFrameworkDetector(rootPath string, files []types.FileInfo) *FrameworkDetector {
-	return &FrameworkDetector{
-		rootPath: rootPath,
-		files:    files,
-	}
+// NewFrameworkDetector creates a framework detector; deps are the declared
+// dependencies some patterns need as evidence
+func NewFrameworkDetector(rootPath string, files []types.FileInfo, deps []types.Dependency) *FrameworkDetector {
+	return &FrameworkDetector{rootPath: rootPath, files: files, deps: NewDepSet(deps)}
 }
 
 // Detect analyzes the codebase for framework-specific patterns
@@ -78,7 +77,7 @@ func (d *FrameworkDetector) detectReactPatterns() []types.Convention {
 	useReducerRegex := regexp.MustCompile(`useReducer\s*\(`)
 	useQueryRegex := regexp.MustCompile(`use(?:Query|Mutation|QueryClient)\s*\(`)
 	useSWRRegex := regexp.MustCompile(`useSWR\s*\(`)
-	reduxRegex := regexp.MustCompile(`useSelector|useDispatch|connect\s*\(`)
+	reduxRegex := regexp.MustCompile(`useSelector|useDispatch|\bconnect\s*\(`)
 	zustandRegex := regexp.MustCompile(`create\s*\(\s*\(\s*set\s*(?:,\s*get)?\s*\)`)
 	jotaiRegex := regexp.MustCompile(`atom\s*\(|useAtom\s*\(`)
 	recoilRegex := regexp.MustCompile(`atom\s*\(|useRecoilState\s*\(`)
@@ -132,7 +131,7 @@ func (d *FrameworkDetector) detectReactPatterns() []types.Convention {
 		}
 
 		// Check state management
-		if reduxRegex.MatchString(contentStr) {
+		if d.deps.declares(reduxPkgs) && reduxRegex.MatchString(contentStr) {
 			stateManagement = "Redux"
 		}
 		if zustandRegex.MatchString(contentStr) {

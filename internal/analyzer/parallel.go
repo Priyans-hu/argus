@@ -15,6 +15,7 @@ import (
 type ParallelAnalyzer struct {
 	rootPath string
 	config   *types.Config
+	rootDeps []types.Dependency // a monorepo root's, for a workspace
 }
 
 // NewParallelAnalyzer creates a new parallel analyzer
@@ -38,7 +39,7 @@ func (pa *ParallelAnalyzer) Analyze(ctx context.Context) (*types.Analysis, error
 	slog.Debug("starting parallel analysis", "rootPath", pa.rootPath)
 
 	// Walk the file tree and read dependencies first (required by all detectors)
-	p, err := newPipeline(ctx, pa.rootPath, pa.config)
+	p, err := newPipeline(ctx, pa.rootPath, pa.config, pa.rootDeps)
 	if err != nil {
 		return nil, err
 	}

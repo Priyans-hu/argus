@@ -22,8 +22,8 @@ type Manifest struct {
 func FindManifests(files []types.FileInfo) []Manifest {
 	var found []Manifest
 	for _, f := range files {
-		kind := manifestKind(f.Name)
 		rel := filepath.ToSlash(f.Path)
+		kind := manifestKind(rel)
 		if f.IsDir || kind == "" || strings.Count(rel, "/") > 2 || !IsProjectSource(rel) {
 			continue
 		}
@@ -39,11 +39,16 @@ func FindManifests(files []types.FileInfo) []Manifest {
 	return found
 }
 
-func manifestKind(name string) string {
+// manifestKind returns the kind of the manifest at the slash path rel, or
+// "" for none. Requirements files are requirements*.txt, or any .txt or .in
+// file in a directory named requirements (requirements/base.txt).
+func manifestKind(rel string) string {
+	name, ext := path.Base(rel), path.Ext(rel)
 	switch {
 	case name == "package.json", name == "go.mod", name == "pyproject.toml", name == "Cargo.toml":
 		return name
-	case strings.HasPrefix(name, "requirements") && strings.HasSuffix(name, ".txt"):
+	case strings.HasPrefix(name, "requirements") && ext == ".txt",
+		path.Base(path.Dir(rel)) == "requirements" && (ext == ".txt" || ext == ".in"):
 		return "requirements.txt"
 	}
 	return ""

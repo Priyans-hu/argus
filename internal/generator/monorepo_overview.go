@@ -17,6 +17,10 @@ type WorkspaceInfo struct {
 	Endpoints int
 }
 
+// maxOverviewWorkspaces caps the workspace rows, so a large monorepo keeps
+// a short root AGENTS.md.
+const maxOverviewWorkspaces = 30
+
 // MonorepoOverviewGenerator creates a root-level overview file for monorepo projects
 type MonorepoOverviewGenerator struct {
 	format string // output format name (for reference)
@@ -56,13 +60,18 @@ func (g *MonorepoOverviewGenerator) Generate(rootAnalysis *types.Analysis, works
 		fmt.Fprintln(&buf)
 		fmt.Fprintln(&buf, "| Workspace | Path | Languages | Commands | Endpoints |")
 		fmt.Fprintln(&buf, "|-----------|------|-----------|----------|-----------|")
-		for _, ws := range workspaces {
+		shown := workspaces[:min(len(workspaces), maxOverviewWorkspaces)]
+		more := len(workspaces) - len(shown)
+		for _, ws := range shown {
 			langs := "-"
 			if len(ws.Languages) > 0 {
 				langs = strings.Join(ws.Languages, ", ")
 			}
 			fmt.Fprintf(&buf, "| %s | `%s` | %s | %d | %d |\n",
 				ws.Name, ws.Path, langs, ws.Commands, ws.Endpoints)
+		}
+		if more > 0 {
+			fmt.Fprintf(&buf, "\nand %d more\n", more)
 		}
 		fmt.Fprintln(&buf)
 
@@ -71,8 +80,11 @@ func (g *MonorepoOverviewGenerator) Generate(rootAnalysis *types.Analysis, works
 		fmt.Fprintln(&buf)
 		fmt.Fprintln(&buf, "Each workspace has its own generated context files with detailed analysis:")
 		fmt.Fprintln(&buf)
-		for _, ws := range workspaces {
-			fmt.Fprintf(&buf, "- `%s/CLAUDE.md`\n", ws.Path)
+		for _, ws := range shown {
+			fmt.Fprintf(&buf, "- `%s/AGENTS.md`\n", ws.Path)
+		}
+		if more > 0 {
+			fmt.Fprintf(&buf, "- and %d more\n", more)
 		}
 		fmt.Fprintln(&buf)
 	}

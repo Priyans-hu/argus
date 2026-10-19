@@ -15,6 +15,7 @@ import (
 type Analyzer struct {
 	rootPath string
 	config   *types.Config
+	rootDeps []types.Dependency // a monorepo root's, for a workspace
 }
 
 // NewAnalyzer creates a new analyzer
@@ -35,7 +36,7 @@ func (a *Analyzer) Analyze(ctx context.Context) (*types.Analysis, error) {
 	}
 
 	slog.Debug("starting analysis", "rootPath", a.rootPath)
-	p, err := newPipeline(ctx, a.rootPath, a.config)
+	p, err := newPipeline(ctx, a.rootPath, a.config, a.rootDeps)
 	if err != nil {
 		return nil, err
 	}

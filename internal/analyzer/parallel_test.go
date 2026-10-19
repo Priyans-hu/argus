@@ -170,7 +170,7 @@ func TestParallelAnalyzerMergesConventionsInOrder(t *testing.T) {
 	}
 	conventions, _ := detector.NewConventionDetector(root, walked).Detect()
 	patterns, _ := detector.NewPatternDetector(root, walked, detector.ReadDependencies(root, walked)).Detect()
-	framework, _ := detector.NewFrameworkDetector(root, walked).Detect()
+	framework, _ := detector.NewFrameworkDetector(root, walked, detector.ReadDependencies(root, walked)).Detect()
 	if len(conventions) == 0 || len(patterns) == 0 || len(framework) == 0 {
 		t.Fatalf("fixture must trigger all three detectors: %d conventions, %d patterns, %d framework",
 			len(conventions), len(patterns), len(framework))

@@ -151,7 +151,7 @@ func TestIgnoreReachesEveryAnalyzer(t *testing.T) {
 	}
 
 	for _, par := range []bool{false, true} {
-		results := NewMonorepoAnalyzer(root, cfg, par, 2).AnalyzeWorkspaces(ctx, control.MonorepoInfo)
+		results := NewMonorepoAnalyzer(root, cfg, par, 2, nil).AnalyzeWorkspaces(ctx, control.MonorepoInfo)
 		if len(results) != 1 || results[0].Analysis == nil {
 			t.Fatalf("workspaces = %+v, want packages/web", results)
 		}

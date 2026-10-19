@@ -201,7 +201,7 @@ func TestPatternDetectorsReadOnlyProjectSource(t *testing.T) {
 	if hasPattern(mono.CodePatterns.GoPatterns, "go func") {
 		t.Error("the root analysis reads apps/docs")
 	}
-	results := NewMonorepoAnalyzer(root, nil, false, 2).AnalyzeWorkspaces(context.Background(), mono.MonorepoInfo)
+	results := NewMonorepoAnalyzer(root, nil, false, 2, nil).AnalyzeWorkspaces(context.Background(), mono.MonorepoInfo)
 	if len(results) != 1 || results[0].Analysis == nil {
 		t.Fatalf("workspaces = %+v, want apps/docs", results)
 	}
