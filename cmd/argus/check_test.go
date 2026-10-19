@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -98,5 +99,27 @@ func TestCheckUsesConfig(t *testing.T) {
 	}
 	if got, code := runCLI(t, "check", root); code != 0 {
 		t.Errorf("check after scan: exit %d\n%s", code, got)
+	}
+}
+
+// A workspace output check cannot read is an error, not a pass.
+func TestCheckFailsOnUnreadableWorkspace(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs unix permission bits that apply to the user")
+	}
+	resetFlags(t)
+	captureOutput(t)
+	root := monorepoFixture(t)
+	writeFiles(t, root, map[string]string{".argus.yaml": "monorepo:\n  per_workspace: true\n  root_overview: true\n"})
+	if _, code := runCLI(t, "scan", root); code != 0 {
+		t.Fatalf("scan exit %d", code)
+	}
+	locked := filepath.Join(root, "packages", "web", "AGENTS.md")
+	if err := os.Chmod(locked, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0644) })
+	if got, code := runCLI(t, "check", root); code != 2 || !strings.Contains(got, "packages/web/AGENTS.md") {
+		t.Errorf("exit %d, want 2:\n%s", code, got)
 	}
 }

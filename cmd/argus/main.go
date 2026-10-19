@@ -434,6 +434,9 @@ func runMonorepoScan(ctx context.Context, absPath string, cfg *config.Config, fo
 	// Generate per-workspace output
 	successCount := 0
 	for _, ws := range wsResults {
+		if ws.Error != nil && checked != nil {
+			return fmt.Errorf("%s: %w", ws.Path, ws.Error) // check cannot vouch for it
+		}
 		if ws.Error != nil {
 			outf("   [skip] %s: %v\n", ws.Path, ws.Error)
 			continue
@@ -459,6 +462,9 @@ func runMonorepoScan(ctx context.Context, absPath string, cfg *config.Config, fo
 		ok := true
 		for _, format := range wsFormats {
 			if err := generateOutput(wsAbsPath, ws.Path, format, ws.Analysis, cfg, dryRun, fullMode); err != nil {
+				if checked != nil {
+					return err
+				}
 				errf("   [warn] %s (%s): %v\n", ws.Path, format, err)
 				ok = false
 			}
