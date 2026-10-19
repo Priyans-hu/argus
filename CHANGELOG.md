@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `agents` format: `AGENTS.md` is the main output, read by Codex, Cursor, Copilot, Gemini CLI and other agents; `argus scan` writes it together with `CLAUDE.md`
 - `--full` on scan, sync and watch adds the detailed sections (structure, key files, patterns, dependencies)
-- A single-test command per test framework (vitest, jest, Go, pytest, Cargo, Gradle) in the Test commands, plus Gradle commands and Cargo commands for crates one directory deep <!-- verify -->
+- A single-test command per test framework (vitest, jest, Go, pytest, Cargo, Gradle) in the Test commands, plus Gradle commands and Cargo commands for crates one directory deep
 - Dependencies are read from package.json (including peer and optional dependencies), go.mod, pyproject.toml, requirements files (`requirements*.txt`, `requirements/*.txt` and `*.in`) and Cargo.toml up to two directories deep; monorepo workspaces also see the root dependencies
 - Dart, Zig, Flutter, Tauri and SvelteKit detection
 - `argus check` exits 1 when a generated file is out of date, for CI. It needs full git history, takes the title from the checkout directory name (a clone under another name shows drift) and cannot check `--ai` or `--full` output (there is no config key for `--full` yet)
@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `CLAUDE.md` is a shim: an `@AGENTS.md` import plus a CUSTOM block for Claude-only notes. An existing `CLAUDE.md` keeps its text outside the generated block (one-time notice), and an `output: [claude]` config also gets `AGENTS.md` without being edited
 - The default `AGENTS.md` is lean: commands, stack, conventions, commit style and API, at most 150 lines
 - `--format all` writes agents, claude, claude-code, cursor and copilot; continue is no longer part of it
-- Cursor rules go to `.cursor/rules/argus.mdc` (`alwaysApply: true`); `.cursorrules` is no longer written, and an existing one is left alone with a notice <!-- verify -->
+- Cursor rules go to `.cursor/rules/argus.mdc` (`alwaysApply: true`); `.cursorrules` is no longer written, and an existing one is left alone with a notice
 - An `AGENTS.md` without argus markers is treated as hand-written and left unchanged with a warning (add an empty ARGUS:AUTO pair or use `--force`); a symlinked `AGENTS.md` or `CLAUDE.md` is never written through
 - `--monorepo` writes `AGENTS.md` and a `CLAUDE.md` shim in every workspace, and the root overview to `AGENTS.md`
 - Generated files no longer import `.claude/rules` with `@` lines; Claude Code loads that directory itself
@@ -39,19 +39,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `-o`/`--output` has no effect; it is hidden and will be removed in a future release
 
 ### Removed
-- MCP config generation: claude-code no longer writes `.claude/mcp.json` (`claude_code.mcp` is ignored), and an existing one is left alone with a notice <!-- verify -->
-- The claude-code PreToolUse Bash guard and `eslint --fix` hooks <!-- verify -->
+- MCP config generation: claude-code no longer writes `.claude/mcp.json` (`claude_code.mcp` is ignored), and an existing one is left alone with a notice
+- The claude-code PreToolUse Bash guard and `eslint --fix` hooks
 - The unused godirwalk dependency
 
 ### Fixed
-- claude-code formatter hooks read the edited path from stdin with `jq` instead of `$FILE_PATH`, which Claude Code never sets, and exit quietly without `jq` or the formatter; argus flags an old `settings.json` (regenerate it with `--force`) <!-- verify -->
-- claude-code agents and rules: reviewers suggest only test commands for their language, java-reviewer needs at least 15% Java, the architecture rule no longer doubles its code fences, and `.claude/rules/security.md` needs detected auth code <!-- verify -->
+- claude-code formatter hooks read the edited path from stdin with `jq` instead of `$FILE_PATH`, which Claude Code never sets, and exit quietly without `jq` or the formatter; argus flags an old `settings.json` (regenerate it with `--force`)
+- claude-code agents and rules: reviewers suggest only test commands for their language, java-reviewer needs at least 15% Java, the architecture rule no longer doubles its code fences, and `.claude/rules/security.md` needs detected auth code
 - Ignore rules match entry names instead of substrings, so `.github`, `.gitignore`, `build.gradle.kts` and directories such as `internal/binder` are analyzed; `ignore` in `.argus.yaml` applies in every mode
 - scan, `scan --parallel=false` and watch produce the same analysis
 - Pattern detection reads project source only (no docs, examples, fixtures, vendored or generated code), and keywords no longer match inside identifiers
 - Library patterns need a declared dependency (JS/TS, Python, Rust) or an import (Go), and tech stack detection compares exact dependency names, including sub-directory and peer dependencies
 - A project is labeled ML only when Python code imports an ML framework or model weights are committed
-- The package manager comes from `packageManager` or the lockfile (bun, pnpm, yarn, npm); `npm ci`-style installs appear only with a lockfile, and `yarn ci` and `pnpm ci` are never emitted <!-- verify -->
+- The package manager comes from `packageManager` or the lockfile (bun, pnpm, yarn, npm); `npm ci`-style installs appear only with a lockfile, and `yarn ci` and `pnpm ci` are never emitted
 - An adopted file that starts with a UTF-8 BOM no longer keeps the BOM mid-file, and temp files left by a killed run are ignored
 - Rescans are stable: argus no longer counts its own outputs as project files, watch no longer re-triggers on its own writes, and unchanged files are not rewritten
 - Output is deterministic: repeated scans of the same repository produce identical files
