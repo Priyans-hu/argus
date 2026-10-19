@@ -10,7 +10,7 @@ import (
 // ValidatedConfig wraps Config with validation tags
 type ValidatedConfig struct {
 	// Output formats to generate
-	Output []string `validate:"dive,oneof=claude claude-code cursor copilot continue all"`
+	Output []string `validate:"dive,oneof=agents claude claude-code cursor copilot continue all"`
 
 	// Patterns to ignore (in addition to .gitignore)
 	Ignore []string `validate:"dive,min=1"`
@@ -26,7 +26,7 @@ type ValidatedConfig struct {
 }
 
 // ValidOutputFormats lists all valid output format options
-var ValidOutputFormats = []string{"claude", "claude-code", "cursor", "copilot", "continue", "all"}
+var ValidOutputFormats = []string{"agents", "claude", "claude-code", "cursor", "copilot", "continue", "all"}
 
 // Validator provides config validation
 type Validator struct {
@@ -150,7 +150,7 @@ func SuggestFix(err error) string {
 		for _, e := range validErr.Errors {
 			switch {
 			case strings.Contains(e, "invalid output format"):
-				suggestions = append(suggestions, "Use one of: claude, claude-code, cursor, copilot, continue, all")
+				suggestions = append(suggestions, "Use one of: agents, claude, claude-code, cursor, copilot, continue, all")
 			case strings.Contains(e, "too many custom conventions"):
 				suggestions = append(suggestions, "Consider consolidating similar conventions or removing less important ones")
 			case strings.Contains(e, "is too long"):

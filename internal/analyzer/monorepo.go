@@ -24,20 +24,29 @@ type WorkspaceResult struct {
 // MonorepoAnalyzer orchestrates per-workspace analysis in a monorepo
 type MonorepoAnalyzer struct {
 	rootPath      string
+	ignore        []string // the root ignore list; overrides stay with the root analysis
+	rootDeps      []types.Dependency
 	parallel      bool
 	maxConcurrent int
 }
 
-// NewMonorepoAnalyzer creates a new monorepo analyzer
-func NewMonorepoAnalyzer(rootPath string, parallel bool, maxConcurrent int) *MonorepoAnalyzer {
+// NewMonorepoAnalyzer creates a new monorepo analyzer; cfg may be nil.
+// rootDeps, the root analysis's dependencies, count as each workspace's too,
+// since a workspace uses what the root declares.
+func NewMonorepoAnalyzer(rootPath string, cfg *types.Config, parallel bool, maxConcurrent int, rootDeps []types.Dependency) *MonorepoAnalyzer {
 	if maxConcurrent <= 0 {
 		maxConcurrent = 4
 	}
-	return &MonorepoAnalyzer{
+	ma := &MonorepoAnalyzer{
 		rootPath:      rootPath,
+		rootDeps:      rootDeps,
 		parallel:      parallel,
 		maxConcurrent: maxConcurrent,
 	}
+	if cfg != nil {
+		ma.ignore = cfg.Ignore
+	}
+	return ma
 }
 
 // AnalyzeWorkspaces runs full analysis on each resolved workspace directory
@@ -159,11 +168,14 @@ func (ma *MonorepoAnalyzer) analyzeOne(ctx context.Context, relDir string) Works
 	var analysis *types.Analysis
 	var err error
 
+	cfg := &types.Config{Ignore: ma.ignore}
 	if ma.parallel {
-		pa := NewParallelAnalyzer(absDir, nil)
+		pa := NewParallelAnalyzer(absDir, cfg)
+		pa.rootDeps = ma.rootDeps
 		analysis, err = pa.Analyze(ctx)
 	} else {
-		a := NewAnalyzer(absDir, nil)
+		a := NewAnalyzer(absDir, cfg)
+		a.rootDeps = ma.rootDeps
 		analysis, err = a.Analyze(ctx)
 	}
 

@@ -55,6 +55,9 @@ func TestMerge(t *testing.T) {
 		{"v0.4.0 previous content kept", oldBlock + "\n\n" + previous, block + "\n\n" + previous, Replaced},
 		{"hand-written", "\n\n# Team rules\n- use the mock\n", block + "\n\n# Team rules\n- use the mock\n", Adopted},
 		{"custom only", "# demo\nold body\n\n" + custom, block + "\n\n# demo\nold body\n\n" + custom, Adopted},
+		{"BOM only", "\ufeff\n", block, Created},
+		{"BOM and text", "\ufeff# Team rules\n", block + "\n\n# Team rules\n", Adopted},
+		{"BOM and auto block", "\ufeff" + oldBlock + "\n", "\ufeff" + block + "\n", Replaced},
 	}
 
 	for _, tt := range tests {

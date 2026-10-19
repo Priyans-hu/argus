@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/Priyans-hu/argus/pkg/types"
@@ -61,11 +62,10 @@ func (d *MLDetector) Detect() *MLProjectInfo {
 	// Count notebooks
 	info.NotebookCount = d.countNotebooks()
 
-	// Determine if this is an ML project
-	info.IsMLProject = len(info.Frameworks) > 0 ||
-		len(info.ModelFiles) > 0 ||
-		info.NotebookCount > 5 ||
-		len(info.TrainingFiles) > 0
+	// An ML framework import or committed model weights decide it;
+	// notebooks, script names and dataset directories never do.
+	info.IsMLProject = slices.ContainsFunc(info.Frameworks, func(f MLFramework) bool { return f.Category != "data" }) ||
+		d.hasWeights(info.ModelFiles)
 
 	// Infer project type
 	info.ProjectType = d.inferMLProjectType(info)
@@ -151,7 +151,7 @@ func (d *MLDetector) detectFrameworks() []MLFramework {
 			continue
 		}
 
-		content, err := os.ReadFile(f.Path)
+		content, err := os.ReadFile(filepath.Join(d.rootPath, f.Path))
 		if err != nil {
 			continue
 		}
@@ -198,6 +198,7 @@ func (d *MLDetector) detectModelFiles() []string {
 		".pb":          true, // TensorFlow
 		".onnx":        true, // ONNX
 		".safetensors": true, // Safe Tensors
+		".gguf":        true, // llama.cpp
 		".bin":         true, // Hugging Face
 		".pkl":         true, // Pickle (often models)
 		".joblib":      true, // Joblib (sklearn)
@@ -211,7 +212,6 @@ func (d *MLDetector) detectModelFiles() []string {
 		regexp.MustCompile(`(?i)weights.*\.(pt|pth|h5|bin)$`),
 		regexp.MustCompile(`(?i)pytorch_model\.bin$`),
 		regexp.MustCompile(`(?i)tf_model\.h5$`),
-		regexp.MustCompile(`(?i)config\.json$`), // Hugging Face model config
 	}
 
 	for _, f := range d.files {
@@ -230,6 +230,27 @@ func (d *MLDetector) detectModelFiles() []string {
 	}
 
 	return modelFiles
+}
+
+// strongWeights are weight formats that alone mark an ML project; any other
+// model file counts only beside a config.json (the Hugging Face layout).
+var strongWeights = map[string]bool{
+	".pt": true, ".pth": true, ".ckpt": true, ".safetensors": true, ".onnx": true,
+	".h5": true, ".hdf5": true, ".pb": true, ".gguf": true,
+}
+
+// hasWeights reports whether modelFiles hold a strong weights file, or any
+// model file in a directory that also holds a config.json.
+func (d *MLDetector) hasWeights(modelFiles []string) bool {
+	configDirs := map[string]bool{}
+	for _, f := range d.files {
+		if f.Name == "config.json" {
+			configDirs[filepath.Dir(f.Path)] = true
+		}
+	}
+	return slices.ContainsFunc(modelFiles, func(path string) bool {
+		return strongWeights[strings.ToLower(filepath.Ext(path))] || configDirs[filepath.Dir(path)]
+	})
 }
 
 // detectDatasetPaths finds dataset directories and files

@@ -15,11 +15,19 @@ var (
 	legacyFiles = []string{".cursorrules"}
 )
 
+// TempPrefix starts the temp file a write goes through before its rename;
+// os.CreateTemp completes the name with digits. A crash can leave one behind.
+const TempPrefix = ".argus-"
+
 // IsGeneratedPath reports whether the relative path p is an argus output at
 // any depth (workspace outputs included), so scans and watch can ignore it.
 // Both slash and backslash separators are accepted.
 func IsGeneratedPath(p string) bool {
 	p = strings.TrimPrefix(strings.ReplaceAll(p, `\`, "/"), "./")
+	base := p[strings.LastIndex(p, "/")+1:]
+	if digits, ok := strings.CutPrefix(base, TempPrefix); ok && digits != "" && strings.Trim(digits, "0123456789") == "" {
+		return true
+	}
 	for _, f := range slices.Concat(generatedFiles, legacyFiles) {
 		if p == f || strings.HasSuffix(p, "/"+f) {
 			return true
