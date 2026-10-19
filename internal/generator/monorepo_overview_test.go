@@ -1,6 +1,7 @@
 package generator
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -164,5 +165,26 @@ func TestMonorepoOverviewGenerator_WithGitConventions(t *testing.T) {
 	}
 	if !strings.Contains(output, "conventional") {
 		t.Error("missing commit style")
+	}
+}
+
+func TestMonorepoOverviewCapsWorkspaces(t *testing.T) {
+	var workspaces []WorkspaceInfo
+	for i := range 60 {
+		workspaces = append(workspaces, WorkspaceInfo{Path: fmt.Sprintf("packages/p%02d", i), Name: fmt.Sprintf("p%02d", i)})
+	}
+	content, err := NewMonorepoOverviewGenerator("claude").Generate(&types.Analysis{ProjectName: "big"}, workspaces)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := string(content)
+	if strings.Contains(out, "packages/p30") || !strings.Contains(out, "packages/p29") {
+		t.Errorf("want exactly the first 30 workspaces:\n%s", out)
+	}
+	if strings.Count(out, "and 30 more") != 2 {
+		t.Errorf("want an \"and 30 more\" line under the table and the list:\n%s", out)
+	}
+	if n := strings.Count(out, "\n"); n > 90 {
+		t.Errorf("overview has %d lines for 60 workspaces", n)
 	}
 }
