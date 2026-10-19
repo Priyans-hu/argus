@@ -367,7 +367,7 @@ func generate(t *testing.T, root, format string) {
 }
 
 func TestMergeFilesAreMarkedAndStable(t *testing.T) {
-	files := map[string]string{"agents": "AGENTS.md", "claude": "CLAUDE.md", "cursor": ".cursorrules", "copilot": ".github/copilot-instructions.md"}
+	files := map[string]string{"agents": "AGENTS.md", "claude": "CLAUDE.md", "cursor": ".cursor/rules/argus.mdc", "copilot": ".github/copilot-instructions.md"}
 	for format, rel := range files {
 		t.Run(format, func(t *testing.T) {
 			resetFlags(t)
@@ -662,7 +662,7 @@ func TestDryRunWritesNothing(t *testing.T) {
 	if len(entries) != 1 || readFile(t, root, "CLAUDE.md") != "# Team rules\n" {
 		t.Errorf("dry-run changed the tree: %v", entries)
 	}
-	for _, rel := range []string{"CLAUDE.md", ".cursorrules", ".continue/config.yaml", ".claude/settings.json"} {
+	for _, rel := range []string{"CLAUDE.md", ".cursor/rules/argus.mdc", ".continue/config.yaml", ".claude/settings.json"} {
 		if header := "📄 Would write to " + filepath.Join(root, filepath.FromSlash(rel)) + ":"; !strings.Contains(out.String(), header) {
 			t.Errorf("no preview for %s", rel)
 		}
@@ -677,14 +677,17 @@ func TestMergeWritesThroughSymlink(t *testing.T) {
 	captureOutput(t)
 	root := t.TempDir()
 	writeFiles(t, root, map[string]string{"docs/real.md": "# Team rules\nKEEP\n"})
-	link := filepath.Join(root, ".cursorrules")
-	if err := os.Symlink(filepath.Join("docs", "real.md"), link); err != nil {
+	link := filepath.Join(root, ".github", "copilot-instructions.md")
+	if err := os.MkdirAll(filepath.Dir(link), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join("..", "docs", "real.md"), link); err != nil {
 		t.Fatal(err)
 	}
 
-	generate(t, root, "cursor")
+	generate(t, root, "copilot")
 	if fi, err := os.Lstat(link); err != nil || fi.Mode()&os.ModeSymlink == 0 {
-		t.Fatalf(".cursorrules is no longer a symlink (err %v)", err)
+		t.Fatalf("copilot-instructions.md is no longer a symlink (err %v)", err)
 	}
 	got := readFile(t, root, "docs/real.md")
 	checkMarked(t, got)

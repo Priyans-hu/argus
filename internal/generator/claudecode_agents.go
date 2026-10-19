@@ -2,10 +2,32 @@ package generator
 
 import (
 	"fmt"
+	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/Priyans-hu/argus/pkg/types"
 )
+
+// jsTestCommand matches project test commands a TS/JS reviewer can run.
+var jsTestCommand = regexp.MustCompile(`vitest|jest|mocha|(npm|yarn|pnpm|bun) (run )?test`)
+
+// reviewerTestCommand is the test command a lang reviewer suggests, or ""
+// when the project's test command cmd belongs to another language.
+func reviewerTestCommand(lang, cmd string) string {
+	switch {
+	case lang == "Go":
+		return "go test ./..."
+	case lang == "Rust":
+		return "cargo test"
+	case lang == "Python" && strings.Contains(cmd, "pytest"):
+		return "pytest"
+	case lang == "TypeScript" && jsTestCommand.MatchString(cmd),
+		lang == "Java" && (strings.HasPrefix(cmd, "./gradlew") || strings.HasPrefix(cmd, "gradle") || strings.HasPrefix(cmd, "mvn")):
+		return cmd
+	}
+	return ""
+}
 
 // generateAgents creates agent files based on the detected tech stack
 func (g *ClaudeCodeGenerator) generateAgents(analysis *types.Analysis) []types.GeneratedFile {
@@ -59,8 +81,10 @@ func (g *ClaudeCodeGenerator) generateTechStackReviewers(analysis *types.Analysi
 		})
 	}
 
-	// Java reviewer
-	if hasLanguage(analysis, "Java") {
+	// Java reviewer, unless Java is platform glue (a Flutter app's android/)
+	if slices.ContainsFunc(analysis.TechStack.Languages, func(l types.Language) bool {
+		return l.Name == "Java" && l.Percentage >= 15
+	}) {
 		files = append(files, types.GeneratedFile{
 			Path:    ".claude/agents/java-reviewer.md",
 			Content: []byte(javaReviewerContent(analysis, ctx)),
@@ -140,8 +164,8 @@ func goReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string {
 			}
 			content.WriteString("\n")
 		}
-		if ctx.TestCommand != "" {
-			fmt.Fprintf(&content, "Run tests: `%s`\n\n", ctx.TestCommand)
+		if cmd := reviewerTestCommand("Go", ctx.TestCommand); cmd != "" {
+			fmt.Fprintf(&content, "Run tests: `%s`\n\n", cmd)
 		}
 	} else {
 		content.WriteString("## Testing\n\n")
@@ -244,8 +268,8 @@ func tsReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string {
 		if testConfig := ctx.GetTestConfig(); testConfig != "" {
 			fmt.Fprintf(&content, "Test config: `%s`\n", testConfig)
 		}
-		if ctx.TestCommand != "" {
-			fmt.Fprintf(&content, "Run tests: `%s`\n", ctx.TestCommand)
+		if cmd := reviewerTestCommand("TypeScript", ctx.TestCommand); cmd != "" {
+			fmt.Fprintf(&content, "Run tests: `%s`\n", cmd)
 		}
 		content.WriteString("\n")
 	}
@@ -345,8 +369,8 @@ func pythonReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) stri
 			}
 			content.WriteString("\n")
 		}
-		if ctx.TestCommand != "" {
-			fmt.Fprintf(&content, "Run tests: `%s`\n\n", ctx.TestCommand)
+		if cmd := reviewerTestCommand("Python", ctx.TestCommand); cmd != "" {
+			fmt.Fprintf(&content, "Run tests: `%s`\n\n", cmd)
 		}
 	}
 
@@ -422,8 +446,8 @@ func rustReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string
 			}
 			content.WriteString("\n")
 		}
-		if ctx.TestCommand != "" {
-			fmt.Fprintf(&content, "Run tests: `%s`\n\n", ctx.TestCommand)
+		if cmd := reviewerTestCommand("Rust", ctx.TestCommand); cmd != "" {
+			fmt.Fprintf(&content, "Run tests: `%s`\n\n", cmd)
 		}
 	}
 
@@ -484,8 +508,8 @@ func javaReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) string
 			}
 			content.WriteString("\n")
 		}
-		if ctx.TestCommand != "" {
-			fmt.Fprintf(&content, "Run tests: `%s`\n\n", ctx.TestCommand)
+		if cmd := reviewerTestCommand("Java", ctx.TestCommand); cmd != "" {
+			fmt.Fprintf(&content, "Run tests: `%s`\n\n", cmd)
 		}
 	}
 
@@ -618,9 +642,6 @@ func securityReviewerContent(analysis *types.Analysis, ctx *GeneratorContext) st
 	content.WriteString("description: Security-focused code reviewer. Use when auditing code for vulnerabilities and security issues.\n")
 	content.WriteString("tools: Read, Grep, Glob, Bash\n")
 	content.WriteString("model: sonnet\n")
-	content.WriteString("skills:\n")
-	content.WriteString("  - lint\n")
-	content.WriteString("  - test\n")
 	content.WriteString("---\n\n")
 
 	fmt.Fprintf(&content, "# Security Reviewer for %s\n\n", ctx.ProjectName)

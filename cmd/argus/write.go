@@ -97,7 +97,8 @@ func writeMerged(root, label, rel string, generated []byte, dryRun bool) error {
 	}
 	replaced := rel == agentsFile && unmarked // only with --force
 
-	content, outcome := merger.NewMerger(mergeMode).Merge(existing, generated)
+	front, body, generated := splitFront(existing, generated)
+	content, outcome := merger.NewMerger(mergeMode).Merge(body, generated)
 	if replaced {
 		content = []byte(merger.WrapContent(string(generated)))
 	}
@@ -117,6 +118,7 @@ func writeMerged(root, label, rel string, generated []byte, dryRun bool) error {
 	if addCustomBlock && !bytes.Contains(content, []byte(merger.CustomStartMarker)) {
 		content = []byte(merger.AddCustomSectionPlaceholder(string(content)))
 	}
+	content = bytes.Join([][]byte{front, content}, nil)
 	content = append(bytes.TrimRight(content, "\r\n"), '\n')
 	// A file whose newlines are all CRLF stays CRLF; others keep an LF block.
 	crlf, lf := []byte("\r\n"), []byte("\n")

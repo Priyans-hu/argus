@@ -42,11 +42,13 @@ func (g *ClaudeCodeGenerator) generateRules(analysis *types.Analysis) []types.Ge
 		}
 	}
 
-	// Security rules (always generated)
-	files = append(files, types.GeneratedFile{
-		Path:    ".claude/rules/security.md",
-		Content: []byte(g.securityRuleContent(analysis, ctx)),
-	})
+	// Security rules (when auth patterns are detected)
+	if len(ctx.AuthPatterns) > 0 {
+		files = append(files, types.GeneratedFile{
+			Path:    ".claude/rules/security.md",
+			Content: []byte(g.securityRuleContent(analysis, ctx)),
+		})
+	}
 
 	return files
 }
@@ -387,9 +389,11 @@ func (g *ClaudeCodeGenerator) generateArchitectureRule(analysis *types.Analysis,
 	// Architecture diagram
 	if ctx.Diagram != "" {
 		content.WriteString("## Diagram\n\n")
-		content.WriteString("```\n")
-		content.WriteString(ctx.Diagram)
-		content.WriteString("\n```\n\n")
+		if strings.HasPrefix(ctx.Diagram, "```") {
+			content.WriteString(strings.TrimRight(ctx.Diagram, "\n") + "\n\n")
+		} else {
+			content.WriteString("```\n" + ctx.Diagram + "\n```\n\n")
+		}
 	}
 
 	// Guidelines
