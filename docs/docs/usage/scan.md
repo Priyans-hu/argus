@@ -6,7 +6,7 @@ description: Analyze your codebase with argus scan
 
 # Scan Command
 
-The `scan` command analyzes your codebase and generates a `CLAUDE.md` context file.
+The `scan` command analyzes your codebase and writes `AGENTS.md` plus a `CLAUDE.md` that imports it.
 
 ## Basic Usage
 
@@ -22,11 +22,15 @@ argus scan /path/to/project
 
 | Flag | Short | Description |
 |------|-------|-------------|
+| `--format` | `-f` | Output format: `agents`, `claude` (writes `AGENTS.md` too), `claude-code`, `cursor`, `copilot`, `all` |
+| `--full` | | Write the detailed sections (structure, key files, patterns, dependencies) |
 | `--verbose` | `-v` | Show detailed analysis output |
 | `--dry-run` | `-n` | Preview output without writing files |
 | `--merge` | `-m` | Keep your text around the generated block when regenerating (default `true`; `--merge=false` replaces the whole file) |
-| `--add-custom` | | Add an empty CUSTOM block for your notes to CLAUDE.md, `.cursorrules` and the Copilot file |
-| `--force` | | Overwrite files argus would otherwise skip: edited `.claude/` and `.continue/config.yaml` files, and files with unbalanced or repeated `ARGUS:AUTO` markers |
+| `--add-custom` | | Add an empty CUSTOM block for your notes to the Markdown outputs |
+| `--force` | | Overwrite files argus would otherwise skip: edited `.claude/` and `.continue/config.yaml` files, an `AGENTS.md` without markers, and files with unbalanced or repeated `ARGUS:AUTO` markers |
+
+`--compact` (lean output is now the default) and `-o`/`--output` (no effect) are deprecated.
 
 See [Output Format](./output.md#re-running-argus) for what a re-scan keeps and what it skips.
 
@@ -70,7 +74,18 @@ argus performs a comprehensive analysis:
 
 ## Output Structure
 
-The generated `CLAUDE.md` includes:
+The default `AGENTS.md` is lean, at most 150 lines:
+
+```
+├── Project name and description
+├── Commands (setup, build, test, lint, ...)
+├── Stack
+├── Conventions
+├── Git
+└── API (when endpoints are found)
+```
+
+With `--full` it includes:
 
 ```
 ├── Project Overview

@@ -8,17 +8,21 @@ Argus is a CLI tool that scans codebases and automatically generates context fil
 
 - Scans your codebase (tech stack, structure, patterns, conventions)
 - Generates optimized context files:
-  - CLAUDE.md (Claude Code)
-  - .cursorrules (Cursor)
+  - AGENTS.md (Codex, Cursor, Copilot, Gemini CLI and other agents)
+  - CLAUDE.md (Claude Code; imports AGENTS.md)
+  - .claude/ (Claude Code agents, rules, skills and hooks)
+  - .cursor/rules/argus.mdc (Cursor)
   - .github/copilot-instructions.md (GitHub Copilot)
-  - .continue/config.yaml (Continue.dev)
+  - .continue/config.yaml (Continue.dev, deprecated)
 
 ## Commands
 
 - `argus init` - Initialize configuration
 - `argus scan` - Analyze codebase and generate files
 - `argus sync` - Update files with changes
-- `argus version` - Print version
+- `argus scan --full` - Detailed output; `--force` overwrites files argus would skip
+- `argus check` - Exit 1 when generated files are out of date
+- `argus version` or `argus --version` - Print version
 
 ## Agent Skill
 

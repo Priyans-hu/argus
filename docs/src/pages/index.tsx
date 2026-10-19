@@ -49,7 +49,7 @@ function HomepageHeader() {
               <span style={{color: '#a1a1aa'}}>📊 Analyzing tech stack...</span><br />
               <span style={{color: '#a1a1aa'}}>🏗️  Detecting architecture...</span><br />
               <span style={{color: '#a1a1aa'}}>📝 Finding conventions...</span><br />
-              <span style={{color: '#22c55e'}}>✅ Generated CLAUDE.md</span>
+              <span style={{color: '#22c55e'}}>✅ Generated AGENTS.md, CLAUDE.md</span>
             </code>
           </div>
         </div>

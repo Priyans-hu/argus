@@ -18,7 +18,7 @@ argus watch .
 
 1. Performs an initial scan
 2. Watches for file changes using filesystem events
-3. Re-analyzes and updates `CLAUDE.md` when changes are detected
+3. Re-analyzes and updates the generated files when changes are detected
 4. Uses debouncing to avoid excessive regeneration
 
 ## Options
@@ -26,6 +26,7 @@ argus watch .
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--verbose` | `-v` | Show detailed output |
+| `--full` | | Write the detailed sections |
 
 ## Example
 
@@ -33,12 +34,12 @@ argus watch .
 $ argus watch .
 👁️ Watching /my-project for changes...
 🔍 Initial scan complete
-📄 Generated CLAUDE.md
+📄 Generated AGENTS.md
 
 # Make some changes to your code...
 
 🔄 Changes detected, re-scanning...
-✅ Updated CLAUDE.md
+✅ Updated AGENTS.md
 ```
 
 ## When to Use Watch
