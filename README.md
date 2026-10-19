@@ -160,7 +160,7 @@ argus --version # Print version (same as argus version)
 
 `--compact` (lean output is now the default) and `-o`/`--output` (no effect) are deprecated.
 
-`argus check` exits 1 when a generated file is out of date, for CI. <!-- verify -->
+`argus check` exits 1 when a generated file is out of date, for CI. It needs full git history (`fetch-depth: 0`), takes the title from the checkout directory name, so a clone under another name shows drift, and cannot check `--ai` or `--full` output.
 
 ## Configuration (Optional)
 

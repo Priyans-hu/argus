@@ -66,7 +66,7 @@ An existing `CLAUDE.md` keeps all text outside the generated block. When its gen
 - A missing file is written. A file that already matches the generated output is reported as up to date.
 - A file that differs (for example one you edited) is left alone, and argus reports how many files it skipped (`-v` lists them). Run `argus scan --force` or `argus sync --force`, or delete the file, to regenerate it.
 
-In both cases a file whose content would not change is not rewritten, and `--dry-run` shows the same decisions without writing anything.
+In both cases a file whose content would not change is not rewritten, and `--dry-run` shows the same decisions without writing anything. Files are replaced through a temp file and a rename, so hard links to a file keep the old text, and its owner, group and extended attributes are not kept.
 
 ## Auto-Generated Sections
 

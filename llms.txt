@@ -21,7 +21,7 @@ Argus is a CLI tool that scans codebases and automatically generates context fil
 - `argus scan` - Analyze codebase and generate files
 - `argus sync` - Update files with changes
 - `argus scan --full` - Detailed output; `--force` overwrites files argus would skip
-- `argus check` - Exit 1 when generated files are out of date <!-- verify -->
+- `argus check` - Exit 1 when generated files are out of date
 - `argus version` or `argus --version` - Print version
 
 ## Agent Skill

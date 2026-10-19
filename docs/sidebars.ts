@@ -10,6 +10,7 @@ const sidebars: SidebarsConfig = {
       items: [
         'usage/scan',
         'usage/watch',
+        'usage/check',
         'usage/output',
       ],
     },

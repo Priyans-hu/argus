@@ -74,7 +74,7 @@ Corrections inside the AUTO block are undone by the next scan, so list them for 
 
 `argus init` writes `.argus.yaml` (keys: `output`, `ignore`, `custom_conventions`). `argus sync` then regenerates every configured format; it fails without the config.
 
-`argus check` exits 1 when a generated file is out of date, for CI (it needs full git history). <!-- verify -->
+`argus check` exits 1 when a generated file is out of date, for CI. It needs full git history and cannot check `--ai` or `--full` output.
 
 ## Without argus
 
