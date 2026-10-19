@@ -13,19 +13,12 @@ import (
 	"github.com/Priyans-hu/argus/pkg/types"
 )
 
-// ClaudeGenerator generates CLAUDE.md files
-type ClaudeGenerator struct {
-	compact bool // Generate compact output for token efficiency
-}
+// ClaudeGenerator renders the detailed body (AGENTS.md with --full).
+type ClaudeGenerator struct{}
 
 // NewClaudeGenerator creates a new Claude generator
 func NewClaudeGenerator() *ClaudeGenerator {
 	return &ClaudeGenerator{}
-}
-
-// SetCompact enables compact mode for smaller output
-func (g *ClaudeGenerator) SetCompact(compact bool) {
-	g.compact = compact
 }
 
 // Name returns the generator name
@@ -51,82 +44,29 @@ func (g *ClaudeGenerator) Generate(analysis *types.Analysis) ([]byte, error) {
 	// Quick Reference (commands table)
 	g.writeQuickReference(&buf, analysis.Commands)
 
-	// Architecture section for monorepos (skip in compact mode if not monorepo)
-	if !g.compact || analysis.MonorepoInfo != nil {
-		g.writeArchitecture(&buf, analysis.MonorepoInfo)
-	}
-
-	// Architecture diagram (simplified in compact mode)
-	if g.compact {
-		g.writeArchitectureDiagramCompact(&buf, analysis.ArchitectureInfo)
-	} else {
-		g.writeArchitectureDiagram(&buf, analysis.ArchitectureInfo)
-	}
-
-	// Tech Stack Summary
+	g.writeArchitecture(&buf, analysis.MonorepoInfo)
+	g.writeArchitectureDiagram(&buf, analysis.ArchitectureInfo)
 	g.writeTechStack(&buf, &analysis.TechStack)
-
-	// Project Structure
 	g.writeStructure(&buf, &analysis.Structure)
-
-	// Key Files (limit in compact mode)
-	if g.compact {
-		g.writeKeyFilesCompact(&buf, analysis.KeyFiles)
-	} else {
-		g.writeKeyFiles(&buf, analysis.KeyFiles)
-	}
-
-	// Configuration System (skip in compact mode)
-	if !g.compact {
-		g.writeConfigurationSystem(&buf, analysis.ConfigFiles)
-	}
-
-	// Development Setup
+	g.writeKeyFiles(&buf, analysis.KeyFiles)
+	g.writeConfigurationSystem(&buf, analysis.ConfigFiles)
 	g.writeDevelopmentSetup(&buf, analysis.DevelopmentInfo)
-
-	// Available Commands (detailed) - skip in compact, Quick Reference has essentials
-	if !g.compact {
-		g.writeCommands(&buf, analysis.Commands)
-	}
-
-	// CLI Output & Verbosity (skip in compact mode)
-	if !g.compact {
-		g.writeCLIOutput(&buf, analysis.CLIInfo)
-	}
-
-	// API Endpoints (limit in compact mode)
-	if g.compact {
-		g.writeEndpointsCompact(&buf, analysis.Endpoints)
-	} else {
-		g.writeEndpoints(&buf, analysis.Endpoints)
-	}
+	g.writeCommands(&buf, analysis.Commands)
+	g.writeCLIOutput(&buf, analysis.CLIInfo)
+	g.writeEndpoints(&buf, analysis.Endpoints)
 
 	// Conventions (includes git conventions)
 	g.writeConventions(&buf, analysis.Conventions, analysis.GitConventions)
 
-	// Guidelines based on tech stack
 	g.writeGuidelines(&buf, &analysis.TechStack)
-
-	// Detected patterns from deep analysis (limited in compact mode)
-	if g.compact {
-		g.writePatternsCompact(&buf, analysis.CodePatterns)
-	} else {
-		g.writePatterns(&buf, analysis.CodePatterns)
-	}
-
-	// Dependencies summary (skip in compact mode)
-	if !g.compact {
-		g.writeDependencies(&buf, analysis.Dependencies)
-	}
+	g.writePatterns(&buf, analysis.CodePatterns)
+	g.writeDependencies(&buf, analysis.Dependencies)
 
 	// AI Usage Insights (from Claude Code session logs)
 	g.writeUsageInsights(&buf, analysis.UsageInsights)
 
 	// AI Enrichment (from local Ollama model)
 	g.writeAIEnrichment(&buf, analysis.AIEnrichment)
-
-	// Import references to .claude/ rules (if claude-code format is also being generated)
-	g.writeImports(&buf, analysis)
 
 	return buf.Bytes(), nil
 }
@@ -1046,10 +986,8 @@ func (g *ClaudeGenerator) writePatterns(buf *bytes.Buffer, patterns *types.CodeP
 }
 
 // writeDependencies writes only notable dependencies with context
-// Skip this section in compact mode as it's less useful for token efficiency
 func (g *ClaudeGenerator) writeDependencies(buf *bytes.Buffer, deps []types.Dependency) {
-	// In compact mode, skip dependencies as they add tokens without much value
-	if g.compact || len(deps) == 0 {
+	if len(deps) == 0 {
 		return
 	}
 
@@ -1116,9 +1054,6 @@ func (g *ClaudeGenerator) writeQuickReference(buf *bytes.Buffer, commands []type
 
 	// Get prioritized commands (top 15 most important)
 	maxCommands := 15
-	if g.compact {
-		maxCommands = 10
-	}
 	quickRef := detector.GetQuickReferenceCommands(commands, maxCommands)
 
 	if len(quickRef) == 0 {
@@ -1310,240 +1245,6 @@ func toTitleCase(s string) string {
 	return strings.Join(words, " ")
 }
 
-// =============================================================================
-// Compact Mode Methods
-// =============================================================================
-
-// writeArchitectureDiagramCompact writes a simplified architecture section
-func (g *ClaudeGenerator) writeArchitectureDiagramCompact(buf *bytes.Buffer, arch *types.ArchitectureInfo) {
-	if arch == nil || (arch.Style == "" && arch.EntryPoint == "") {
-		return
-	}
-
-	buf.WriteString("## Architecture\n\n")
-
-	if arch.Style != "" {
-		fmt.Fprintf(buf, "**Style:** %s", arch.Style)
-		if arch.EntryPoint != "" {
-			fmt.Fprintf(buf, " | **Entry:** `%s`", arch.EntryPoint)
-		}
-		buf.WriteString("\n\n")
-	} else if arch.EntryPoint != "" {
-		fmt.Fprintf(buf, "**Entry Point:** `%s`\n\n", arch.EntryPoint)
-	}
-
-	// Skip diagram in compact mode - too verbose
-}
-
-// writeKeyFilesCompact writes only the most important key files (max 5)
-func (g *ClaudeGenerator) writeKeyFilesCompact(buf *bytes.Buffer, keyFiles []types.KeyFile) {
-	if len(keyFiles) == 0 {
-		return
-	}
-
-	buf.WriteString("## Key Files\n\n")
-
-	// Prioritize entry points, configs, and main files
-	priority := []string{"main", "entry", "config", "readme", "contributing"}
-	selected := make([]types.KeyFile, 0, 5)
-
-	// First pass: get priority files
-	for _, kf := range keyFiles {
-		lower := strings.ToLower(kf.Path + kf.Purpose)
-		for _, p := range priority {
-			if strings.Contains(lower, p) {
-				selected = append(selected, kf)
-				break
-			}
-		}
-		if len(selected) >= 5 {
-			break
-		}
-	}
-
-	// If not enough, fill with remaining
-	if len(selected) < 5 {
-		for _, kf := range keyFiles {
-			found := false
-			for _, s := range selected {
-				if s.Path == kf.Path {
-					found = true
-					break
-				}
-			}
-			if !found {
-				selected = append(selected, kf)
-				if len(selected) >= 5 {
-					break
-				}
-			}
-		}
-	}
-
-	for _, kf := range selected {
-		if kf.Description != "" {
-			fmt.Fprintf(buf, "- `%s` - %s\n", kf.Path, kf.Description)
-		} else if kf.Purpose != "" {
-			fmt.Fprintf(buf, "- `%s` - %s\n", kf.Path, kf.Purpose)
-		} else {
-			fmt.Fprintf(buf, "- `%s`\n", kf.Path)
-		}
-	}
-
-	if len(keyFiles) > 5 {
-		fmt.Fprintf(buf, "\n*...and %d more files*\n", len(keyFiles)-5)
-	}
-	buf.WriteString("\n")
-}
-
-// writeEndpointsCompact writes only unique endpoint patterns (max 10)
-func (g *ClaudeGenerator) writeEndpointsCompact(buf *bytes.Buffer, endpoints []types.Endpoint) {
-	if len(endpoints) == 0 {
-		return
-	}
-
-	buf.WriteString("## API Endpoints\n\n")
-
-	// Group by method and show unique paths
-	methodPaths := make(map[string][]string)
-	for _, ep := range endpoints {
-		method := ep.Method
-		if method == "" {
-			method = "GET"
-		}
-		methodPaths[method] = append(methodPaths[method], ep.Path)
-	}
-
-	// Show summary
-	methods := []string{"GET", "POST", "PUT", "PATCH", "DELETE"}
-	count := 0
-	for _, method := range methods {
-		paths := methodPaths[method]
-		if len(paths) == 0 {
-			continue
-		}
-		// Show max 3 examples per method
-		limit := 3
-		if len(paths) < limit {
-			limit = len(paths)
-		}
-		fmt.Fprintf(buf, "**%s:** ", method)
-		examples := make([]string, limit)
-		for i := 0; i < limit; i++ {
-			examples[i] = "`" + paths[i] + "`"
-		}
-		buf.WriteString(strings.Join(examples, ", "))
-		if len(paths) > limit {
-			fmt.Fprintf(buf, " *+%d more*", len(paths)-limit)
-		}
-		buf.WriteString("\n")
-		count++
-		if count >= 5 {
-			break
-		}
-	}
-	buf.WriteString("\n")
-}
-
-// writePatternsCompact writes only the top 5 most relevant patterns per category
-func (g *ClaudeGenerator) writePatternsCompact(buf *bytes.Buffer, patterns *types.CodePatterns) {
-	if patterns == nil {
-		return
-	}
-
-	// Check if any patterns exist
-	hasPatterns := len(patterns.StateManagement) > 0 ||
-		len(patterns.DataFetching) > 0 ||
-		len(patterns.Routing) > 0 ||
-		len(patterns.Testing) > 0 ||
-		len(patterns.Authentication) > 0 ||
-		len(patterns.APIPatterns) > 0 ||
-		len(patterns.DatabaseORM) > 0 ||
-		len(patterns.GoPatterns) > 0
-
-	if !hasPatterns {
-		return
-	}
-
-	buf.WriteString("## Detected Patterns\n\n")
-	buf.WriteString("*Top patterns detected in the codebase:*\n\n")
-
-	// Helper to write limited patterns
-	writeTopPatterns := func(title string, patterns []types.PatternInfo, limit int) {
-		if len(patterns) == 0 {
-			return
-		}
-
-		// Sort by file count (most common first), then name
-		sorted := slices.Clone(patterns)
-		slices.SortStableFunc(sorted, func(a, b types.PatternInfo) int {
-			return cmp.Or(cmp.Compare(b.FileCount, a.FileCount), cmp.Compare(a.Name, b.Name))
-		})
-
-		buf.WriteString("### " + title + "\n\n")
-		count := 0
-		for _, p := range sorted {
-			if count >= limit {
-				break
-			}
-			if p.FileCount > 1 {
-				fmt.Fprintf(buf, "- **%s** (%d files)\n", p.Name, p.FileCount)
-			} else if len(p.Examples) > 0 {
-				fmt.Fprintf(buf, "- **%s** - `%s`\n", p.Name, p.Examples[0])
-			} else {
-				fmt.Fprintf(buf, "- **%s**\n", p.Name)
-			}
-			count++
-		}
-		if len(patterns) > limit {
-			fmt.Fprintf(buf, "\n*...and %d more*\n", len(patterns)-limit)
-		}
-		buf.WriteString("\n")
-	}
-
-	// Write only the most relevant categories with limited patterns
-	writeTopPatterns("Go Patterns", patterns.GoPatterns, 3)
-	writeTopPatterns("Data Fetching", patterns.DataFetching, 3)
-	writeTopPatterns("Testing", patterns.Testing, 3)
-	writeTopPatterns("API Patterns", patterns.APIPatterns, 3)
-	writeTopPatterns("Database & ORM", patterns.DatabaseORM, 3)
-}
-
-// writeImports writes import references to .claude/ rules
-// This uses Claude Code's @import syntax to reference external files
-func (g *ClaudeGenerator) writeImports(buf *bytes.Buffer, analysis *types.Analysis) {
-	// Build list of available rule imports
-	var imports []string
-
-	// Add standard rules that are typically generated
-	if analysis.GitConventions != nil {
-		imports = append(imports, "@.claude/rules/git-workflow.md")
-	}
-	if analysis.CodePatterns != nil && len(analysis.CodePatterns.Testing) > 0 {
-		imports = append(imports, "@.claude/rules/testing.md")
-	}
-	if len(analysis.Conventions) > 0 {
-		imports = append(imports, "@.claude/rules/coding-style.md")
-	}
-	if analysis.ArchitectureInfo != nil && analysis.ArchitectureInfo.Style != "" {
-		imports = append(imports, "@.claude/rules/architecture.md")
-	}
-	// Security rules are always generated
-	imports = append(imports, "@.claude/rules/security.md")
-
-	if len(imports) == 0 {
-		return
-	}
-
-	buf.WriteString("## Additional Rules\n\n")
-	buf.WriteString("*The following rules are imported from `.claude/rules/` for context-specific guidance:*\n\n")
-
-	for _, imp := range imports {
-		fmt.Fprintf(buf, "- %s\n", imp)
-	}
-	buf.WriteString("\n")
-}
-
 // writeAIEnrichment writes AI-generated insights section
 func (g *ClaudeGenerator) writeAIEnrichment(buf *bytes.Buffer, enrichment *types.AIEnrichment) {
 	if enrichment == nil {
@@ -1612,18 +1313,9 @@ func (g *ClaudeGenerator) writeUsageInsights(buf *bytes.Buffer, insights *types.
 	// Hot Files
 	if len(insights.HotFiles) > 0 {
 		buf.WriteString("### Hot Files\n\n")
-		if g.compact {
-			buf.WriteString("Files most accessed by AI — prioritize keeping them well-documented:\n")
-		} else {
-			buf.WriteString("These files are most frequently accessed by AI. Prioritize keeping them well-documented:\n")
-		}
+		buf.WriteString("These files are most frequently accessed by AI. Prioritize keeping them well-documented:\n")
 
-		limit := len(insights.HotFiles)
-		if g.compact && limit > 5 {
-			limit = 5
-		} else if limit > 10 {
-			limit = 10
-		}
+		limit := min(len(insights.HotFiles), 10)
 
 		for _, hf := range insights.HotFiles[:limit] {
 			parts := []string{}

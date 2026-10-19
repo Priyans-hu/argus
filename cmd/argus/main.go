@@ -6,15 +6,18 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -57,7 +60,8 @@ var (
 	force             bool
 	mergeMode         bool
 	addCustomBlock    bool
-	compactMode       bool
+	compactMode       bool // deprecated alias of the lean default
+	fullMode          bool
 	parallel          bool
 	usageMode         bool
 	monorepoMode      bool
@@ -180,12 +184,13 @@ func init() {
 	// Scan command flags
 	scanCmd.Flags().StringVarP(&outputDir, "output", "o", ".", "Output directory for generated files")
 	_ = scanCmd.Flags().MarkDeprecated("output", "it has no effect and will be removed in a future release")
-	scanCmd.Flags().StringVarP(&outputFormat, "format", "f", "claude", "Output format: claude, claude-code, cursor, copilot, continue, all")
+	scanCmd.Flags().StringVarP(&outputFormat, "format", "f", "claude", "Output format: agents, claude, claude-code, cursor, copilot, continue (deprecated), all")
 	scanCmd.Flags().BoolVarP(&dryRun, "dry-run", "n", false, "Show what would be generated without writing files")
 	scanCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed output")
 	scanCmd.Flags().BoolVarP(&mergeMode, "merge", "m", true, "Preserve custom sections when regenerating (default: true)")
 	scanCmd.Flags().BoolVar(&addCustomBlock, "add-custom", false, "Add a custom section placeholder to output")
-	scanCmd.Flags().BoolVarP(&compactMode, "compact", "c", false, "Generate compact output (~45% smaller, optimized for token efficiency)")
+	scanCmd.Flags().BoolVar(&fullMode, "full", false, "Write the detailed AGENTS.md instead of the lean one")
+	scanCmd.Flags().BoolVarP(&compactMode, "compact", "c", false, "Deprecated: the lean output is the default")
 	scanCmd.Flags().BoolVarP(&parallel, "parallel", "p", true, "Run detectors in parallel for faster analysis (default: true)")
 	scanCmd.Flags().BoolVar(&usageMode, "usage", false, "Include AI usage insights from Claude Code session logs")
 	scanCmd.Flags().BoolVar(&aiMode, "ai", false, "Enrich output with AI-generated insights via local Ollama")
@@ -197,7 +202,8 @@ func init() {
 	syncCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed output")
 	syncCmd.Flags().BoolVarP(&mergeMode, "merge", "m", true, "Preserve custom sections when regenerating (default: true)")
 	syncCmd.Flags().BoolVar(&addCustomBlock, "add-custom", false, "Add a custom section placeholder to output")
-	syncCmd.Flags().BoolVarP(&compactMode, "compact", "c", false, "Generate compact output (~45% smaller, optimized for token efficiency)")
+	syncCmd.Flags().BoolVar(&fullMode, "full", false, "Write the detailed AGENTS.md instead of the lean one")
+	syncCmd.Flags().BoolVarP(&compactMode, "compact", "c", false, "Deprecated: the lean output is the default")
 	syncCmd.Flags().BoolVarP(&parallel, "parallel", "p", true, "Run detectors in parallel for faster analysis (default: true)")
 	syncCmd.Flags().BoolVar(&usageMode, "usage", false, "Include AI usage insights from Claude Code session logs")
 	syncCmd.Flags().BoolVar(&aiMode, "ai", false, "Enrich output with AI-generated insights via local Ollama")
@@ -208,13 +214,24 @@ func init() {
 	insightsCmd.Flags().StringVarP(&insightsFormat, "format", "f", "text", "Output format: text, json")
 	insightsCmd.Flags().BoolVar(&insightsSubagents, "subagents", true, "Include subagent data")
 
+	// Check command flags
+	checkCmd.Flags().StringVarP(&outputFormat, "format", "f", "", "Output format to check, as for scan (default: output in .argus.yaml)")
+	checkCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed output")
+
 	// Watch command flags
 	watchCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed output")
 	watchCmd.Flags().BoolVarP(&mergeMode, "merge", "m", true, "Preserve custom sections when regenerating (default: true)")
+	watchCmd.Flags().BoolVar(&fullMode, "full", false, "Write the detailed AGENTS.md instead of the lean one")
+
+	for _, c := range []*cobra.Command{scanCmd, syncCmd} {
+		_ = c.Flags().MarkDeprecated("compact", "the lean output is now the default, use --full for the detailed output")
+		c.MarkFlagsMutuallyExclusive("full", "compact")
+	}
 
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(scanCmd)
 	rootCmd.AddCommand(syncCmd)
+	rootCmd.AddCommand(checkCmd)
 	rootCmd.AddCommand(watchCmd)
 	rootCmd.AddCommand(insightsCmd)
 	rootCmd.AddCommand(versionCmd)
@@ -307,12 +324,10 @@ func runScan(cmd *cobra.Command, args []string) error {
 	// Override format from flag if specified
 	formats := cfg.Output
 	if cmd.Flags().Changed("format") {
-		if outputFormat == "all" {
-			formats = []string{"claude", "claude-code", "cursor", "copilot", "continue"}
-		} else {
-			formats = []string{outputFormat}
-		}
+		formats = []string{outputFormat}
 	}
+	formats = expandFormats(formats)
+	warnContinue(cfg, formats)
 
 	fmt.Printf("🔍 Scanning %s...\n", absPath)
 	if parallel && verbose {
@@ -377,23 +392,21 @@ func runScan(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Check for monorepo mode
-	isMonorepo := monorepoMode
-	if !isMonorepo && cfg.Monorepo != nil && cfg.Monorepo.PerWorkspace {
-		isMonorepo = true
-	}
+	return writeOutputs(ctx, absPath, cfg, formats, analysis)
+}
 
+// writeOutputs renders formats into absPath as scan does: per workspace in
+// monorepo mode, else once for the whole directory.
+func writeOutputs(ctx context.Context, absPath string, cfg *config.Config, formats []string, analysis *types.Analysis) error {
+	isMonorepo := monorepoMode || (cfg.Monorepo != nil && cfg.Monorepo.PerWorkspace)
 	if isMonorepo && analysis.MonorepoInfo != nil && analysis.MonorepoInfo.IsMonorepo {
 		return runMonorepoScan(ctx, absPath, cfg, formats, analysis)
 	}
-
-	// Generate output for each format
 	for _, format := range formats {
-		if err := generateOutput(absPath, "", format, analysis, cfg, dryRun, compactMode); err != nil {
+		if err := generateOutput(absPath, "", format, analysis, cfg, dryRun, fullMode); err != nil {
 			return err
 		}
 	}
-
 	return nil
 }
 
@@ -407,22 +420,25 @@ func runMonorepoScan(ctx context.Context, absPath string, cfg *config.Config, fo
 	wsResults := ma.AnalyzeWorkspaces(ctx, rootAnalysis.MonorepoInfo)
 
 	if len(wsResults) == 0 {
-		fmt.Println("No workspaces found to analyze, falling back to single-project mode")
+		outf("No workspaces found to analyze, falling back to single-project mode\n")
 		for _, format := range formats {
-			if err := generateOutput(absPath, "", format, rootAnalysis, cfg, dryRun, compactMode); err != nil {
+			if err := generateOutput(absPath, "", format, rootAnalysis, cfg, dryRun, fullMode); err != nil {
 				return err
 			}
 		}
 		return nil
 	}
 
-	fmt.Printf("   Found %d workspaces\n", len(wsResults))
+	outf("   Found %d workspaces\n", len(wsResults))
 
 	// Generate per-workspace output
 	successCount := 0
 	for _, ws := range wsResults {
+		if ws.Error != nil && checked != nil {
+			return fmt.Errorf("%s: %w", ws.Path, ws.Error) // check cannot vouch for it
+		}
 		if ws.Error != nil {
-			fmt.Printf("   [skip] %s: %v\n", ws.Path, ws.Error)
+			outf("   [skip] %s: %v\n", ws.Path, ws.Error)
 			continue
 		}
 
@@ -431,7 +447,7 @@ func runMonorepoScan(ctx context.Context, absPath string, cfg *config.Config, fo
 		if cfg.Monorepo != nil && cfg.Monorepo.WorkspaceOverrides != nil {
 			if override, ok := cfg.Monorepo.WorkspaceOverrides[ws.Path]; ok {
 				if len(override.Output) > 0 {
-					wsFormats = override.Output
+					wsFormats = expandFormats(override.Output)
 				}
 				for _, conv := range override.CustomConventions {
 					ws.Analysis.Conventions = append(ws.Analysis.Conventions, types.Convention{
@@ -445,7 +461,10 @@ func runMonorepoScan(ctx context.Context, absPath string, cfg *config.Config, fo
 		wsAbsPath := filepath.Join(absPath, ws.Path)
 		ok := true
 		for _, format := range wsFormats {
-			if err := generateOutput(wsAbsPath, ws.Path, format, ws.Analysis, cfg, dryRun, compactMode); err != nil {
+			if err := generateOutput(wsAbsPath, ws.Path, format, ws.Analysis, cfg, dryRun, fullMode); err != nil {
+				if checked != nil {
+					return err
+				}
 				errf("   [warn] %s (%s): %v\n", ws.Path, format, err)
 				ok = false
 			}
@@ -486,7 +505,12 @@ func runMonorepoScan(ctx context.Context, absPath string, cfg *config.Config, fo
 			return fmt.Errorf("overview generation failed: %w", err)
 		}
 
-		if err := writeMerged(absPath, "", "CLAUDE.md", overview, dryRun); err != nil {
+		// The overview is the root AGENTS.md; the root CLAUDE.md imports it.
+		shim, _ := generator.ShimGenerator{}.Generate(rootAnalysis)
+		if err := writeMerged(absPath, "", "AGENTS.md", overview, dryRun); err != nil {
+			return err
+		}
+		if err := writeMerged(absPath, "", "CLAUDE.md", shim, dryRun); err != nil {
 			return err
 		}
 	}
@@ -585,13 +609,63 @@ func runSync(cmd *cobra.Command, args []string) error {
 	}
 
 	// Generate output for each format in config
-	for _, format := range cfg.Output {
-		if err := generateOutput(absPath, "", format, analysis, cfg, dryRun, compactMode); err != nil {
+	formats := expandFormats(cfg.Output)
+	warnContinue(cfg, formats)
+	for _, format := range formats {
+		if err := generateOutput(absPath, "", format, analysis, cfg, dryRun, fullMode); err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+// formatOrder is the order formats are written in. all selects every
+// format but continue, which is deprecated.
+var formatOrder = []string{"agents", "claude", "claude-code", "cursor", "copilot", "continue"}
+
+// expandFormats turns a format list from --format or output: into the
+// formats to write, in formatOrder without duplicates: all expands, and
+// claude brings agents because the CLAUDE.md shim imports AGENTS.md (an old
+// output: [claude] config migrates this way). Unknown names follow, sorted,
+// so generateOutput reports them.
+func expandFormats(formats []string) []string {
+	want := map[string]bool{}
+	for _, f := range formats {
+		switch f {
+		case "all":
+			for _, a := range formatOrder[:len(formatOrder)-1] {
+				want[a] = true
+			}
+		case "claude":
+			want["agents"], want["claude"] = true, true
+		default:
+			want[f] = true
+		}
+	}
+	var out []string
+	for _, f := range formatOrder {
+		if want[f] {
+			out = append(out, f)
+			delete(want, f)
+		}
+	}
+	unknown := slices.Sorted(maps.Keys(want))
+	return append(out, unknown...)
+}
+
+// warnContinue prints the continue deprecation once per run when the run's
+// formats, or a workspace override, name continue.
+func warnContinue(cfg *config.Config, formats []string) {
+	named := slices.Contains(formats, "continue")
+	if cfg.Monorepo != nil {
+		for _, o := range cfg.Monorepo.WorkspaceOverrides {
+			named = named || (o != nil && slices.Contains(o.Output, "continue"))
+		}
+	}
+	if named {
+		errf("⚠️  format \"continue\" is deprecated and will be removed in a future release; it is no longer part of --format all\n")
+	}
 }
 
 // Generator interface for different output formats
@@ -602,7 +676,7 @@ type contextGenerator interface {
 
 // generateOutput renders one format into absPath. label is the workspace
 // path shown in messages ("" for the scanned directory itself).
-func generateOutput(absPath, label, format string, analysis *types.Analysis, cfg *config.Config, dryRun, compact bool) error {
+func generateOutput(absPath, label, format string, analysis *types.Analysis, cfg *config.Config, dryRun, full bool) error {
 	// Handle claude-code format separately (multi-file generator)
 	if format == "claude-code" {
 		return generateClaudeCodeOutput(absPath, label, analysis, cfg.ClaudeCode, dryRun)
@@ -612,9 +686,12 @@ func generateOutput(absPath, label, format string, analysis *types.Analysis, cfg
 	var outputFile string
 
 	switch format {
+	case "agents":
+		g := generator.NewAgentsGenerator(full)
+		gen = g
+		outputFile = g.OutputFile()
 	case "claude":
-		g := generator.NewClaudeGenerator()
-		g.SetCompact(compact)
+		g := generator.ShimGenerator{}
 		gen = g
 		outputFile = g.OutputFile()
 	case "cursor":
@@ -744,7 +821,8 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("👁️  Watching %s for changes...\n", absPath)
-	fmt.Printf("   Output formats: %s\n", strings.Join(cfg.Output, ", "))
+	fmt.Printf("   Output formats: %s\n", strings.Join(expandFormats(cfg.Output), ", "))
+	warnContinue(cfg, expandFormats(cfg.Output))
 	fmt.Println("   Mode: incremental updates")
 	fmt.Println("   Press Ctrl+C to stop")
 	fmt.Println()
@@ -855,8 +933,8 @@ func regenerateWithAnalyzer(ctx context.Context, absPath string, cfg *config.Con
 	}
 
 	// Generate output for each format
-	for _, format := range cfg.Output {
-		if err := generateOutput(absPath, "", format, analysis, cfg, false, compactMode); err != nil {
+	for _, format := range expandFormats(cfg.Output) {
+		if err := generateOutput(absPath, "", format, analysis, cfg, false, fullMode); err != nil {
 			return err
 		}
 	}
@@ -1189,11 +1267,18 @@ func main() {
 // execute runs the command line, reports a failure once on w and returns the
 // exit code.
 func execute(w io.Writer) int {
-	if err := rootCmd.Execute(); err != nil {
-		_, _ = fmt.Fprintf(w, "Error: %v\n", err)
+	cmd, err := rootCmd.ExecuteC()
+	switch {
+	case err == nil:
+		return 0
+	case errors.Is(err, errDrift):
 		return 1
 	}
-	return 0
+	_, _ = fmt.Fprintf(w, "Error: %v\n", err)
+	if cmd == checkCmd {
+		return 2
+	}
+	return 1
 }
 
 // releaseURL is the GitHub API endpoint for the latest release.
