@@ -79,3 +79,24 @@ func TestCheckErrorsExitTwo(t *testing.T) {
 		})
 	}
 }
+
+// check analyzes with .argus.yaml like scan, so ignored files cause no drift.
+func TestCheckUsesConfig(t *testing.T) {
+	resetFlags(t)
+	captureOutput(t)
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{
+		".argus.yaml":  "ignore:\n  - extra\n",
+		"go.mod":       "module example.com/fx\n\ngo 1.22\n",
+		"main.go":      "package main\n\nfunc main() {}\n",
+		"extra/a.py":   "print('a')\n",
+		"extra/b.py":   "print('b')\n",
+		"extra/c/d.py": "print('d')\n",
+	})
+	if _, code := runCLI(t, "scan", root); code != 0 {
+		t.Fatalf("scan exit %d", code)
+	}
+	if got, code := runCLI(t, "check", root); code != 0 {
+		t.Errorf("check after scan: exit %d\n%s", code, got)
+	}
+}

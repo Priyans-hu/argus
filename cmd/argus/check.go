@@ -64,7 +64,7 @@ func runCheck(cmd *cobra.Command, args []string) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	analysis, err := analyzer.NewParallelAnalyzer(absPath, nil).Analyze(ctx)
+	analysis, err := analyzer.NewParallelAnalyzer(absPath, analyzerConfig(cfg)).Analyze(ctx)
 	if err != nil {
 		return fmt.Errorf("analysis failed: %w", err)
 	}
