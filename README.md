@@ -101,7 +101,6 @@ Run `argus scan` or `argus sync` as often as you like:
 - **Patterns** — API shapes, error handling, state management
 
 ## Output Example
-<!-- verify -->
 
 ````markdown
 # your-project
@@ -120,6 +119,7 @@ npm run build
 
 # Test
 npm test
+npx vitest run <file>
 
 # Lint
 npm run lint

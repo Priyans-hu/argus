@@ -43,7 +43,6 @@ When working with AI coding assistants, you often need to provide context about 
 
 After running `argus scan .`, you'll get an `AGENTS.md` file like this:
 
-<!-- verify -->
 ````markdown
 # your-project
 
@@ -61,6 +60,7 @@ npm run build
 
 # Test
 npm test
+npx vitest run <file>
 
 # Lint
 npm run lint

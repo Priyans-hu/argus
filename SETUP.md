@@ -292,7 +292,8 @@ argus/
 │   │   └── patterns.go     # Code patterns
 │   ├── generator/      # Output generators
 │   │   ├── agents.go       # AGENTS.md and the CLAUDE.md shim
-│   │   ├── claude.go       # AGENTS.md body
+│   │   ├── agents_lean.go  # Lean AGENTS.md body
+│   │   ├── claude.go       # Detailed body (--full)
 │   │   ├── cursor.go       # .cursor/rules/argus.mdc
 │   │   └── copilot.go      # copilot-instructions.md
 │   └── merger/         # Content merging (custom sections)
