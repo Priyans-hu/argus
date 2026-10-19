@@ -11,7 +11,7 @@
 #   - argus must be installed: go install github.com/Priyans-hu/argus@latest
 #
 # What sync changes:
-#   - CLAUDE.md, .cursorrules, .github/copilot-instructions.md: only the
+#   - AGENTS.md, CLAUDE.md, .cursorrules, .github/copilot-instructions.md: only the
 #     ARGUS:AUTO block is regenerated; your text around it is kept.
 #   - .claude/** and .continue/config.yaml: written only when missing.
 #     Neither sync nor this hook ever overwrites a hand-edited file there;
@@ -40,7 +40,7 @@ echo "Running argus sync..."
 # Run argus sync
 if argus sync "$REPO_ROOT"; then
     # Check if any context files were modified
-    CHANGED_FILES=$(git diff --name-only -- CLAUDE.md .cursorrules .github/copilot-instructions.md .continue/ .claude/ 2>/dev/null || true)
+    CHANGED_FILES=$(git diff --name-only -- AGENTS.md CLAUDE.md .cursorrules .github/copilot-instructions.md .continue/ .claude/ 2>/dev/null || true)
 
     if [ -n "$CHANGED_FILES" ]; then
         echo "Context files updated:"

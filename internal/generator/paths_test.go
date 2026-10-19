@@ -37,6 +37,13 @@ func TestIsGeneratedPath(t *testing.T) {
 		{"src/.continuerc", false},
 		{"copilot-instructions.md", false},
 		{"cmd/argus/main.go", false},
+		{".argus-123456", true},
+		{"packages/web/.argus-42", true},
+		{`docs\.argus-7`, true},
+		{".argus-", false},
+		{".argus-12.md", false},
+		{".argus-tmp", false},
+		{".argus.yaml", false},
 		{"", false},
 	}
 	for _, tt := range tests {

@@ -15,6 +15,8 @@ const (
 	CustomStartMarker = "<!-- ARGUS:CUSTOM -->"
 	// CustomEndMarker marks the end of user's custom content
 	CustomEndMarker = "<!-- /ARGUS:CUSTOM -->"
+
+	bom = "\ufeff"
 )
 
 // Merger handles merging of generated content with existing files
@@ -54,14 +56,16 @@ func (m *Merger) Merge(existingContent, newContent []byte) ([]byte, Outcome) {
 	}
 
 	existing := string(existingContent)
-	if strings.TrimSpace(existing) == "" {
+	// A leading BOM is dropped only where the text moves below the block.
+	text := strings.TrimPrefix(existing, bom)
+	if strings.TrimSpace(text) == "" {
 		return []byte(block), Created
 	}
 
 	starts := strings.Count(existing, AutoStartMarker)
 	ends := strings.Count(existing, AutoEndMarker)
 	if starts == 0 && ends == 0 {
-		return []byte(block + "\n\n" + strings.TrimLeft(existing, "\r\n")), Adopted
+		return []byte(block + "\n\n" + strings.TrimLeft(text, "\r\n")), Adopted
 	}
 	start := strings.Index(existing, AutoStartMarker)
 	end := strings.Index(existing, AutoEndMarker)

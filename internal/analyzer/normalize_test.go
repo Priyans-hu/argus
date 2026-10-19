@@ -79,6 +79,11 @@ func richAnalysis() *types.Analysis {
 		ArchitectureInfo: &types.ArchitectureInfo{
 			Layers: []types.ArchitectureLayer{{Name: "internal"}, {Name: "cmd"}},
 		},
+		ConfigFiles: []types.ConfigFileInfo{
+			{Path: "package.json", Type: "npm"},
+			{Path: "go.mod", Type: "Go Modules"},
+			{Path: "Makefile", Type: "Build"},
+		},
 	}
 }
 
@@ -105,6 +110,7 @@ func TestNormalizeOrdersArbitrarySlices(t *testing.T) {
 		shuffle(r, a.CodePatterns.DataFetching)
 		shuffle(r, a.CodePatterns.GoPatterns)
 		shuffle(r, a.CodePatterns.MLPatterns)
+		shuffle(r, a.ConfigFiles)
 
 		normalize(a)
 		if !reflect.DeepEqual(a, want) {
@@ -155,6 +161,8 @@ func TestNormalizeResult(t *testing.T) {
 			[]string{"fetch", "useEffect", "axios"}},
 		{"MLPatterns", names(len(a.CodePatterns.MLPatterns), func(i int) string { return a.CodePatterns.MLPatterns[i].Usage }),
 			[]string{"inference", "training"}},
+		{"ConfigFiles", names(len(a.ConfigFiles), func(i int) string { return a.ConfigFiles[i].Path }),
+			[]string{"Makefile", "go.mod", "package.json"}},
 		// ordered at the source, so normalize leaves these alone
 		{"Commands", names(len(a.Commands), func(i int) string { return a.Commands[i].Name }),
 			[]string{"make test", "make build"}},

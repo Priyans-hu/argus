@@ -1,6 +1,7 @@
 package detector
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -11,7 +12,7 @@ func detectStack(t *testing.T, files map[string]string) *types.TechStack {
 	t.Helper()
 	root, infos := writeProject(t, files)
 	return stableResult(t, func() *types.TechStack {
-		stack, err := NewTechStackDetector(root, infos).Detect()
+		stack, err := NewTechStackDetector(root, infos, ReadDependencies(root, infos)).Detect()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -74,5 +75,95 @@ func TestTechStackPythonFrameworksAreDeduplicated(t *testing.T) {
 	}
 	if want := []string{"FastAPI", "Pydantic", "pytest"}; !reflect.DeepEqual(names, want) {
 		t.Errorf("Frameworks = %v, want %v", names, want)
+	}
+}
+
+// frameworkNames returns the stack's frameworks as name@version.
+func frameworkNames(stack *types.TechStack) []string {
+	var names []string
+	for _, fw := range stack.Frameworks {
+		names = append(names, fw.Name+"@"+fw.Version)
+	}
+	return names
+}
+
+func TestTechStackPeerOnlyFrameworkHasNoVersion(t *testing.T) {
+	stack := detectStack(t, map[string]string{
+		"package.json": `{"peerDependencies": {"react": ">=18"}, "devDependencies": {"vitest": "^2.0.0"}}`,
+	})
+	if got, want := frameworkNames(stack), []string{"React@", "Vitest@2.0.0"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("frameworks = %v, want %v", got, want)
+	}
+}
+
+func TestTechStackReadsSubdirectoryManifests(t *testing.T) {
+	stack := detectStack(t, map[string]string{
+		"web/package.json":     `{"dependencies": {"next": "14.0.0"}}`,
+		"src-tauri/Cargo.toml": "[dependencies]\ntokio = \"1\"\n",
+		"go.mod":               "module m\n\ngo 1.24\n\nrequire github.com/labstack/echo/v4 v4.11.0\n",
+	})
+	if got, want := frameworkNames(stack), []string{"Next.js@14.0.0", "Echo@", "Tokio@"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("frameworks = %v, want %v", got, want)
+	}
+}
+
+func TestTechStackComparesExactNames(t *testing.T) {
+	stack := detectStack(t, map[string]string{
+		"requirements.txt": "pytest-cov\ndjango-extensions\n",
+		"go.mod": "module m\n\ngo 1.24\n\n// github.com/gin-gonic/gin is not used\nrequire (\n" +
+			"\tgithub.com/gin-gonic/gin v1.9.0 // indirect\n\tgithub.com/spf13/cobra-cli v1.0.0\n)\n",
+	})
+	if len(stack.Frameworks) != 0 {
+		t.Errorf("frameworks = %v, want none", frameworkNames(stack))
+	}
+}
+
+func TestTechStackDartAndZigLanguages(t *testing.T) {
+	files := map[string]string{}
+	for i := range 140 {
+		files[fmt.Sprintf("lib/f%d.dart", i)] = "void main() {}\n"
+	}
+	for i := range 80 {
+		files[fmt.Sprintf("android/f%d.kt", i)] = "fun main() {}\n"
+	}
+	for i := range 10 {
+		files[fmt.Sprintf("android/f%d.java", i)] = "class A {}\n"
+	}
+	if got := detectStack(t, files).Languages; len(got) == 0 || got[0].Name != "Dart" {
+		t.Errorf("languages = %+v, want Dart first", got)
+	}
+
+	files = map[string]string{"a.swift": "", "b.zig": "", "c.zig": ""}
+	if got := detectStack(t, files).Languages; len(got) == 0 || got[0].Name != "Zig" {
+		t.Errorf("languages = %+v, want Zig first", got)
+	}
+}
+
+func TestTechStackAppFrameworks(t *testing.T) {
+	tests := []struct {
+		name  string
+		files map[string]string
+		want  []string // "name category"
+	}{
+		{"Flutter pubspec", map[string]string{"app/pubspec.yaml": "name: app\ndependencies:\n  flutter:\n    sdk: flutter\n"}, []string{"Flutter frontend"}},
+		{"Dart-only pubspec", map[string]string{"pubspec.yaml": "name: lib\ndependencies:\n  path: ^1.8.0\n"}, nil},
+		{"@tauri-apps/cli", map[string]string{"package.json": `{"devDependencies": {"@tauri-apps/cli": "2.0.0"}}`}, []string{"Tauri fullstack"}},
+		{"@tauri-apps/api", map[string]string{"package.json": `{"dependencies": {"@tauri-apps/api": "2.0.0"}}`}, []string{"Tauri fullstack"}},
+		{"tauri crate", map[string]string{"src-tauri/Cargo.toml": "[package]\nname = \"app\"\n\n[dependencies]\ntauri = \"2\"\n"}, []string{"Tauri fullstack"}},
+		{"tauri.conf.json", map[string]string{"src-tauri/tauri.conf.json": "{}"}, []string{"Tauri fullstack"}},
+		{"SvelteKit", map[string]string{"package.json": `{"devDependencies": {"@sveltejs/kit": "2.0.0"}}`}, []string{"SvelteKit frontend"}},
+		{"claude-glance shape", map[string]string{
+			"package.json":         `{"devDependencies": {"@sveltejs/kit": "2.0.0", "@tauri-apps/cli": "2.0.0"}}`,
+			"src-tauri/Cargo.toml": "[package]\nname = \"app\"\n\n[dependencies]\ntauri = \"2\"\n",
+		}, []string{"SvelteKit frontend", "Tauri fullstack"}},
+	}
+	for _, tt := range tests {
+		var got []string
+		for _, fw := range detectStack(t, tt.files).Frameworks {
+			got = append(got, fw.Name+" "+fw.Category)
+		}
+		if !reflect.DeepEqual(got, tt.want) {
+			t.Errorf("%s: frameworks %v, want %v", tt.name, got, tt.want)
+		}
 	}
 }
