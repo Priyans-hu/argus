@@ -67,6 +67,10 @@ func normalize(a *types.Analysis) {
 		return cmp.Or(cmp.Compare(x.Type, y.Type), cmp.Compare(x.Path, y.Path), cmp.Compare(x.Purpose, y.Purpose))
 	})
 
+	slices.SortFunc(a.TestRunners, func(x, y types.TestRunner) int {
+		return cmp.Or(cmp.Compare(x.Dir, y.Dir), cmp.Compare(x.Framework, y.Framework))
+	})
+
 	slices.SortFunc(a.Endpoints, func(x, y types.Endpoint) int {
 		return cmp.Or(
 			cmp.Compare(x.File, y.File),

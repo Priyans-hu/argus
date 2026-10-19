@@ -120,8 +120,9 @@ func mergeGoAST(patterns *types.CodePatterns, found []types.PatternInfo) {
 }
 
 // commands returns the script, Makefile and manifest commands, pyproject and
-// Cargo included.
-func (p *pipeline) commands() []types.Command {
+// Cargo included, then Gradle and the crates one directory deep, then the
+// test runners' commands not already listed; and the test runners.
+func (p *pipeline) commands() ([]types.Command, []types.TestRunner) {
 	commands := detector.DetectCommands(p.root)
 	if pyInfo := detector.NewPyProjectDetector(p.root).Detect(); pyInfo != nil && pyInfo.HasPyProject {
 		commands = append(commands, detectPyProjectCommands(pyInfo)...)
@@ -131,7 +132,10 @@ func (p *pipeline) commands() []types.Command {
 		// the Cargo detector's commands replace the basic cargo ones
 		commands = append(filterNonCargoCommands(commands), cargo.DetectCargoCommands()...)
 	}
-	return commands
+	commands = append(commands, detector.GradleCommands(p.root, p.files)...)
+	commands = append(commands, detector.SubdirCargoCommands(p.root, p.files)...)
+	runners := detector.DetectTestRunners(p.root, p.files, p.deps, commands)
+	return append(commands, detector.TestRunnerCommands(runners, commands)...), runners
 }
 
 // projectTools reads the tech stack, README and CLI info of a.

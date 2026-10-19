@@ -122,6 +122,10 @@ func leanCommands(cmds []types.Command) []string {
 	total := 0
 	for _, g := range leanCommandGroups {
 		shown := groups[g.name][:min(len(groups[g.name]), g.limit, 24-total)]
+		// a test runner's single-test command survives the cap, in place of the last entry
+		if i := slices.IndexFunc(groups[g.name], isRunOne); len(shown) > 0 && i >= len(shown) {
+			shown = append(slices.Clone(shown[:len(shown)-1]), groups[g.name][i])
+		}
 		if len(shown) == 0 {
 			continue
 		}
@@ -139,6 +143,8 @@ func leanCommands(cmds []types.Command) []string {
 	}
 	return slices.Concat([]string{"```bash"}, lines, []string{"```"})
 }
+
+func isRunOne(c types.Command) bool { return strings.HasPrefix(c.Description, "Run one ") }
 
 // leanStack renders the languages, frameworks, databases, entry point and monorepo lines.
 func leanStack(a *types.Analysis) []string {

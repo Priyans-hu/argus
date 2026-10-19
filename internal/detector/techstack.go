@@ -48,6 +48,9 @@ func (d *TechStackDetector) Detect() (*types.TechStack, error) {
 	d.detectFromCargo(stack)
 
 	d.detectFromAppManifests(stack)
+	if fileExists(filepath.Join(d.rootPath, "package.json")) {
+		stack.PackageManager = DetectPackageManager(d.rootPath, d.rootPath)
+	}
 
 	// Detect from config files
 	d.detectFromConfigFiles(stack)

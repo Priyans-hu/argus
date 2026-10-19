@@ -241,3 +241,31 @@ func TestGoLibrariesAreFiledByCategory(t *testing.T) {
 		}
 	}
 }
+
+func TestTestRunnersInEveryAnalyzer(t *testing.T) {
+	root := writeRichProject(t)
+	a, _ := analyzeBoth(t, root, nil)
+	want := []types.TestRunner{
+		{Framework: "go", RunAll: "go test ./...", RunOne: "go test -run <TestName> ./<pkg>"},
+		{Framework: "vitest", RunAll: "npm test", RunOne: "npx vitest run <file>"},
+	}
+	if !reflect.DeepEqual(a.TestRunners, want) {
+		t.Errorf("test runners = %+v, want %+v", a.TestRunners, want)
+	}
+	if !slices.ContainsFunc(a.Commands, func(c types.Command) bool { return c.Name == "npx vitest run <file>" }) {
+		t.Errorf("commands lack the single-test command: %+v", a.Commands)
+	}
+	full, err := NewIncrementalAnalyzer(root, nil).AnalyzeFull(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if clone := (&IncrementalAnalyzer{}).cloneAnalysis(full); !reflect.DeepEqual(clone.TestRunners, want) {
+		t.Errorf("watch test runners = %+v, want %+v", clone.TestRunners, want)
+	}
+
+	shuffled := &types.Analysis{TestRunners: []types.TestRunner{want[1], {Framework: "cargo", Dir: "a"}, want[0]}}
+	normalize(shuffled)
+	if got := shuffled.TestRunners; got[0].Framework != "go" || got[1].Framework != "vitest" || got[2].Dir != "a" {
+		t.Errorf("normalized test runners = %+v", got)
+	}
+}
