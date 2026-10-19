@@ -2,6 +2,7 @@ package generator
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -84,8 +85,6 @@ func TestRenderLean_Golden(t *testing.T) {
 		"- Repository: Priyans-hu/argus",
 		"- Commit style: Conventional Commits",
 		"- Commit format: `<type>(<scope>): <description>`",
-		"- Commit types: `feat`, `fix`",
-		"- Branch prefixes: feat/, fix/",
 		"",
 		"## API",
 		"",
@@ -218,5 +217,22 @@ func TestLeanDescription(t *testing.T) {
 				t.Errorf("got %q (%d bytes), want %q", got, len(got), tt.want)
 			}
 		})
+	}
+}
+
+// Histories with the same commit style give the same Git section, whatever
+// types, scopes and branch prefixes are most frequent.
+func TestLeanGitIsStableAcrossHistories(t *testing.T) {
+	history := func(kinds, scopes, prefixes []string) *types.GitConventions {
+		return &types.GitConventions{
+			Repository:       &types.GitRepository{Owner: "acme", Name: "demo"},
+			CommitConvention: &types.CommitConvention{Style: "conventional", Format: "<type>(<scope>): <description>", Types: kinds, Scopes: scopes},
+			BranchConvention: &types.BranchConvention{Prefixes: prefixes},
+		}
+	}
+	a := leanGit(history([]string{"feat", "fix"}, []string{"cli"}, []string{"feat", "fix"}))
+	b := leanGit(history([]string{"fix", "chore", "feat"}, []string{"generator", "cli"}, []string{"fix"}))
+	if !slices.Equal(a, b) || len(a) != 3 {
+		t.Errorf("Git sections differ or are incomplete:\n%v\n%v", a, b)
 	}
 }

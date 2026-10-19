@@ -187,7 +187,9 @@ func leanConventions(convs []types.Convention) []string {
 	return append(custom, other...)
 }
 
-// leanGit renders the repository and the commit and branch conventions, without examples.
+// leanGit renders the repository and the commit style. Commit types and
+// scopes and branch prefixes are ranked by frequency and shift with new
+// commits, so they are left out to keep the file stable.
 func leanGit(git *types.GitConventions) []string {
 	if git == nil {
 		return nil
@@ -203,11 +205,6 @@ func leanGit(git *types.GitConventions) []string {
 		}
 		lines = bullet(lines, "Commit style", style)
 		lines = bullet(lines, "Commit format", joinList([]string{cc.Format}, 0, "`%s`"))
-		lines = bullet(lines, "Commit types", joinList(cc.Types, 0, "`%s`"))
-		lines = bullet(lines, "Commit scopes", joinList(cc.Scopes, 0, "`%s`"))
-	}
-	if bc := git.BranchConvention; bc != nil {
-		lines = bullet(lines, "Branch prefixes", joinList(bc.Prefixes, 0, "%s/"))
 	}
 	return lines
 }
