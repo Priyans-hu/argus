@@ -45,28 +45,47 @@ After running `argus scan .`, you'll get an `AGENTS.md` file like this:
 
 <!-- verify -->
 ````markdown
-# my-project
+# your-project
+
+A Next.js app for booking meeting rooms.
 
 ## Commands
 
 ```bash
+# Setup
+npm install
+npm ci
+
 # Build
 npm run build
 
 # Test
 npm test
-npx jest <file>  # one test
+
+# Lint
+npm run lint
+
+# Run
+npm run dev
+npm start
 ```
 
 ## Stack
 
-- Languages: TypeScript 85%, CSS 15%
-- Frameworks: React, Next.js
+- Languages: TypeScript 100%
+- Frameworks: Prisma, Next.js, React, TypeScript, Vitest, ESLint
 
 ## Conventions
 
-- Component files use PascalCase
-- Tests colocated with source files
+- Path aliases configured: @
+- Absolute imports enabled with baseUrl: .
+- TypeScript strict mode enabled - maintain strict type safety
+
+## Git
+
+- Repository: acme/your-project
+- Commit style: Conventional Commits
+- Commit format: `<type>(<scope>): <description>`
 ````
 
 ## Next Steps

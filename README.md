@@ -106,30 +106,45 @@ Run `argus scan` or `argus sync` as often as you like:
 ````markdown
 # your-project
 
+A Next.js app for booking meeting rooms.
+
 ## Commands
 
 ```bash
+# Setup
+npm install
+npm ci
+
 # Build
 npm run build
 
 # Test
 npm test
-npx vitest run <file>  # one test
+
+# Lint
+npm run lint
 
 # Run
 npm run dev
+npm start
 ```
 
 ## Stack
 
-- Languages: TypeScript 94%, CSS 6%
-- Frameworks: Next.js, React, Prisma
-- Databases: PostgreSQL
+- Languages: TypeScript 100%
+- Frameworks: Prisma, Next.js, React, TypeScript, Vitest, ESLint
 
 ## Conventions
 
-- TypeScript strict mode is enabled
-- Use the @/ path alias for imports
+- Path aliases configured: @
+- Absolute imports enabled with baseUrl: .
+- TypeScript strict mode enabled - maintain strict type safety
+
+## Git
+
+- Repository: acme/your-project
+- Commit style: Conventional Commits
+- Commit format: `<type>(<scope>): <description>`
 ````
 
 `argus scan --full` adds the project structure, key files, detected patterns and dependencies.
