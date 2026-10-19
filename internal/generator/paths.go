@@ -9,8 +9,10 @@ import (
 // directories by name. The files carry ARGUS:AUTO markers and are merged on
 // rescans; everything under the directories is create-only.
 var (
-	generatedFiles = []string{"CLAUDE.md", "AGENTS.md", ".cursorrules", ".github/copilot-instructions.md"}
+	generatedFiles = []string{"CLAUDE.md", "AGENTS.md", ".cursor/rules/argus.mdc", ".github/copilot-instructions.md"}
 	generatedDirs  = []string{".claude", ".continue"}
+	// Outputs of older argus versions: still skipped, no longer written.
+	legacyFiles = []string{".cursorrules"}
 )
 
 // TempPrefix starts the temp file a write goes through before its rename;
@@ -26,7 +28,7 @@ func IsGeneratedPath(p string) bool {
 	if digits, ok := strings.CutPrefix(base, TempPrefix); ok && digits != "" && strings.Trim(digits, "0123456789") == "" {
 		return true
 	}
-	for _, f := range generatedFiles {
+	for _, f := range slices.Concat(generatedFiles, legacyFiles) {
 		if p == f || strings.HasSuffix(p, "/"+f) {
 			return true
 		}
