@@ -1,6 +1,6 @@
 module github.com/Priyans-hu/argus
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/BurntSushi/toml v1.6.0
@@ -10,7 +10,7 @@ require (
 	github.com/go-playground/validator/v10 v10.30.2
 	github.com/go-python/gpython v0.2.0
 	github.com/spf13/cobra v1.10.2
-	golang.org/x/mod v0.35.0
+	golang.org/x/mod v0.42.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
